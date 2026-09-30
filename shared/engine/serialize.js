@@ -50,6 +50,7 @@ export function serialize(inst, opts = {}) {
     p[k] = enc;
   }
   const out = { c: C.className, id: inst.id, p };
+  if (inst._isCharacter) out.char = 1;
   const ch = [];
   for (const c of inst._children) {
     if (!opts.replication && !c.Archivable) continue;
@@ -70,6 +71,7 @@ export function deserialize(data, opts = {}) {
     if (!C) return null;
     const inst = new C();
     if (opts.keepIds !== false && d.id) inst.id = d.id;
+    if (d.char) inst._isCharacter = true;
     map.set(d.id, inst);
     applyProps(inst, d.p || {}, pending);
     for (const cd of d.ch || []) {

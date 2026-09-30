@@ -49,7 +49,7 @@ export function createApi(db, manager) {
 
   const resolvedAvatar = (u) => {
     const a = normalizeAvatar(u.avatar);
-    return { bodyColors: a.bodyColors, items: a.wearing.map((id) => D.items[id]).filter(Boolean).map((i) => ({ id: i.id, type: i.type, data: i.data })) };
+    return { bodyColors: a.bodyColors, items: a.wearing.map((id) => D.items[id]).filter(Boolean).map((i) => ({ id: i.id, name: i.name, type: i.type, data: i.data })) };
   };
   manager.resolveAvatar = resolvedAvatar;
 

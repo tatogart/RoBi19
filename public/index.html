@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robis — Play, Build and Create Games</title>
+<meta name="description" content="Robis is a 2019-style user-generated game platform: play games made by the community, customize your avatar and build your own worlds in Robis Studio.">
+<link rel="icon" href="/img/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/robis.css">
+<link rel="stylesheet" href="/css/landing.css">
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+</head>
+<body class="landing">
+<header class="landing-header">
+  <img src="/img/logo.svg" alt="ROBIS" class="landing-logo">
+  <form class="login-inline" id="login-form">
+    <input class="input" name="username" placeholder="Username" autocomplete="username" required>
+    <input class="input" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button class="btn btn-primary" type="submit">Log In</button>
+  </form>
+</header>
+<section class="hero">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-shade"></div>
+  <div class="hero-inner">
+    <div class="hero-text">
+      <img src="/img/logo.svg" alt="ROBIS" class="hero-logo">
+      <p class="tagline">Build anything. Play everything. Hang out with friends.</p>
+      <p class="sub">Robis is the place where millions of imaginary players come together to play games made by people just like you.</p>
+    </div>
+    <form class="signup panel" id="signup-form">
+      <h2>Sign up and start having fun!</h2>
+      <label class="field">Birthday
+        <div class="row" style="gap:6px">
+          <select class="input" name="month" aria-label="Month"><option>Month</option></select>
+          <select class="input" name="day" aria-label="Day"><option>Day</option></select>
+          <select class="input" name="year" aria-label="Year"><option>Year</option></select>
+        </div>
+      </label>
+      <label class="field">Username<input class="input" name="username" placeholder="Don't use your real name" autocomplete="username" required></label>
+      <label class="field">Password<input class="input" name="password" type="password" placeholder="At least 6 characters" autocomplete="new-password" required></label>
+      <div class="field">Gender (optional)
+        <div class="row gender">
+          <label><input type="radio" name="gender" value="f"> <span>♀</span></label>
+          <label><input type="radio" name="gender" value="m"> <span>♂</span></label>
+        </div>
+      </div>
+      <div class="error-text" id="signup-error"></div>
+      <button class="btn btn-green btn-block btn-large" type="submit">Sign Up</button>
+      <p class="small muted center">By clicking Sign Up, you are agreeing to be awesome. This is a fan project — no real data leaves your computer.</p>
+    </form>
+  </div>
+</section>
+<section class="landing-section">
+  <h2>Robis on your devices</h2>
+  <div class="devices">
+    <div><div class="dev-icon">🖥️</div><b>Browser</b><span>Play instantly in any modern browser — no plugin needed.</span></div>
+    <div><div class="dev-icon">🛠️</div><b>Robis Studio</b><span>A full editor with Explorer, Properties, Lua scripting and one-click publishing.</span></div>
+    <div><div class="dev-icon">📱</div><b>Mobile</b><span>Touch thumbstick and jump button for phones and tablets.</span></div>
+  </div>
+</section>
+<footer class="footer" style="max-width:1000px;margin:0 auto 20px"></footer>
+<script type="module" src="/js/site/pages/landing.js"></script>
+</body>
+</html>

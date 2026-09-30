@@ -1,0 +1,32 @@
+body.landing { background: #fff; }
+.landing-header {
+  position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 50; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; background: rgba(0, 0, 0, .35); backdrop-filter: blur(4px);
+}
+.landing-logo { height: 30px; }
+.login-inline { display: flex; gap: 8px; }
+.login-inline .input { width: 150px; padding: 6px 10px; }
+.hero { position: relative; min-height: 640px; height: 100vh; max-height: 820px; overflow: hidden; background: #6aa7de; }
+#hero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hero-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0, 0, 0, .55), rgba(0, 0, 0, .1) 60%, rgba(0, 0, 0, .25)); }
+.hero-inner { position: relative; z-index: 2; max-width: 1100px; margin: 0 auto; height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 40px; padding: 80px 24px 40px; }
+.hero-text { color: #fff; max-width: 480px; text-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
+.hero-logo { height: 80px; margin-bottom: 18px; }
+.tagline { font-size: 30px; font-weight: 700; margin: 0 0 10px; line-height: 1.2; }
+.sub { font-size: 18px; opacity: .95; }
+.signup { width: 360px; flex: none; }
+.signup h2 { font-size: 22px; text-align: center; }
+.gender { gap: 24px; margin-top: 6px; }
+.gender label { display: flex; align-items: center; gap: 6px; font-size: 22px; cursor: pointer; }
+.landing-section { max-width: 1000px; margin: 50px auto; padding: 0 24px; text-align: center; }
+.devices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; margin-top: 24px; }
+.devices > div { background: var(--gray-bg); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 8px; }
+.dev-icon { font-size: 44px; }
+@media (max-width: 860px) {
+  .hero { height: auto; max-height: none; }
+  .hero-inner { flex-direction: column; justify-content: flex-start; }
+  .signup { width: 100%; max-width: 420px; }
+  .login-inline .input { width: 100px; }
+  .landing-logo { display: none; }
+  .login-inline { flex: 1; justify-content: flex-end; }
+}

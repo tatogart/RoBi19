@@ -1,0 +1,124 @@
+/* Robis game client HUD — modelled on the 2019 in-game UI. */
+.game-root { position: fixed; inset: 0; overflow: hidden; background: #000; font-family: 'Source Sans Pro', 'Segoe UI', Arial, sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
+.game-root.embedded { position: absolute; }
+.game-root canvas.view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.game-root.hover-click canvas.view { cursor: pointer; }
+.hud { position: absolute; inset: 0; pointer-events: none; color: #fff; }
+.hud > * { pointer-events: auto; }
+.overlay-tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+
+/* top bar buttons */
+.topbar { position: absolute; top: 0; left: 0; right: 0; height: 36px; display: flex; gap: 4px; padding: 4px; pointer-events: none; }
+.topbar button { pointer-events: auto; width: 32px; height: 28px; border: 0; border-radius: 4px; background: rgba(31, 31, 31, .6); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.topbar button:hover { background: rgba(60, 60, 60, .8); }
+.topbar button.on { background: rgba(0, 162, 255, .75); }
+.topbar svg { width: 20px; height: 20px; }
+
+/* chat */
+.chat { position: absolute; top: 40px; left: 4px; width: 380px; max-width: calc(100% - 8px); font-size: 17px; }
+.chat .log { max-height: 190px; overflow-y: auto; padding: 6px 8px; background: rgba(31, 31, 31, 0); transition: background .3s; border-radius: 4px 4px 0 0; scrollbar-width: thin; }
+.chat.active .log, .chat:hover .log { background: rgba(31, 31, 31, .4); }
+.chat .line { text-shadow: 0 0 2px #000, 1px 1px 1px #000; line-height: 1.25; margin-bottom: 2px; word-wrap: break-word; transition: opacity .6s; }
+.chat.faded .line { opacity: 0; }
+.chat.active .line, .chat:hover .line { opacity: 1; }
+.chat .line .who { font-weight: 700; }
+.chat .line.system { color: #d8d8d8; font-style: italic; }
+.chat .bar { display: flex; background: rgba(31, 31, 31, .6); border-radius: 0 0 4px 4px; opacity: 0; transition: opacity .3s; }
+.chat.active .bar, .chat:hover .bar { opacity: 1; }
+.chat input { flex: 1; border: 0; background: transparent; color: #fff; padding: 7px 8px; font-size: 16px; outline: none; font-family: inherit; }
+.chat input::placeholder { color: #c8c8c8; }
+
+/* leaderboard */
+.leaderboard { position: absolute; top: 4px; right: 4px; min-width: 180px; background: rgba(31, 31, 31, .6); border-radius: 4px; font-size: 16px; overflow: hidden; }
+.leaderboard table { border-collapse: collapse; width: 100%; }
+.leaderboard th { font-size: 13px; font-weight: 600; text-align: right; padding: 5px 10px; background: rgba(0, 0, 0, .25); }
+.leaderboard th:first-child { text-align: left; }
+.leaderboard td { padding: 4px 10px; text-align: right; white-space: nowrap; }
+.leaderboard td:first-child { text-align: left; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+.leaderboard tr.me td { background: rgba(255, 255, 255, .15); }
+.leaderboard .title { padding: 5px 10px; font-weight: 700; font-size: 14px; background: rgba(0, 0, 0, .35); }
+
+/* health bar (top right under leaderboard) */
+.healthbar { position: absolute; right: 10px; width: 180px; height: 12px; border-radius: 6px; background: rgba(31, 31, 31, .6); overflow: hidden; display: none; }
+.healthbar div { height: 100%; background: #29d157; transition: width .2s; }
+
+/* hints and messages */
+.hint { position: absolute; top: 36px; left: 0; right: 0; background: rgba(0, 0, 0, .75); color: #fff; text-align: center; font-size: 18px; padding: 4px; font-weight: 600; display: none; pointer-events: none; }
+.message-full { position: absolute; inset: 0; background: rgba(90, 90, 90, .55); display: none; align-items: center; justify-content: center; font-size: 30px; font-weight: 700; text-align: center; padding: 20px; pointer-events: none; text-shadow: 0 2px 4px #000; }
+
+/* name tags & bubbles */
+.name-tag { position: absolute; left: 0; top: 0; text-align: center; will-change: transform; }
+.name-tag .nt-name { color: #fff; font-weight: 700; font-size: 15px; text-shadow: 0 0 3px #000, 1px 1px 1px #000; white-space: nowrap; }
+.name-tag .nt-health { width: 60px; height: 6px; margin: 2px auto 0; background: #6b0000; border: 1px solid rgba(0, 0, 0, .6); display: none; }
+.name-tag .nt-health div { height: 100%; }
+.name-tag .bubbles { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 6px; }
+.bubble { background: #fff; color: #222; border-radius: 12px; padding: 6px 12px; font-size: 15px; max-width: 260px; box-shadow: 0 2px 6px rgba(0, 0, 0, .35); position: relative; transition: opacity .8s; animation: bubbleIn .2s ease-out; }
+.bubble:last-child::after { content: ''; position: absolute; bottom: -7px; left: 50%; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: #fff; }
+.bubble.fade { opacity: 0; }
+@keyframes bubbleIn { from { transform: scale(.7); opacity: 0; } }
+
+/* escape menu */
+.esc-menu { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); display: none; align-items: center; justify-content: center; z-index: 20; }
+.esc-menu.open { display: flex; }
+.esc-panel { width: 720px; max-width: calc(100% - 20px); height: 520px; max-height: calc(100% - 20px); background: rgba(31, 31, 31, .85); border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; }
+.esc-tabs { display: flex; border-bottom: 1px solid rgba(255, 255, 255, .15); }
+.esc-tabs button { flex: 1; background: none; border: 0; color: #bdbdbd; padding: 14px; font-size: 17px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; font-family: inherit; }
+.esc-tabs button.active { color: #fff; border-bottom-color: #fff; }
+.esc-body { flex: 1; overflow-y: auto; padding: 16px 22px; }
+.esc-actions { display: flex; gap: 12px; padding: 14px 22px; border-top: 1px solid rgba(255, 255, 255, .15); }
+.esc-actions button { flex: 1; padding: 11px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, .6); background: transparent; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.esc-actions button:hover { background: rgba(255, 255, 255, .12); }
+.esc-actions button.primary { background: #fff; color: #222; border-color: #fff; }
+.esc-actions kbd { background: rgba(255, 255, 255, .2); border-radius: 3px; padding: 0 6px; font-size: 12px; margin-left: 6px; font-family: inherit; }
+.esc-actions button.primary kbd { background: rgba(0, 0, 0, .12); }
+.esc-player { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 4px; background: rgba(255, 255, 255, .06); margin-bottom: 6px; }
+.esc-player img { width: 44px; height: 44px; border-radius: 50%; background: #555; }
+.esc-setting { display: flex; align-items: center; justify-content: space-between; padding: 12px 4px; border-bottom: 1px solid rgba(255, 255, 255, .1); font-size: 16px; }
+.esc-setting input[type=range] { width: 200px; }
+.esc-setting select { background: #333; color: #fff; border: 1px solid #666; border-radius: 3px; padding: 4px; font-family: inherit; }
+.esc-confirm { text-align: center; padding-top: 70px; }
+.esc-confirm h2 { font-size: 26px; margin-bottom: 8px; }
+
+/* loading screen */
+.loading-screen { position: absolute; inset: 0; background: #2e3136; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 30; transition: opacity .6s; }
+.loading-screen.done { opacity: 0; pointer-events: none; }
+.loading-screen .ls-name { font-size: 40px; font-weight: 700; text-align: center; padding: 0 20px; }
+.loading-screen .ls-by { font-size: 18px; color: #bbb; margin-top: 4px; }
+.loading-screen .ls-logo { width: 64px; height: 64px; margin-top: 40px; animation: lsSpin 1.2s linear infinite; }
+.loading-screen .ls-status { margin-top: 18px; color: #ccc; font-size: 16px; }
+@keyframes lsSpin { to { transform: rotate(360deg); } }
+
+/* dialogs (disconnect / kick) */
+.game-dialog { position: absolute; inset: 0; background: rgba(0, 0, 0, .6); display: flex; align-items: center; justify-content: center; z-index: 40; }
+.game-dialog .box { background: #2e3136; border-radius: 6px; width: 420px; max-width: calc(100% - 20px); padding: 22px; text-align: center; }
+.game-dialog h3 { margin: 0 0 10px; font-size: 22px; }
+.game-dialog p { color: #ccc; }
+.game-dialog .btns { display: flex; gap: 10px; margin-top: 18px; }
+.game-dialog button { flex: 1; padding: 10px; border-radius: 4px; border: 0; font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.game-dialog button.primary { background: #fff; color: #222; }
+.game-dialog button.secondary { background: transparent; color: #fff; border: 1px solid #fff; }
+
+/* developer console */
+.dev-console { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 820px; max-width: calc(100% - 20px); height: 460px; max-height: calc(100% - 40px); background: rgba(20, 20, 20, .92); border-radius: 6px; display: none; flex-direction: column; z-index: 25; font-size: 13px; }
+.dev-console.open { display: flex; }
+.dev-console .dc-head { display: flex; align-items: center; padding: 8px 12px; font-weight: 700; border-bottom: 1px solid #444; }
+.dev-console .dc-head button { margin-left: auto; background: none; border: 0; color: #fff; font-size: 18px; cursor: pointer; }
+.dev-console .dc-log { flex: 1; overflow-y: auto; padding: 6px 12px; font-family: Consolas, Menlo, monospace; white-space: pre-wrap; user-select: text; -webkit-user-select: text; }
+.dev-console .dc-log .warn { color: #ffb02e; }
+.dev-console .dc-log .error { color: #ff5c5c; }
+.dev-console .dc-log .info { color: #7fb8ff; }
+.dev-console form { display: flex; border-top: 1px solid #444; }
+.dev-console form input { flex: 1; background: #111; border: 0; color: #fff; padding: 8px 12px; font-family: Consolas, Menlo, monospace; outline: none; }
+
+/* mobile controls */
+.touch-stick { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, .15); border: 2px solid rgba(255, 255, 255, .4); display: none; pointer-events: none; }
+.touch-stick .knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, .5); }
+.jump-btn { position: absolute; right: 30px; bottom: 40px; width: 80px; height: 80px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .5); background: rgba(255, 255, 255, .15); color: #fff; font-weight: 700; display: none; }
+@media (hover: none) and (pointer: coarse) { .jump-btn { display: block; } .chat { width: 280px; font-size: 15px; } }
+
+/* crosshair for first person / shift lock */
+.crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; pointer-events: none; display: none; }
+.crosshair::before, .crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+.crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+.crosshair::after { top: 10px; left: 0; width: 22px; height: 2px; }
+.fps { position: absolute; bottom: 4px; left: 6px; font-size: 12px; color: rgba(255, 255, 255, .6); pointer-events: none; }

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 56" role="img" aria-label="ROBIS">
+  <g fill="#fff" font-family="'Source Sans Pro','Arial Black',Arial,sans-serif" font-weight="900" font-size="52">
+    <text x="0" y="48">R</text>
+    <g transform="translate(66 28) rotate(15)">
+      <rect x="-21" y="-21" width="42" height="42" rx="3"/>
+      <rect x="-6.5" y="-6.5" width="13" height="13" fill="#00a2ff"/>
+    </g>
+    <text x="96" y="48">BIS</text>
+  </g>
+</svg>

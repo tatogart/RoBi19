@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Robis Player</title>
+<link rel="icon" href="/img/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="/css/game.css">
+<style>html, body { margin: 0; background: #000; overflow: hidden; height: 100%; }</style>
+<script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","three/addons/":"/vendor/three/examples/jsm/"}}</script>
+</head>
+<body>
+<script type="module">
+import { GameClient } from '/js/game/client.js';
+import { getMe } from '/js/site/api.js';
+
+const params = new URLSearchParams(location.search);
+const placeId = +params.get('placeId');
+const me = await getMe();
+if (!me) location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search);
+let gameInfo = null;
+try { gameInfo = (await (await fetch(`/api/games/${placeId}`)).json()).game; } catch { /* shown by the client */ }
+if (gameInfo) document.title = `${gameInfo.name} - Robis`;
+const client = new GameClient(document.body, { placeId, serverId: params.get('serverId'), gameInfo });
+client.start();
+window.robis = client;
+</script>
+</body>
+</html>
