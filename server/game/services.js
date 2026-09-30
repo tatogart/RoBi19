@@ -198,8 +198,10 @@ export function installServices(game, rt, backend) {
   ds.GetOrderedDataStore = ds.GetDataStore;
 
   const badges = game.GetService('BadgeService');
-  badges.AwardBadge = (userId, name) => backend.awardBadge(+userId, String(name));
-  badges.UserHasBadgeAsync = (userId, name) => backend.hasBadge(+userId, String(name));
+  // Badges are created by name the first time they're awarded. A Studio test
+  // of an unpublished place has nowhere to save them, so nothing happens there.
+  badges.AwardBadge = (userId, name) => (backend.awardBadge ? backend.awardBadge(+userId, String(name)) : false);
+  badges.UserHasBadgeAsync = (userId, name) => (backend.hasBadge ? backend.hasBadge(+userId, String(name)) : false);
   badges.UserHasBadge = badges.UserHasBadgeAsync;
 
   const market = game.GetService('MarketplaceService');
