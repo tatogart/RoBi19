@@ -9,12 +9,38 @@ import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES } from '../shared/avatar.js';
 import { PLACE_FORMAT } from '../shared/engine/serialize.js';
 
 const ONLINE_MS = 2 * 60 * 1000;
-const STIPEND = 25;
 const STIPEND_MS = 24 * 3600 * 1000;
+
+// Builders Club tiers (2019 names). All free: Robits are fictional.
+export const MEMBERSHIPS = {
+  None: { name: 'Classic', stipend: 25 },
+  BuildersClub: { name: 'Builders Club', short: 'BC', stipend: 40 },
+  TurboBuildersClub: { name: 'Turbo Builders Club', short: 'TBC', stipend: 60 },
+  OutrageousBuildersClub: { name: 'Outrageous Builders Club', short: 'OBC', stipend: 85 },
+};
+// The 2019 Robux packages (shown with their old prices, but free here).
+export const ROBITS_PACKS = [
+  { amount: 400, price: '$4.99' }, { amount: 800, price: '$9.99' }, { amount: 1700, price: '$19.99' },
+  { amount: 4500, price: '$49.99' }, { amount: 10000, price: '$99.99' }, { amount: 22500, price: '$199.99' },
+];
+const ADMIN_ROBITS = 1_000_000;
 
 export function createApi(db, manager) {
   const api = express.Router();
   const D = db.data;
+
+  // Admins get the full owner experience: Robits, OBC and every catalog item.
+  const grantAdminPerks = (u) => {
+    if (!u || !u.isAdmin || u.adminPerks || u.system) return;
+    u.adminPerks = true;
+    u.robits = (u.robits || 0) + ADMIN_ROBITS;
+    u.membership = 'OutrageousBuildersClub';
+    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...Object.keys(D.items).map(Number)])];
+    D.transactions.push({ userId: u.id, amount: ADMIN_ROBITS, desc: 'Admin bonus', time: Date.now() });
+    db.save();
+  };
+  // Also for admins created before this existed (e.g. an existing phone world).
+  for (const u of Object.values(D.users)) grantAdminPerks(u);
 
   // ------------------------------------------------------------ helpers
   const requireUser = (req, res, next) => {
@@ -54,7 +80,11 @@ export function createApi(db, manager) {
   };
   manager.resolveAvatar = resolvedAvatar;
 
-  const me = (u) => ({ ...publicUser(u, true), robits: u.robits, canClaimStipend: Date.now() - (u.lastStipend || 0) > STIPEND_MS, rawAvatar: normalizeAvatar(u.avatar) });
+  const stipendFor = (u) => (MEMBERSHIPS[u.membership] || MEMBERSHIPS.None).stipend;
+  const me = (u) => ({
+    ...publicUser(u, true), robits: u.robits, canClaimStipend: Date.now() - (u.lastStipend || 0) > STIPEND_MS,
+    stipend: stipendFor(u), rawAvatar: normalizeAvatar(u.avatar),
+  });
 
   const publicGame = (g, user) => {
     const creator = D.users[g.creatorId];
@@ -99,6 +129,7 @@ export function createApi(db, manager) {
     // The very first person to sign up on a fresh server becomes its admin.
     const isFirst = !Object.values(D.users).some((u) => !u.system);
     const user = createUser(db, username, password, isFirst ? { isAdmin: true } : {});
+    grantAdminPerks(user);
     const token = createSession(db, user.id);
     res.setHeader('Set-Cookie', sessionCookie(token));
     res.json({ user: me(user) });
@@ -108,6 +139,7 @@ export function createApi(db, manager) {
     const { username, password } = req.body || {};
     const user = Object.values(D.users).find((u) => u.username.toLowerCase() === String(username || '').toLowerCase());
     if (!user || !checkPassword(user, String(password || ''))) return bad(res, 'Incorrect username or password.', 401);
+    if (user.banned) return bad(res, `This account has been banned.${user.banReason ? ' Reason: ' + user.banReason : ''}`, 403);
     const token = createSession(db, user.id);
     user.lastOnline = Date.now();
     res.setHeader('Set-Cookie', sessionCookie(token));
@@ -332,11 +364,39 @@ export function createApi(db, manager) {
   // ------------------------------------------------------------ economy
   api.post('/economy/stipend', requireUser, (req, res) => {
     if (Date.now() - (req.user.lastStipend || 0) < STIPEND_MS) return bad(res, 'Come back tomorrow for more Robits!');
+    const amount = stipendFor(req.user);
     req.user.lastStipend = Date.now();
-    req.user.robits += STIPEND;
-    log(req.user.id, STIPEND, 'Daily stipend');
+    req.user.robits += amount;
+    log(req.user.id, amount, 'Daily stipend');
     db.save();
-    res.json({ robits: req.user.robits, amount: STIPEND });
+    res.json({ robits: req.user.robits, amount });
+  });
+
+  api.get('/economy/store', (req, res) => {
+    res.json({
+      packs: ROBITS_PACKS,
+      memberships: Object.entries(MEMBERSHIPS).map(([id, m]) => ({ id, ...m })),
+      current: req.user ? req.user.membership || 'None' : null,
+    });
+  });
+
+  // "Buying" Robits: fictional currency, so the packs are free.
+  api.post('/economy/buy', requireUser, (req, res) => {
+    const pack = ROBITS_PACKS.find((p) => p.amount === +req.body?.amount);
+    if (!pack) return bad(res, 'Unknown package.');
+    req.user.robits += pack.amount;
+    log(req.user.id, pack.amount, `Bought ${pack.amount.toLocaleString('en-US')} Robits`);
+    db.save();
+    res.json({ robits: req.user.robits, amount: pack.amount });
+  });
+
+  api.post('/economy/membership', requireUser, (req, res) => {
+    const tier = String(req.body?.tier || '');
+    if (!MEMBERSHIPS[tier]) return bad(res, 'Unknown membership.');
+    req.user.membership = tier;
+    log(req.user.id, 0, tier === 'None' ? 'Cancelled membership' : `Joined ${MEMBERSHIPS[tier].name}`);
+    db.save();
+    res.json({ user: me(req.user) });
   });
 
   api.get('/economy/transactions', requireUser, (req, res) => {
@@ -525,6 +585,82 @@ export function createApi(db, manager) {
       playing: servers.reduce((a, s) => a + s.playerCount, 0),
       servers: servers.length,
     });
+  });
+
+  // ------------------------------------------------------------ admin panel
+  const requireAdmin = (req, res, next) => {
+    if (!req.user) return bad(res, 'You must be logged in.', 401);
+    if (!req.user.isAdmin) return bad(res, 'Admins only.', 403);
+    next();
+  };
+  const adminUser = (u) => ({
+    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, banned: !!u.banned, banReason: u.banReason || '',
+    items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
+  });
+  const target = (req, res) => {
+    const u = D.users[toInt(req.params.id)];
+    if (!u || u.system) { bad(res, 'User not found', 404); return null; }
+    return u;
+  };
+
+  api.get('/admin/overview', requireAdmin, (req, res) => {
+    const users = Object.values(D.users).filter((u) => !u.system);
+    res.json({
+      stats: {
+        users: users.length, games: Object.keys(D.games).length, items: Object.keys(D.items).length,
+        robits: users.reduce((a, u) => a + (u.robits || 0), 0),
+        playing: manager.allServers().reduce((a, s) => a + s.playerCount, 0),
+      },
+      users: users.sort((a, b) => b.lastOnline - a.lastOnline).map(adminUser),
+      memberships: Object.entries(MEMBERSHIPS).map(([id, m]) => ({ id, name: m.name })),
+    });
+  });
+
+  api.post('/admin/users/:id/robits', requireAdmin, (req, res) => {
+    const u = target(req, res); if (!u) return;
+    const amount = Math.trunc(+req.body?.amount || 0);
+    if (!amount || Math.abs(amount) > 1e9) return bad(res, 'Enter an amount.');
+    u.robits = Math.max(0, u.robits + amount);
+    log(u.id, amount, amount > 0 ? `Gift from ${req.user.username}` : `Removed by ${req.user.username}`);
+    db.save();
+    res.json({ user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/membership', requireAdmin, (req, res) => {
+    const u = target(req, res); if (!u) return;
+    if (!MEMBERSHIPS[req.body?.tier]) return bad(res, 'Unknown membership.');
+    u.membership = req.body.tier;
+    db.save();
+    res.json({ user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/items', requireAdmin, (req, res) => {
+    const u = target(req, res); if (!u) return;
+    const ids = req.body?.all ? Object.keys(D.items).map(Number) : [toInt(req.body?.itemId)].filter((i) => D.items[i]);
+    if (!ids.length) return bad(res, 'Item not found.');
+    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...ids])];
+    db.save();
+    res.json({ user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/admin', requireAdmin, (req, res) => {
+    const u = target(req, res); if (!u) return;
+    if (u.id === req.user.id) return bad(res, 'You can\'t change your own admin rights.');
+    u.isAdmin = !!req.body?.isAdmin;
+    grantAdminPerks(u);
+    db.save();
+    res.json({ user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/ban', requireAdmin, (req, res) => {
+    const u = target(req, res); if (!u) return;
+    if (u.id === req.user.id) return bad(res, 'You can\'t ban yourself.');
+    u.banned = !!req.body?.banned;
+    u.banReason = u.banned ? String(req.body?.reason || '').slice(0, 200) : '';
+    if (u.banned) for (const [t, s] of Object.entries(D.sessions)) if (s.userId === u.id) delete D.sessions[t];
+    if (u.banned) { const f = manager.findUser(u.id); if (f) f.server.kick(f.session, 'You have been banned.'); }
+    db.save();
+    res.json({ user: adminUser(u) });
   });
 
   api.use((req, res) => bad(res, 'Not found', 404));

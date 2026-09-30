@@ -102,7 +102,8 @@ Open **http://localhost:3000** and press **Sign Up** to create your own account.
 
 There are no ready-made accounts with passwords: every player signs up on the landing page (username 3–20 characters, password at least 6).
 
-- **The first account created on a server becomes its admin**: it can edit and delete any game.
+- **The first account created on a server becomes its admin.** It gets 1,000,000 R$, Outrageous Builders Club and every catalog item, can edit and delete any game, and can open the **Admin Panel** (⚙ menu or More). The panel can give players Robits and all items, change membership, make admins and ban.
+- **Robits and Builders Club** are on the **Robits** page: packs from 400 to 22,500 R$ and BC / TBC / OBC memberships (40 / 60 / 85 R$ a day instead of 25). All free: the currency is fictional and no real money is ever charged.
 - Every new player gets **100 R$** and the starter items: Bacon Hair, Pal Hair, Smile, Man Face, Woman Face, Blue Hoodie, Jeans, Robis Logo T-Shirt and Classic Robis Cap. Another 25 R$ can be collected every day.
 - `Robis` is a built-in "official" system account that owns the catalog and the five showcase games. It has no password: nobody can log into it, message it or send it friend requests.
 - Forgot a password? Stop the server and run `npm run reset-password YourName` to print a new one, or `npm run reset-password YourName new-password` to choose it.

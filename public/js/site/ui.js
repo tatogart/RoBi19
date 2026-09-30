@@ -170,3 +170,10 @@ export function launchGame(gameId, serverId) {
     location.href = `/play?placeId=${gameId}${serverId ? '&serverId=' + serverId : ''}`;
   }, 1300);
 }
+
+// Builders Club tier names (2019 style).
+export const MEMBERSHIP = {
+  BuildersClub: { name: 'Builders Club', short: 'BC', color: '#f68802' },
+  TurboBuildersClub: { name: 'Turbo Builders Club', short: 'TBC', color: '#d0021b' },
+  OutrageousBuildersClub: { name: 'Outrageous Builders Club', short: 'OBC', color: '#393b3d' },
+};

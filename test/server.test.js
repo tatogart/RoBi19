@@ -67,28 +67,49 @@ test('signup, login validation, avatar and purchases', async () => {
   assert.equal((await call('POST', '/auth/login', { username: 'Tester_1', password: 'nope' })).status, 401);
   const me = (await call('GET', '/auth/me', null, cookie)).data.user;
   assert.equal(me.username, 'Tester_1');
-  assert.equal(me.robits, 100);
-  // the first player on a fresh server is its admin; later ones are not
+  // the first player on a fresh server is its admin and gets the admin perks
   assert.equal(me.isAdmin, true);
+  assert.equal(me.robits, 1_000_100);
+  assert.equal(me.membership, 'OutrageousBuildersClub');
+  const all = (await call('GET', '/catalog')).data.items.length;
+  assert.equal((await call('GET', `/users/${me.id}/inventory`)).data.items.length, all);
+  // later players are regular players with 100 R$
   const second = await call('POST', '/auth/signup', { username: 'Second', password: 'secret123' });
   assert.equal(second.data.user.isAdmin, false);
+  assert.equal(second.data.user.robits, 100);
+  const c2 = second.cookie;
   // the built-in Robis account has no password and can't be logged into
   assert.equal((await call('POST', '/auth/login', { username: 'Robis', password: '' })).status, 401);
   assert.equal((await call('POST', '/friends/1/request', {}, cookie)).status, 400);
   // buy a cheap hat
   const cone = (await call('GET', '/catalog?q=Traffic')).data.items[0];
-  const buy = await call('POST', `/catalog/${cone.id}/buy`, {}, cookie);
+  const buy = await call('POST', `/catalog/${cone.id}/buy`, {}, c2);
   assert.equal(buy.status, 200);
   assert.equal(buy.data.robits, 75);
-  assert.equal((await call('POST', `/catalog/${cone.id}/buy`, {}, cookie)).status, 400);
+  assert.equal((await call('POST', `/catalog/${cone.id}/buy`, {}, c2)).status, 400);
   // can wear owned items only
   const crown = (await call('GET', '/catalog?q=Crown')).data.items[0];
-  const av = await call('PUT', '/avatar', { bodyColors: { head: '#ff0000' }, wearing: [cone.id, crown.id] }, cookie);
+  const av = await call('PUT', '/avatar', { bodyColors: { head: '#ff0000' }, wearing: [cone.id, crown.id] }, c2);
   assert.deepEqual(av.data.avatar.wearing, [cone.id]);
   assert.equal(av.data.avatar.bodyColors.head, '#ff0000');
-  // stipend once per day
-  assert.equal((await call('POST', '/economy/stipend', {}, cookie)).status, 200);
-  assert.equal((await call('POST', '/economy/stipend', {}, cookie)).status, 400);
+  // stipend once per day, bigger with Builders Club
+  assert.equal((await call('POST', '/economy/stipend', {}, c2)).data.amount, 25);
+  assert.equal((await call('POST', '/economy/stipend', {}, c2)).status, 400);
+  // free Robits packs and membership
+  assert.equal((await call('POST', '/economy/buy', { amount: 400 }, c2)).data.robits, 75 + 25 + 400);
+  assert.equal((await call('POST', '/economy/buy', { amount: 123 }, c2)).status, 400);
+  assert.equal((await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, c2)).data.user.stipend, 60);
+  // admin panel: only admins, gift Robits, ban
+  assert.equal((await call('GET', '/admin/overview', null, c2)).status, 403);
+  const ov = (await call('GET', '/admin/overview', null, cookie)).data;
+  const sid = ov.users.find((u) => u.username === 'Second').id;
+  assert.equal((await call('POST', `/admin/users/${sid}/robits`, { amount: 1000 }, cookie)).data.user.robits, 1500);
+  assert.equal((await call('POST', `/admin/users/${me.id}/ban`, { banned: true }, cookie)).status, 400);
+  await call('POST', `/admin/users/${sid}/ban`, { banned: true, reason: 'test' }, cookie);
+  assert.equal((await call('GET', '/auth/me', null, c2)).data.user, null);
+  assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 403);
+  await call('POST', `/admin/users/${sid}/ban`, { banned: false }, cookie);
+  assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 200);
 });
 
 test('create, publish and play a game with scripts over WebSocket', async () => {

@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, gameCard, avatarCard, headshotImg, toast, spinner } from '../ui.js';
+import { el, gameCard, avatarCard, headshotImg, toast, spinner, MEMBERSHIP } from '../ui.js';
 
 const me = await initPage({ active: 'home' });
 const app = document.getElementById('app');
@@ -9,14 +9,15 @@ const greeting = el('div', { class: 'section row greet', style: { gap: '20px' } 
   el('div', { class: 'greet-head', style: { width: '128px', height: '128px', borderRadius: '50%', overflow: 'hidden', background: '#d4d4d4', flex: 'none' } }, headshotImg(me, 256)),
   el('div', {},
     el('h1', { style: { margin: 0 }, text: `Hello, ${me.username}!` }),
-    me.membership !== 'None' ? el('div', { class: 'pill', style: { background: '#393b3d', color: '#fff' }, text: 'OUTRAGEOUS BUILDERS CLUB' }) : null));
+    MEMBERSHIP[me.membership] ? el('div', { class: 'pill', style: { background: MEMBERSHIP[me.membership].color, color: '#fff' }, text: MEMBERSHIP[me.membership].name.toUpperCase() }) : null,
+    me.isAdmin ? el('a', { class: 'pill', href: '/admin', style: { background: '#00a2ff', color: '#fff', marginLeft: '6px' }, text: 'ADMIN PANEL' }) : null));
 app.append(greeting);
 
 if (me.canClaimStipend) {
   const banner = el('div', { class: 'panel section row', style: { background: '#fffbe6', border: '1px solid #f6d365' } },
     el('span', { style: { fontSize: '28px' }, text: '🎁' }),
     el('div', { class: 'spacer' }, el('b', { text: 'Your daily Robits are ready!' }), el('div', { class: 'small muted', text: 'Log in every day to collect a free stipend.' })),
-    el('button', { class: 'btn btn-green', text: 'Collect R$25', onclick: async () => {
+    el('button', { class: 'btn btn-green', text: `Collect R$${me.stipend}`, onclick: async () => {
       try { const r = await api.post('/economy/stipend'); setRobits(r.robits); toast(`+${r.amount} Robits!`, 'success'); banner.remove(); } catch (e) { toast(e.message, 'error'); }
     } }));
   app.append(banner);
