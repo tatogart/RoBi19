@@ -14,6 +14,7 @@ const NAV = [
   ['friends', 'Friends', '/friends'],
   ['avatar', 'Avatar', '/avatar'],
   ['inventory', 'Inventory', '/inventory'],
+  ['trade', 'Trade', '/trades'],
   ['blog', 'Blog', '/blog'],
 ];
 
@@ -123,6 +124,7 @@ function buildNav(me, active) {
     const a = el('a', { href, class: active === ic ? 'active' : '' }, icon(ic), el('span', { text: label }));
     if (ic === 'messages') a.append(el('span', { class: 'count hidden', id: 'nav-msg' }));
     if (ic === 'friends') a.append(el('span', { class: 'count hidden', id: 'nav-friends' }));
+    if (ic === 'trade') a.append(el('span', { class: 'count hidden', id: 'nav-trade' }));
     nav.append(a);
   }
   // Links that live in the top bar on desktop.
@@ -141,11 +143,12 @@ function buildNav(me, active) {
 
 async function refreshCounts() {
   try {
-    const [msgs, reqs] = await Promise.all([api.get('/messages'), api.get('/friends/requests')]);
+    const [msgs, reqs, trades] = await Promise.all([api.get('/messages'), api.get('/friends/requests'), api.get('/trades/count').catch(() => ({ inbound: 0 }))]);
     const setCount = (id, n) => { const e = document.getElementById(id); if (e) { e.textContent = n; e.classList.toggle('hidden', !n); } };
     setCount('nav-msg', msgs.unread);
     setCount('nav-friends', reqs.requests.length);
-    setCount('hdr-notif', reqs.requests.length + msgs.unread);
+    setCount('nav-trade', trades.inbound);
+    setCount('hdr-notif', reqs.requests.length + msgs.unread + trades.inbound);
   } catch { /* ignore */ }
 }
 

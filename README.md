@@ -56,6 +56,8 @@
 - **Create Item (BETA)**: draw a T-shirt or face in the pixel editor (or upload a picture), or make shirts, pants, hats and hair from patterns, models and colours. Items go on sale in the Catalog; the creator gets 70%. Needs the *Item Creator* right.
 - **Rights from the Admin Panel**: admins give players *Moderator* (ban, kick, mute), *Economy* (Robits, items, Builders Club), *Item Creator (BETA)* and *Game Curator* (choose Featured games).
 - **Name badges** like on Roblox: a blue **verified check**, the **Robis icon** (official / staff) and a **Star Creator** star, shown next to the name on profiles, game and item pages, in chat and on the in-game player list. Nobody gets them automatically (only the official *Robis* account has the check and icon) — admins hand them out in **Admin Panel → Badges**.
+- **Trading** like in 2019: open a player's profile → **Trade Items**, pick up to 4 items and some Robits on each side and send the offer. Trades live in **Trade** (Inbound / Outbound / Completed / Inactive); nothing changes hands until the other player accepts. Only paid or Limited items can be traded, Robits received in a trade have a 30% fee, and *Settings → Trading* chooses who may send you trades.
+- **Taking items away**: in the Admin Panel, **Take items** shows a player's inventory — click an item to remove it (it's also taken off their avatar), or take everything at once.
 
 ### 🎮 Game client
 - Multiplayer over WebSocket with a server-authoritative world and client-side character movement.

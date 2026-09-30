@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner, nameBadges } from '../ui.js';
+import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner, nameBadges, itemCard } from '../ui.js';
 
 const me = await initPage({ active: 'admin' });
 const app = document.getElementById('app');
@@ -63,6 +63,7 @@ function row(u) {
     el('div', { class: 'admin-actions' },
       perm('economy') ? el('button', { class: 'btn btn-small btn-green', text: 'Give Robits', onclick: () => giveRobits(u) }) : null,
       perm('economy') ? el('button', { class: 'btn btn-small', text: 'Give all items', onclick: () => act(`/admin/users/${u.id}/items`, { all: true }, `${u.username} now owns every item`) }) : null,
+      perm('economy') ? el('button', { class: 'btn btn-small', text: 'Take items', onclick: () => takeItems(u) }) : null,
       perm('economy') ? tier : null,
       self || !me.isAdmin ? null : el('button', { class: 'btn btn-small', text: u.isAdmin ? 'Remove admin' : 'Make admin', onclick: () => act(`/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin }, u.isAdmin ? 'Admin removed' : `${u.username} is now an admin`) }),
       self || !me.isAdmin || u.isAdmin ? null : el('button', { class: 'btn btn-small', text: 'Permissions', onclick: () => permsDialog(u) }),
@@ -100,6 +101,29 @@ function permsDialog(u) {
     body: el('div', {}, el('p', { class: 'small muted', text: 'Admins have every right. Give other players only what they need.' }), boxes),
     buttons: [{ text: 'Save', cls: 'btn-primary', onClick: () => act(`/admin/users/${u.id}/perms`, { perms: boxes.map((b) => b.firstChild).filter((c) => c.checked).map((c) => c.dataset.perm) }, 'Permissions saved') }, { text: 'Cancel' }],
   });
+}
+
+// Shows a player's inventory; click an item to take it away.
+async function takeItems(u) {
+  const grid = el('div', { class: 'item-grid' }, spinner());
+  const draw = async () => {
+    const { items } = await api.get(`/users/${u.id}/inventory`);
+    grid.replaceChildren(...(items.length ? items.map((it) => itemCard(it, { onClick: async () => {
+      if (!confirm(`Take ${it.name} from ${u.username}?`)) return;
+      await act(`/admin/users/${u.id}/items/remove`, { itemId: it.id }, `${it.name} taken from ${u.username}`);
+      draw();
+    } })) : [el('div', { class: 'empty', text: 'This player has no items.' })]));
+  };
+  modal({
+    title: `Take items from ${u.username}`,
+    width: 760,
+    body: el('div', {}, el('p', { class: 'small muted', text: 'Click an item to take it away. It is also removed from the avatar.' }), el('div', { class: 'take-grid' }, grid)),
+    buttons: [{ text: 'Take all items', cls: 'btn-red', onClick: async () => {
+      if (!confirm(`Take ALL items from ${u.username}?`)) return false;
+      await act(`/admin/users/${u.id}/items/remove`, { all: true }, `All items taken from ${u.username}`);
+    } }, { text: 'Close' }],
+  });
+  draw();
 }
 
 function giveRobits(u) {

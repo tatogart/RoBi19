@@ -44,6 +44,15 @@ app.append(el('div', { class: 'panel' },
       } catch (e) { toast(e.message, 'error'); }
     } }))));
 
+// ---------------------------------------------------------------- trading
+const tradePanel = el('div', { class: 'panel', id: 'trading' });
+const drawTrading = (v) => tradePanel.replaceChildren(el('h3', { text: 'Trading' }),
+  choice('Who can trade with me?', v, [['everyone', 'Everyone'], ['friends', 'Friends'], ['nobody', 'No one']], async (p) => {
+    try { me = (await api.post('/account/trade-privacy', { privacy: p })).user; drawTrading(me.tradePrivacy); toast('Saved', 'success'); } catch (e) { toast(e.message, 'error'); }
+  }));
+drawTrading(me.tradePrivacy || 'everyone');
+app.append(tradePanel);
+
 // ---------------------------------------------------------------- password
 const oldPass = el('input', { class: 'input', type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
 const newPass = el('input', { class: 'input', type: 'password', placeholder: 'New password', autocomplete: 'new-password' });

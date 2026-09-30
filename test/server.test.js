@@ -410,3 +410,57 @@ test('name badges are only given by admins', async () => {
   await call('POST', `/admin/users/${starId}/flags`, {}, admin);
   assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, []);
 });
+
+test('players trade items and Robits', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const a = (await call('POST', '/auth/signup', { username: 'TraderA', password: 'secret123' })).cookie;
+  const b = (await call('POST', '/auth/signup', { username: 'TraderB', password: 'secret123' })).cookie;
+  const aid = (await call('GET', '/auth/me', null, a)).data.user.id;
+  const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
+  const paid = (await call('GET', '/catalog')).data.items.filter((i) => i.price > 0);
+  const [hat, shirt, free] = [paid[0], paid[1], (await call('GET', '/catalog')).data.items.find((i) => !i.price && !i.limited)];
+  await call('POST', `/admin/users/${aid}/items`, { itemId: hat.id }, admin);
+  await call('POST', `/admin/users/${bid}/items`, { itemId: shirt.id }, admin);
+  await call('POST', `/admin/users/${bid}/robits`, { amount: 1000 }, admin);
+  // can't trade items you don't have, free items, or with yourself
+  assert.equal((await call('POST', '/trades', { toUserId: bid, give: [shirt.id], get: [hat.id] }, a)).status, 400);
+  if (free) assert.equal((await call('POST', '/trades', { toUserId: bid, give: [free.id], get: [shirt.id] }, a)).status, 400);
+  assert.equal((await call('POST', '/trades', { toUserId: aid, give: [hat.id], get: [] }, a)).status, 400);
+  const r = await call('POST', '/trades', { toUserId: bid, give: [hat.id], get: [shirt.id], getRobits: 100 }, a);
+  assert.equal(r.status, 200);
+  assert.equal((await call('GET', '/trades/count', null, b)).data.inbound, 1);
+  assert.equal((await call('GET', '/trades?type=outbound', null, a)).data.trades.length, 1);
+  assert.equal((await call('POST', `/trades/${r.data.trade.id}/accept`, {}, a)).status, 403); // only the receiver accepts
+  const before = (await call('GET', '/auth/me', null, a)).data.user.robits;
+  assert.equal((await call('POST', `/trades/${r.data.trade.id}/accept`, {}, b)).status, 200);
+  const invA = (await call('GET', `/users/${aid}/inventory`)).data.items.map((i) => i.id);
+  const invB = (await call('GET', `/users/${bid}/inventory`)).data.items.map((i) => i.id);
+  assert.ok(invA.includes(shirt.id) && !invA.includes(hat.id));
+  assert.ok(invB.includes(hat.id) && !invB.includes(shirt.id));
+  assert.equal((await call('GET', '/auth/me', null, a)).data.user.robits, before + 70); // 30% fee
+  assert.equal((await call('GET', '/trades?type=completed', null, b)).data.trades.length, 1);
+  // a trade fails if an item is gone by the time it's accepted
+  const t2 = (await call('POST', '/trades', { toUserId: bid, give: [shirt.id], get: [hat.id] }, a)).data.trade;
+  await call('POST', `/admin/users/${aid}/items/remove`, { itemId: shirt.id }, admin);
+  assert.equal((await call('POST', `/trades/${t2.id}/accept`, {}, b)).status, 400);
+  assert.equal((await call('GET', '/trades?type=inactive', null, a)).data.trades[0].status, 'failed');
+  // privacy
+  await call('POST', '/account/trade-privacy', { privacy: 'nobody' }, b);
+  assert.equal((await call('POST', '/trades', { toUserId: bid, give: [], giveRobits: 5, get: [hat.id] }, a)).status, 400);
+});
+
+test('admins take items away', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = (await call('POST', '/auth/signup', { username: 'Hoarder', password: 'secret123' })).cookie;
+  const pid = (await call('GET', '/auth/me', null, p)).data.user.id;
+  await call('POST', `/admin/users/${pid}/items`, { all: true }, admin);
+  const inv = (await call('GET', `/users/${pid}/inventory`)).data.items;
+  const avatar = (await call('GET', '/avatar', null, p)).data.avatar;
+  await call('PUT', '/avatar', { ...avatar, wearing: [inv[0].id] }, p);
+  assert.equal((await call('POST', `/admin/users/${pid}/items/remove`, { itemId: inv[0].id }, p)).status, 403);
+  assert.equal((await call('POST', `/admin/users/${pid}/items/remove`, { itemId: inv[0].id }, admin)).status, 200);
+  assert.ok(!(await call('GET', `/users/${pid}/inventory`)).data.items.some((i) => i.id === inv[0].id));
+  assert.ok(!(await call('GET', '/avatar', null, p)).data.avatar.wearing.includes(inv[0].id)); // taken off the avatar too
+  assert.equal((await call('POST', `/admin/users/${pid}/items/remove`, { all: true }, admin)).data.removed, inv.length - 1);
+  assert.equal((await call('GET', `/users/${pid}/inventory`)).data.items.length, 0);
+});

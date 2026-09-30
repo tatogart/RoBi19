@@ -76,7 +76,7 @@ await esbuild.build({
 const boot = fs.readFileSync(r('standalone/boot.js'), 'utf8').replace(/__BASE__/g, BASE).replace('__ONLINE__', ONLINE);
 fs.writeFileSync(path.join(OUT, 'js/local/boot.js'), boot);
 
-const ROUTES = 'js|css|img|vendor|shared|api|ws|home|games|game|catalog|item|avatar|inventory|profile|friends|messages|develop|robits|admin|blog|help|settings|create|studio|play|manifest\\.webmanifest|sw\\.js|404';
+const ROUTES = 'js|css|img|vendor|shared|api|ws|home|games|game|catalog|item|avatar|inventory|profile|friends|messages|develop|robits|admin|blog|help|settings|create|trades|studio|play|manifest\\.webmanifest|sw\\.js|404';
 // Absolute app paths ('/js/..', '/game?id=..', '/?returnUrl=..') get the base prefix.
 // A bare '/' is only a path after `href:`/`href =` or `? .. :` (not e.key === '/').
 const rewrite = (text) => (BASE ? text

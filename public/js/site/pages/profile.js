@@ -32,6 +32,7 @@ function renderActions() {
     renderActions();
   } }));
   actions.append(el('a', { class: 'btn', href: `/messages?to=${encodeURIComponent(user.username)}`, text: 'Message' }));
+  actions.append(el('a', { class: 'btn', href: `/trades?with=${uid}` }, icon('trade'), 'Trade Items'));
   if (user.presence.status === 'ingame' && user.presence.gameId) actions.append(el('button', { class: 'btn btn-green', text: 'Join Game', onclick: () => launchGame(user.presence.gameId) }));
 }
 renderActions();

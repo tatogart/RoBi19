@@ -203,7 +203,7 @@ export function createApi(db, manager, opts = {}) {
   const me = (u) => ({
     ...publicUser(u, true), robits: u.robits, canClaimStipend: Date.now() - (u.lastStipend || 0) > STIPEND_MS,
     stipend: stipendFor(u), rawAvatar: normalizeAvatar(u.avatar),
-    perms: u.isAdmin ? Object.keys(PERMISSIONS) : (u.perms || []),
+    perms: u.isAdmin ? Object.keys(PERMISSIONS) : (u.perms || []), tradePrivacy: u.tradePrivacy || 'everyone',
   });
 
   const publicGame = (g, user) => {
@@ -370,6 +370,156 @@ export function createApi(db, manager, opts = {}) {
     D.invites = (D.invites || []).filter((i) => !(i.id === id && i.to === req.user.id));
     db.save();
     res.json({ ok: true });
+  });
+
+  // ------------------------------------------------------------ trades
+  // 2019-style trading: up to 4 items and some Robits on each side. Robits
+  // that change hands are taxed 30%. Nothing moves until the other player
+  // accepts, and everything is checked again at that moment.
+  const TRADE_MAX_ITEMS = 4;
+  const TRADE_TAX = 0.3;
+  const TRADE_MS = 7 * 24 * 3600e3;
+  if (!D.trades) D.trades = [];
+  const tradable = (it) => !!it && (it.price > 0 || it.limited);
+  // Removes an item from a player's inventory and takes it off their avatar.
+  const takeItem = (userId, itemId) => {
+    const inv = D.inventory[userId] || [];
+    const i = inv.indexOf(itemId);
+    if (i >= 0) inv.splice(i, 1);
+    const u = D.users[userId];
+    if (u && u.avatar && Array.isArray(u.avatar.wearing)) u.avatar.wearing = u.avatar.wearing.filter((x) => x !== itemId);
+  };
+  const itemList = (v) => [...new Set((Array.isArray(v) ? v : []).map(toInt).filter((i) => i !== null))];
+  const robitsAmount = (v) => Math.max(0, Math.min(1e9, Math.trunc(+v || 0)));
+  // Returns why a trade can't happen right now, or '' when it can.
+  const tradeProblem = (t) => {
+    const from = D.users[t.from], to = D.users[t.to];
+    if (!from || !to) return 'That player no longer exists.';
+    if (isBanned(from) || isBanned(to)) return 'One of the players is banned.';
+    const side = (owner, other, ids) => {
+      const inv = D.inventory[owner.id] || [];
+      const theirs = D.inventory[other.id] || [];
+      for (const id of ids) {
+        const it = D.items[id];
+        if (!tradable(it)) return 'One of the items can\'t be traded.';
+        if (!inv.includes(id)) return `${owner.username} no longer owns ${it.name}.`;
+        if (theirs.includes(id)) return `${other.username} already owns ${it.name}.`;
+      }
+      return '';
+    };
+    return side(from, to, t.give) || side(to, from, t.get)
+      || (from.robits < t.giveRobits ? `${from.username} doesn't have enough Robits.` : '')
+      || (to.robits < t.getRobits ? `${to.username} doesn't have enough Robits.` : '');
+  };
+  const expireTrades = () => {
+    const now = Date.now();
+    for (const t of D.trades) if (t.status === 'pending' && now - t.created > TRADE_MS) { t.status = 'expired'; t.updated = now; }
+    if (D.trades.length > 3000) D.trades.splice(0, D.trades.length - 3000);
+  };
+  const publicTrade = (t, viewer) => ({
+    id: t.id, status: t.status, created: t.created, updated: t.updated || t.created, reason: t.reason || '',
+    from: publicUser(D.users[t.from]), to: publicUser(D.users[t.to]),
+    give: t.give.map((i) => D.items[i]).filter(Boolean).map((i) => publicItem(i, viewer)), giveRobits: t.giveRobits,
+    get: t.get.map((i) => D.items[i]).filter(Boolean).map((i) => publicItem(i, viewer)), getRobits: t.getRobits,
+    inbound: t.to === viewer.id,
+  });
+  const tradeFor = (req, res) => {
+    const t = D.trades.find((x) => x.id === toInt(req.params.id) && (x.from === req.user.id || x.to === req.user.id));
+    if (!t) { bad(res, 'Trade not found', 404); return null; }
+    return t;
+  };
+
+  api.post('/trades', requireUser, (req, res) => {
+    const from = req.user;
+    const to = D.users[toInt(req.body?.toUserId)];
+    if (!to || to.system) return bad(res, 'User not found', 404);
+    if (to.id === from.id) return bad(res, 'You can\'t trade with yourself.');
+    const privacy = to.tradePrivacy || 'everyone';
+    if (privacy === 'nobody' || (privacy === 'friends' && !(D.friends[to.id] || []).includes(from.id))) return bad(res, `${to.username} isn't accepting trades from you.`);
+    const t = {
+      id: db.nextId('trade'), from: from.id, to: to.id, status: 'pending', created: Date.now(),
+      give: itemList(req.body?.give), giveRobits: robitsAmount(req.body?.giveRobits),
+      get: itemList(req.body?.get), getRobits: robitsAmount(req.body?.getRobits),
+    };
+    if (t.give.length > TRADE_MAX_ITEMS || t.get.length > TRADE_MAX_ITEMS) return bad(res, `You can trade at most ${TRADE_MAX_ITEMS} items on each side.`);
+    if (!t.give.length && !t.get.length) return bad(res, 'Add at least one item to the trade.');
+    if ((!t.give.length && !t.giveRobits) || (!t.get.length && !t.getRobits)) return bad(res, 'Both sides of a trade need something.');
+    const problem = tradeProblem(t);
+    if (problem) return bad(res, problem);
+    expireTrades();
+    if (D.trades.filter((x) => x.from === from.id && x.status === 'pending').length >= 25) return bad(res, 'You have too many open trades. Wait for answers or cancel some.');
+    D.trades.push(t);
+    db.save();
+    res.json({ trade: publicTrade(t, from) });
+  });
+
+  api.get('/trades', requireUser, (req, res) => {
+    expireTrades();
+    const id = req.user.id;
+    const type = String(req.query.type || 'inbound');
+    const mine = D.trades.filter((t) => t.from === id || t.to === id);
+    const list = type === 'outbound' ? mine.filter((t) => t.status === 'pending' && t.from === id)
+      : type === 'completed' ? mine.filter((t) => t.status === 'accepted')
+        : type === 'inactive' ? mine.filter((t) => !['pending', 'accepted'].includes(t.status))
+          : mine.filter((t) => t.status === 'pending' && t.to === id);
+    res.json({ trades: list.sort((a, b) => (b.updated || b.created) - (a.updated || a.created)).slice(0, 100).map((t) => publicTrade(t, req.user)) });
+  });
+
+  api.get('/trades/count', requireUser, (req, res) => {
+    expireTrades();
+    res.json({ inbound: D.trades.filter((t) => t.to === req.user.id && t.status === 'pending').length });
+  });
+
+  api.get('/trades/:id', requireUser, (req, res) => {
+    const t = tradeFor(req, res); if (!t) return;
+    res.json({ trade: publicTrade(t, req.user) });
+  });
+
+  api.post('/trades/:id/accept', requireUser, (req, res) => {
+    expireTrades();
+    const t = tradeFor(req, res); if (!t) return;
+    if (t.to !== req.user.id) return bad(res, 'Only the other player can accept this trade.', 403);
+    if (t.status !== 'pending') return bad(res, 'This trade is no longer active.');
+    const problem = tradeProblem(t);
+    if (problem) {
+      t.status = 'failed'; t.reason = problem; t.updated = Date.now();
+      db.save();
+      return bad(res, `The trade could not be completed: ${problem}`);
+    }
+    const from = D.users[t.from], to = D.users[t.to];
+    for (const id of t.give) { takeItem(from.id, id); (D.inventory[to.id] || (D.inventory[to.id] = [])).push(id); }
+    for (const id of t.get) { takeItem(to.id, id); (D.inventory[from.id] || (D.inventory[from.id] = [])).push(id); }
+    const move = (payer, payee, amount) => {
+      if (!amount) return;
+      const received = Math.floor(amount * (1 - TRADE_TAX));
+      payer.robits -= amount;
+      payee.robits += received;
+      log(payer.id, -amount, `Trade with ${payee.username}`);
+      log(payee.id, received, `Trade with ${payer.username} (after 30% fee)`);
+    };
+    move(from, to, t.giveRobits);
+    move(to, from, t.getRobits);
+    t.status = 'accepted'; t.updated = Date.now();
+    // Other open trades may have just become impossible; they fail when someone tries to accept them.
+    db.save();
+    res.json({ trade: publicTrade(t, req.user), robits: req.user.robits });
+  });
+
+  api.post('/trades/:id/decline', requireUser, (req, res) => {
+    const t = tradeFor(req, res); if (!t) return;
+    if (t.status !== 'pending') return bad(res, 'This trade is no longer active.');
+    t.status = t.from === req.user.id ? 'cancelled' : 'declined';
+    t.updated = Date.now();
+    db.save();
+    res.json({ trade: publicTrade(t, req.user) });
+  });
+
+  api.post('/account/trade-privacy', requireUser, (req, res) => {
+    const v = String(req.body?.privacy || '');
+    if (!['everyone', 'friends', 'nobody'].includes(v)) return bad(res, 'Choose who can trade with you.');
+    req.user.tradePrivacy = v;
+    db.save();
+    res.json({ user: me(req.user) });
   });
 
   // ------------------------------------------------------------ account settings
@@ -930,6 +1080,18 @@ export function createApi(db, manager, opts = {}) {
     D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...ids])];
     db.save();
     res.json({ user: adminUser(u) });
+  });
+
+  // Takes one item (or every item) away from a player.
+  api.post('/admin/users/:id/items/remove', requirePerm('economy'), (req, res) => {
+    const u = target(req, res); if (!u) return;
+    const owned = [...(D.inventory[u.id] || [])];
+    const ids = req.body?.all ? owned : [toInt(req.body?.itemId)].filter((i) => owned.includes(i));
+    if (!ids.length) return bad(res, req.body?.all ? 'This player has no items.' : 'This player doesn\'t own that item.');
+    for (const id of ids) takeItem(u.id, id);
+    log(u.id, 0, ids.length === 1 ? `${D.items[ids[0]]?.name || 'Item'} removed by ${req.user.username}` : `${ids.length} items removed by ${req.user.username}`);
+    db.save();
+    res.json({ user: adminUser(u), removed: ids.length });
   });
 
   api.post('/admin/users/:id/admin', requireAdmin, (req, res) => {
