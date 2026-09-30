@@ -179,7 +179,7 @@ export class GameClient {
         if (v) v.bubble(m.text);
         return;
       }
-      case 'sys': this.hud.addChat('', m.text, { system: true }); return;
+      case 'sys': this.hud.addChat('', m.text, { system: true }); this.hud.log({ level: 'info', text: m.text }); return;
       case 'emote': { const v = this.views.get(m.userId); if (v) v.emote(m.emote); return; }
       case 'teleport': {
         if (this.local) {

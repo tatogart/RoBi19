@@ -349,7 +349,7 @@ export class HUD {
     this.console = h('div', 'dev-console', '<div class="dc-head">Developer Console<button title="Close">×</button></div><div class="dc-log"></div>');
     const form = h('form');
     this.consoleInput = h('input');
-    this.consoleInput.placeholder = 'Run server Lua (game owners only)';
+    this.consoleInput.placeholder = 'Server Lua or :commands (owners and admins)';
     form.append(this.consoleInput);
     this.console.append(form);
     this.el.append(this.console);
@@ -359,7 +359,9 @@ export class HUD {
       const src = this.consoleInput.value.trim();
       if (!src) return;
       this.consoleInput.value = '';
-      this.client.send({ t: 'exec', src });
+      // ":kill all" etc. are chat commands; everything else is server Lua.
+      if (src[0] === ':') this.client.send({ t: 'chat', text: src });
+      else this.client.send({ t: 'exec', src });
     };
     this.consoleInput.addEventListener('keydown', (e) => e.stopPropagation());
     this.consoleInput.addEventListener('focus', () => { this.client.input.enabled = false; });

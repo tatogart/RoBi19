@@ -184,7 +184,8 @@ export class GameServer {
     const session = {
       ws, user, avatar, player: null, character: null,
       state: { p: [0, 10, 0], ry: 0, a: 'idle', v: [0, 0, 0] },
-      isDeveloper: this.isTest || user.id === this.creatorId || !!opts.developer,
+      // Game owners and Robis admins can use the F9 console (server Lua) everywhere.
+      isDeveloper: this.isTest || user.id === this.creatorId || !!user.isAdmin || !!opts.developer,
       respawnAt: 0,
       joinedAt: Date.now(),
     };

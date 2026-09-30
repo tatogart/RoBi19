@@ -114,7 +114,7 @@ There are no ready-made accounts with passwords: every player signs up on the la
 
 - **The first account created on a server becomes its admin.** It gets 1,000,000 R$, Outrageous Builders Club and every catalog item, can edit and delete any game, and can open the **Admin Panel** (⚙ menu or More). The panel can give players Robits and all items, change membership, make admins and ban.
 - **Bans** (Admin Panel → Ban) log the player out and kick them from games. Choose the type: **Account only** (a normal ban) or **Account + device and IP** (they can't make a new account either; the admins' own devices and IPs are never blocked), and the length: 1 hour, 1/3/7/30 days or forever. Temporary bans lift themselves.
-- **Chat commands** in any game (admins; a game's creator can use the fun ones in their own game). Targets: a name (or its start), `me`, `all`, `others`. Type `:cmds` for the list.
+- **Chat commands** in any game (admins; a game's creator can use the fun ones in their own game). Targets: a name (or its start), `me`, `all`, `others`. Type `:cmds` for the list. They also work in the **F9 developer console**, which admins and game owners can open in any game to run server Lua (e.g. `workspace.Gravity = 50`).
 
   | Command | Does |
   |---|---|
