@@ -31,6 +31,7 @@ jobs:
         run: npm run build:standalone
         env:
           ROBIS_BASE: /${{ github.event.repository.name }}
+          ROBIS_SERVER_URL: ${{ vars.ROBIS_SERVER_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

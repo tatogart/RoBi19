@@ -5,6 +5,8 @@
   var TOKEN = 'robis.session';
   window.ROBIS_STANDALONE = true;
   window.ROBIS_BASE = BASE;
+  // Shared online server (everyone in one world), if the owner has one.
+  window.ROBIS_ONLINE_URL = '__ONLINE__';
   var backend = null;
   function load() { return backend || (backend = import(BASE + '/js/local/backend.js')); }
   function token() { try { return localStorage.getItem(TOKEN); } catch (e) { return null; } }

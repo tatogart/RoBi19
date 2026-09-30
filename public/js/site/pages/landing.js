@@ -38,6 +38,12 @@ lf.addEventListener('submit', async (e) => {
 });
 if (params.get('signup')) f.username.focus();
 
+// Phone version: each phone is its own world, so point to the shared server.
+if (window.ROBIS_ONLINE_URL) {
+  f.prepend(el('a', { class: 'btn btn-green btn-large online-link', href: window.ROBIS_ONLINE_URL, text: 'Play online with friends' }),
+    el('p', { class: 'online-note', text: 'This app keeps a private world on your phone. Tap above to join the shared online server where your friends are.' }));
+}
+
 document.querySelector('.footer').innerHTML = '©2019 Robis — an open-source fan tribute to 2019-era game platforms. Not affiliated with Roblox Corporation.';
 
 // ---- live 3D background: slowly orbit around the Crossroads map

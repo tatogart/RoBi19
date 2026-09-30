@@ -4,13 +4,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
+import crypto from 'node:crypto';
 import { createServer } from '../server/index.js';
+import { pack, unpack } from '../server/backup.js';
 
 let srv, base, dir;
 
 before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'robis-test-'));
-  srv = createServer({ dataDir: dir, quiet: true, adminCode: 'test-code-1' });
+  srv = createServer({ dataDir: dir, quiet: true });
   await new Promise((r) => srv.server.listen(0, r));
   base = `http://127.0.0.1:${srv.server.address().port}`;
 });
@@ -109,13 +111,41 @@ test('signup, login validation, avatar and purchases', async () => {
   assert.equal((await call('GET', '/auth/me', null, c2)).data.user, null);
   assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 403);
   await call('POST', `/admin/users/${sid}/ban`, { banned: false }, cookie);
-  const relog = await call('POST', '/auth/login', { username: 'Second', password: 'secret123' });
-  assert.equal(relog.status, 200);
-  // the secret admin code turns any account into an admin
-  assert.equal((await call('POST', '/auth/admin-code', { code: 'nope' }, relog.cookie)).status, 403);
-  const promoted = await call('POST', '/auth/admin-code', { code: ' Test-Code-1 ' }, relog.cookie);
-  assert.equal(promoted.data.user.isAdmin, true);
-  assert.equal((await call('GET', '/admin/overview', null, relog.cookie)).status, 200);
+  assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 200);
+});
+
+test('with an admin code only the code makes admins, and backups round-trip', async () => {
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'robis-test-'));
+  const s2 = createServer({ dataDir: d2, quiet: true, adminCode: 'test-code-1' });
+  await new Promise((r) => s2.server.listen(0, r));
+  const url = `http://127.0.0.1:${s2.server.address().port}/api`;
+  const post = async (u, body, cookie) => {
+    const res = await fetch(url + u, { method: 'POST', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
+    return { status: res.status, data: await res.json(), cookie: (res.headers.get('set-cookie') || '').split(';')[0] };
+  };
+  try {
+    const first = await post('/auth/signup', { username: 'Owner', password: 'secret123' });
+    assert.equal(first.data.user.isAdmin, false);
+    assert.equal(first.data.user.robits, 100);
+    assert.equal((await post('/auth/admin-code', { code: 'nope' }, first.cookie)).status, 403);
+    const promoted = await post('/auth/admin-code', { code: ' Test-Code-1 ' }, first.cookie);
+    assert.equal(promoted.data.user.isAdmin, true);
+    assert.equal(promoted.data.user.robits, 1_000_100);
+    // encrypted backup of the whole data dir restores into an empty one
+    s2.db.flush();
+    const key = crypto.scryptSync('k', 'robis-backup', 32);
+    const blob = pack(d2, key);
+    const d3 = fs.mkdtempSync(path.join(os.tmpdir(), 'robis-test-'));
+    unpack(blob, d3, key);
+    const restored = JSON.parse(fs.readFileSync(path.join(d3, 'db.json'), 'utf8'));
+    assert.ok(Object.values(restored.users).some((u) => u.username === 'Owner' && u.isAdmin));
+    assert.equal(fs.readdirSync(path.join(d3, 'places')).length, fs.readdirSync(path.join(d2, 'places')).length);
+    assert.throws(() => unpack(blob, d3, crypto.scryptSync('wrong', 'robis-backup', 32)));
+    fs.rmSync(d3, { recursive: true, force: true });
+  } finally {
+    await s2.close();
+    fs.rmSync(d2, { recursive: true, force: true });
+  }
 });
 
 test('create, publish and play a game with scripts over WebSocket', async () => {

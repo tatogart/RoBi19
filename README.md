@@ -26,6 +26,7 @@
 - [Features](#features)
 - [Quick start](#quick-start)
 - [Install on your phone](#install-on-your-phone)
+- [Online server: play with friends](#online-server-play-with-friends)
 - [Screenshots](#screenshots)
 - [Controls](#controls)
 - [Robis Studio](#robis-studio)
@@ -145,7 +146,7 @@ To play: pick a game → green ▶ button → turn the phone sideways → fullsc
 
 - **Everything lives on the phone.** Accounts, items, games and DataStore saves are kept in the browser's storage. Clearing the site's data, or removing the app together with its data, starts a new world.
 - **On iPhone, add the icon to the home screen.** Safari may delete data of sites you haven't opened for 7 days, but home-screen apps are exempt.
-- **Each phone has its own world.** Friends on other phones can't join it: the standalone version has no internet server, so all games are single-player. Use the server version below to play together.
+- **Each phone has its own world.** Friends on other phones can't join it: the standalone version has no internet server, so all games are single-player. To play together, use the [online server](#online-server-play-with-friends).
 - Use Robis in one tab: two open tabs can overwrite each other's data.
 
 ### For the repository owner: publishing the link
@@ -161,6 +162,25 @@ To build by hand, run `npm run build:standalone`. It produces a `dist/` folder y
 ### Playing together over Wi-Fi (server version)
 
 To share one world, run `npm start` on a computer. The console prints an address like `http://192.168.1.23:3000`; open it on phones on the same Wi-Fi. On Windows, allow Node.js through the firewall for private networks if it doesn't load. To play over the internet, use a tunnel (`npx cloudflared tunnel --url http://localhost:3000`) or deploy with the `Dockerfile`.
+
+## Online server: play with friends
+
+The phone version keeps a separate world on every phone, so friends can't see each other there. For one shared world (friends, chat, multiplayer, bans from the Admin Panel) run the online server. It's free on [Render](https://render.com) and needs no computer:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/tatogart/RoBi19)
+
+1. **Make a GitHub token** so accounts survive restarts: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new) → *Repository access: Only select repositories* → `RoBi19` → *Permissions → Contents: Read and write* → **Generate token**. Copy it.
+2. Tap **Deploy to Render** above and sign in with GitHub.
+3. Fill in the two fields:
+   - `ROBIS_ADMIN_CODE`: your secret admin code (e.g. `ABCD-1234-WXYZ`). Nobody becomes admin automatically on this server; you enter this code via ⚙ → **Enter Admin Code**.
+   - `ROBIS_BACKUP_TOKEN`: the token from step 1.
+4. Tap **Deploy Blueprint** and wait 2–3 minutes. You get a link like `https://robis-xxxx.onrender.com`. Send it to your friends; on phones, open it and **Add to Home Screen**.
+5. Optional: to show a **Play online with friends** button in the phone version, add the link in *GitHub → Settings → Secrets and variables → Actions → Variables* as `ROBIS_SERVER_URL` (or put it in `standalone/server-url.txt`) and push to `main`.
+
+Good to know:
+- The free server **falls asleep after 15 minutes** without players. The first visit after that takes about a minute to load.
+- Render's free plan wipes the disk on every restart, so the server keeps an **encrypted** copy of all accounts and games on the `robis-data` branch (updated every minute while something changes) and restores it on start. The encryption key is your admin code (or `ROBIS_BACKUP_KEY`). If you change the code, set `ROBIS_BACKUP_KEY` to the old code, or the old data can't be read.
+- Every push to `main` redeploys the server automatically.
 
 ## Screenshots
 
@@ -321,6 +341,11 @@ All endpoints live under `/api` and use JSON. Authentication goes through the `r
 | `PORT` | `3000` | HTTP port |
 | `ROBIS_DATA` | `./data` | Folder for `db.json`, place files and thumbnails |
 | `ROBIS_LOG_SCRIPTS` | unset | Set it to `1` to also print game output in the server console |
+| `ROBIS_ADMIN_CODE` | unset | Secret admin code (⚙ → Enter Admin Code). When set, the first account is no longer made admin automatically |
+| `ROBIS_BACKUP_TOKEN` | unset | GitHub token (Contents: read and write) for encrypted backups to a branch; see [Online server](#online-server-play-with-friends) |
+| `ROBIS_BACKUP_REPO` | `RENDER_GIT_REPO_SLUG` | `owner/repo` for backups |
+| `ROBIS_BACKUP_BRANCH` | `robis-data` | Branch that holds the backup |
+| `ROBIS_BACKUP_KEY` | `ROBIS_ADMIN_CODE` | Password the backup is encrypted with |
 
 ## Tests
 
@@ -335,7 +360,7 @@ There are 22 tests. They cover the math types, the instance tree, serialization,
 - Only server `Script`s run. `LocalScript`s and GUI objects (`ScreenGui`) are stored but don't execute on the client yet.
 - The physics is intentionally simple. Unanchored parts fall and stack, but there is no rotation, joints or welds.
 - No real Terrain, meshes, audio assets or image uploads. Everything is procedural.
-- The standalone (phone) version is single-player: it has no shared server or multiplayer.
+- The standalone (phone) version is single-player: it has no shared server or multiplayer. To play with friends, use the [online server](#online-server-play-with-friends).
 - Ideas: LocalScripts running in the browser, Tools with `Activated`, ScreenGui, teams, Team Create in Studio and trading.
 
 ## License

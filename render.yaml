@@ -1,0 +1,23 @@
+# One-click online Robis server on Render's free plan.
+# Deploy: https://render.com/deploy?repo=https://github.com/tatogart/RoBi19
+services:
+  - type: web
+    name: robis
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/stats
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Secret code that turns an account into an admin (⚙ → Enter Admin Code).
+      - key: ROBIS_ADMIN_CODE
+        sync: false
+      # GitHub token with "Contents: read and write" on this repository.
+      # The free plan wipes the disk on every restart; with this token all
+      # accounts and games are kept (encrypted) on the robis-data branch.
+      - key: ROBIS_BACKUP_TOKEN
+        sync: false

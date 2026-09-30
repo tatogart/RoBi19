@@ -12,6 +12,7 @@ import { createApi } from './api.js';
 import { GameManager } from './game/manager.js';
 import { seed } from './seed/seed.js';
 import { handleConnection } from './connection.js';
+import { backupConfig, restore, startBackups } from './backup.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -30,10 +31,11 @@ export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROO
     next();
   });
 
-  // Optional admin code (any account that enters it becomes an admin).
+  // Optional admin code: any account that enters it becomes an admin. With a
+  // code set (public servers) the first account is no longer made admin.
   const code = adminCode ?? process.env.ROBIS_ADMIN_CODE;
   const adminCodeHash = code ? crypto.createHash('sha256').update(code.trim().toUpperCase()).digest('hex') : '';
-  app.use('/api', createApi(db, manager, { adminCodeHash }));
+  app.use('/api', createApi(db, manager, { adminCodeHash, firstUserIsAdmin: !adminCodeHash }));
   const staticOpts = { maxAge: 0 };
   app.use('/vendor/three', express.static(path.join(ROOT, 'node_modules/three'), staticOpts));
   app.use('/vendor/codemirror', express.static(path.join(ROOT, 'node_modules/codemirror'), staticOpts));
@@ -64,9 +66,15 @@ export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROO
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { server, close } = createServer();
+  const dataDir = process.env.ROBIS_DATA || path.join(ROOT, 'data');
+  const backup = backupConfig();
+  if (backup) {
+    try { await restore(backup, dataDir); } catch (e) { console.error('[backup] restore failed:', e.message); process.exit(1); }
+  }
+  const { server, db, close } = createServer({ dataDir });
+  const backups = backup ? startBackups(backup, db) : null;
   server.listen(+process.env.PORT || 3000);
-  const stop = async () => { await close(); process.exit(0); };
+  const stop = async () => { await close(); if (backups) await backups.flush(); process.exit(0); };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
 }

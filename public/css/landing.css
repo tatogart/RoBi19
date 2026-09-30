@@ -30,3 +30,5 @@ body.landing { background: #fff; }
   .landing-logo { display: none; }
   .login-inline { flex: 1; justify-content: flex-end; }
 }
+.online-link { display: block; width: 100%; text-align: center; box-sizing: border-box; }
+.online-note { font-size: 12px; color: #666; margin: 6px 0 14px; text-align: center; }

@@ -83,5 +83,5 @@ export function seed(db) {
     };
   }
   db.flush();
-  console.log('[seed] done. Open the site and sign up — the first account you create becomes the admin.');
+  console.log('[seed] done. Open the site and sign up — the first account you create becomes the admin (with ROBIS_ADMIN_CODE set: whoever enters that code).');
 }

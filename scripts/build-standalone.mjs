@@ -18,6 +18,8 @@ const ADMIN_HASH = process.env.ROBIS_ADMIN_CODE
   ? crypto.createHash('sha256').update(process.env.ROBIS_ADMIN_CODE.trim().toUpperCase()).digest('hex')
   : fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../standalone/admin-code.sha256'), 'utf8').trim();
 const r = (...p) => path.join(ROOT, ...p);
+// URL of the online server (render.yaml), linked from the phone version.
+const ONLINE = (process.env.ROBIS_SERVER_URL || (fs.existsSync(r('standalone/server-url.txt')) ? fs.readFileSync(r('standalone/server-url.txt'), 'utf8') : '')).trim().replace(/\/+$/, '');
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
@@ -70,7 +72,7 @@ await esbuild.build({
 });
 
 // ---------------------------------------------------------------- boot script, base path
-const boot = fs.readFileSync(r('standalone/boot.js'), 'utf8').replace(/__BASE__/g, BASE);
+const boot = fs.readFileSync(r('standalone/boot.js'), 'utf8').replace(/__BASE__/g, BASE).replace('__ONLINE__', ONLINE);
 fs.writeFileSync(path.join(OUT, 'js/local/boot.js'), boot);
 
 const ROUTES = 'js|css|img|vendor|shared|api|ws|home|games|game|catalog|item|avatar|inventory|profile|friends|messages|develop|robits|admin|blog|help|studio|play|manifest\\.webmanifest|sw\\.js|404';
