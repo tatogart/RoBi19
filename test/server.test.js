@@ -202,3 +202,33 @@ test('studio test sessions run unsaved places', async () => {
   assert.equal(out.text, 'from command bar 6');
   c.ws.close();
 });
+
+test('free Robits and self-joined memberships are taken back once', async () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'robis-test-'));
+  const user = (id, name, extra) => ({ id, username: name, robits: 100, membership: 'None', created: 0, ...extra });
+  fs.writeFileSync(path.join(d, 'db.json'), JSON.stringify({
+    meta: { version: 1, nextIds: { user: 4, game: 1, item: 1, message: 1 } },
+    users: {
+      1: user(1, 'Rich', { robits: 2300, membership: 'OutrageousBuildersClub' }),
+      2: user(2, 'Spent', { robits: 50, membership: 'BuildersClub' }),
+      3: user(3, 'Gifted', { robits: 100, membership: 'TurboBuildersClub' }),
+    },
+    transactions: [
+      { userId: 1, amount: 400, desc: 'Bought 400 Robits' }, { userId: 1, amount: 1700, desc: 'Bought 1,700 Robits' },
+      { userId: 1, amount: 0, desc: 'Joined Outrageous Builders Club' },
+      { userId: 2, amount: 800, desc: 'Bought 800 Robits' }, { userId: 2, amount: 0, desc: 'Joined Builders Club' },
+      { userId: 3, amount: 0, desc: 'Joined Builders Club' }, { userId: 3, amount: 0, desc: 'Membership set by Admin' },
+    ],
+  }));
+  let s = createServer({ dataDir: d, quiet: true });
+  const u = s.db.data.users;
+  assert.deepEqual([u[1].robits, u[1].membership], [200, 'None']);
+  assert.deepEqual([u[2].robits, u[2].membership], [0, 'None']);
+  assert.deepEqual([u[3].robits, u[3].membership], [100, 'TurboBuildersClub']);
+  u[1].robits = 500;
+  await s.close();
+  s = createServer({ dataDir: d, quiet: true });
+  assert.equal(s.db.data.users[1].robits, 500);
+  await s.close();
+  fs.rmSync(d, { recursive: true, force: true });
+});

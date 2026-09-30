@@ -56,6 +56,33 @@ export function createApi(db, manager, opts = {}) {
   if (opts.requireAdminCode) for (const u of Object.values(D.users)) if (u.isAdmin && !u.adminByCode) revokeAdmin(u);
   // Also for admins created before perks existed.
   for (const u of Object.values(D.users)) grantAdminPerks(u);
+  // The free Robits packs and self-service Builders Club are gone: take back
+  // what players gave themselves (runs once per database).
+  if (!D.meta.freeDonateRevoked) {
+    D.meta.freeDonateRevoked = true;
+    const now = Date.now();
+    for (const u of Object.values(D.users)) {
+      let bought = 0;
+      let selfJoined = false;
+      for (const t of D.transactions) {
+        if (t.userId !== u.id) continue;
+        const m = /^Bought ([\d,]+) Robits$/.exec(t.desc);
+        if (m) bought += +m[1].replace(/,/g, '');
+        else if (/^Joined /.test(t.desc)) selfJoined = true;
+        else if (t.desc === 'Cancelled membership' || /^Membership set by /.test(t.desc)) selfJoined = false;
+      }
+      if (bought) {
+        const take = Math.min(bought, u.robits);
+        u.robits -= take;
+        D.transactions.push({ userId: u.id, amount: -take, desc: 'Free Robits removed', time: now });
+      }
+      if (selfJoined && !u.adminPerks && u.membership && u.membership !== 'None') {
+        D.transactions.push({ userId: u.id, amount: 0, desc: `Free ${MEMBERSHIPS[u.membership]?.name || 'membership'} removed`, time: now });
+        u.membership = 'None';
+      }
+    }
+    db.save();
+  }
 
   // ------------------------------------------------------------ helpers
   const requireUser = (req, res, next) => {
@@ -638,6 +665,7 @@ export function createApi(db, manager, opts = {}) {
     const u = target(req, res); if (!u) return;
     if (!MEMBERSHIPS[req.body?.tier]) return bad(res, 'Unknown membership.');
     u.membership = req.body.tier;
+    log(u.id, 0, `Membership set by ${req.user.username}`);
     db.save();
     res.json({ user: adminUser(u) });
   });
