@@ -211,6 +211,7 @@ export class GameClient {
   }
 
   onWelcome(m) {
+    if (this.opts.onWelcome) setTimeout(() => this.opts.onWelcome(m));
     this.userId = m.userId;
     this.isDeveloper = m.isDeveloper;
     this.hud.setLoadingName(m.name, this.opts.gameInfo?.creator?.username);

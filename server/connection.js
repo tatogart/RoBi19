@@ -15,7 +15,7 @@ export function handleConnection(ws, user, { db, manager }) {
     if (!session) {
       if (msg.t !== 'join') return;
       try {
-        const avatar = manager.resolveAvatar(user);
+        const avatar = user.remoteAvatar || manager.resolveAvatar(user);
         if (msg.test) {
           gameServer = manager.createTestServer(msg.test, user, +msg.placeId || 0);
         } else {

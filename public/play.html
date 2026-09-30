@@ -23,12 +23,50 @@ import { getMe } from '/js/site/api.js';
 
 const params = new URLSearchParams(location.search);
 const placeId = +(params.get('placeId') || params.get('id'));
+const room = params.get('room');
 const me = await getMe();
 if (!me) location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search);
 let gameInfo = null;
-try { gameInfo = (await (await fetch(`/api/games/${placeId}`)).json()).game; } catch { /* shown by the client */ }
+if (!room) try { gameInfo = (await (await fetch(`/api/games/${placeId}`)).json()).game; } catch { /* shown by the client */ }
 if (gameInfo) document.title = `${gameInfo.name} - Robis`;
-const client = new GameClient(document.body, { placeId, serverId: params.get('serverId'), gameInfo });
+
+// Rooms: play together in the phone/PC app (see js/game/rooms.js).
+let rooms = null;
+if (window.ROBIS_STANDALONE && (room || params.get('host'))) rooms = await import('/js/game/rooms.js');
+if (rooms && room) window.ROBIS_ROOM_SOCKET = () => new rooms.RoomSocket(room);
+
+function roomBadge() {
+  const box = document.createElement('div');
+  box.className = 'room-badge';
+  box.innerHTML = '<div class="room-title">Opening room...</div>';
+  document.body.append(box);
+  return box;
+}
+
+async function openRoom(welcome) {
+  const box = roomBadge();
+  try {
+    const r = await rooms.hostRoom({
+      placeId, serverId: welcome.serverId, name: welcome.name,
+      onGuests: (names) => { box.querySelector('.room-guests').textContent = names.length ? 'Here: ' + names.join(', ') : 'Waiting for friends...'; },
+    });
+    box.innerHTML = `<div class="room-title">Room code</div><div class="room-code">${r.code}</div>
+      <div class="room-guests">Waiting for friends...</div><div class="room-hint">Friends: Home → "Join a friend" → enter the code</div>
+      <button class="room-share">Share</button>`;
+    box.querySelector('.room-share').onclick = async () => {
+      const text = `Join my Robis game! Code: ${r.code}`;
+      try { if (navigator.share) await navigator.share({ text }); else { await navigator.clipboard.writeText(r.code); box.querySelector('.room-share').textContent = 'Copied!'; } } catch { /* cancelled */ }
+    };
+    addEventListener('pagehide', () => r.close());
+  } catch (e) {
+    box.innerHTML = `<div class="room-title">Room not available</div><div class="room-hint">${String(e.message || e).replace(/</g, '&lt;')}</div>`;
+  }
+}
+
+const client = new GameClient(document.body, {
+  placeId: room ? 0 : placeId, serverId: params.get('serverId'), gameInfo,
+  onWelcome: rooms && !room ? openRoom : null,
+});
 client.start();
 window.robis = client;
 </script>

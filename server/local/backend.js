@@ -6,6 +6,8 @@ import { GameManager } from '../game/manager.js';
 import { seed } from '../seed/seed.js';
 import { userFromToken, parseCookies, COOKIE } from '../auth.js';
 import { handleConnection } from '../connection.js';
+import { createUser } from '../seed/seed.js';
+import { validUsername, isBanned, banDetails } from '../auth.js';
 
 let ready = null;
 export function init() {
@@ -81,4 +83,51 @@ export async function connect(token, client) {
   client._server = server;
   client._toServer = (data) => { if (server.readyState === 1) for (const fn of listeners.message) fn(data); };
   handleConnection(server, userFromToken(db, token), { db, manager });
+}
+
+// A friend joining this device's game room (public/js/game/rooms.js).
+// Friends get a password-less account in this world, found again by their
+// device id, so admins here can see and ban them like anyone else.
+const HEX = /^#[0-9a-f]{6}$/i;
+function cleanAvatar(a) {
+  const colors = {};
+  for (const [k, v] of Object.entries((a && a.bodyColors) || {})) if (HEX.test(v)) colors[k] = v;
+  const items = (Array.isArray(a && a.items) ? a.items : []).slice(0, 10)
+    .map((i) => ({ id: +i.id || 0, name: String(i.name || '').slice(0, 60), type: String(i.type || '').slice(0, 20), data: i.data && typeof i.data === 'object' ? i.data : {} }))
+    .filter((i) => JSON.stringify(i.data).length < 2000);
+  return { bodyColors: colors, items };
+}
+
+export async function connectRemote(hello, sock) {
+  const { db, manager } = await init();
+  const D = db.data;
+  const rid = /^[a-z0-9]{16}$/.test(hello && hello.id) ? hello.id : null;
+  if (!rid) { sock.send(JSON.stringify({ t: 'error', msg: 'Bad room request.' })); sock.close(); return; }
+  let user = Object.values(D.users).find((u) => u.remoteId === rid);
+  if (!user) {
+    let base = validUsername(hello.name) ? hello.name : 'Guest';
+    let name = base;
+    for (let i = 2; Object.values(D.users).some((u) => u.username.toLowerCase() === name.toLowerCase()); i++) name = (base.slice(0, 17) + '_' + i).replace(/__+/, '_');
+    user = createUser(db, name, null, { remote: true, remoteId: rid });
+    delete user.salt;
+    delete user.hash;
+  }
+  user.remoteAvatar = cleanAvatar(hello.avatar);
+  user.lastOnline = Date.now();
+  db.save();
+  if (isBanned(user)) {
+    sock.send(JSON.stringify({ t: 'error', msg: `You are banned from this room.${banDetails(user)}` }));
+    sock.close();
+    return;
+  }
+  // Guests may only join a normal game server, never start a Studio test one.
+  const guestSock = Object.create(sock);
+  guestSock.on = (ev, fn) => sock.on(ev, ev !== 'message' ? fn : (raw) => {
+    try {
+      const m = JSON.parse(raw);
+      if (m.t === 'join' && m.test) { delete m.test; raw = JSON.stringify(m); }
+    } catch { /* handled by the connection */ }
+    fn(raw);
+  });
+  handleConnection(guestSock, user, { db, manager });
 }

@@ -167,3 +167,14 @@
 .game-root .hidden, .game-root.touch .fs-btn.hidden { display: none !important; }
 
 .leaderboard tr.team td, .board tr.team td { font-weight: 700; color: #fff; text-shadow: 0 0 2px #000; }
+
+/* Room code badge (hosting a game for friends in the phone/PC app) */
+.room-badge { font-family: 'Source Sans Pro', 'Helvetica Neue', Arial, sans-serif; position: fixed; left: 50%; transform: translateX(-50%); bottom: 12px; z-index: 20; background: rgba(31, 31, 31, .85); color: #fff; border-radius: 10px; padding: 8px 14px; text-align: center; font-family: inherit; max-width: 90vw; }
+.room-title { font-size: 12px; opacity: .8; }
+.room-code { font-size: 26px; font-weight: 800; letter-spacing: 4px; }
+.room-guests { font-size: 13px; }
+.room-hint { font-size: 11px; opacity: .7; margin: 2px 0 6px; }
+.room-share { background: #00a2ff; color: #fff; border: 0; border-radius: 6px; padding: 4px 14px; font-weight: 700; }
+body:has(.game-root.touch) .room-badge { bottom: auto; top: calc(92px + env(safe-area-inset-top)); left: auto; right: 8px; transform: none; padding: 4px 10px; }
+body:has(.game-root.touch) .room-code { font-size: 18px; }
+body:has(.game-root.touch) .room-hint { display: none; }

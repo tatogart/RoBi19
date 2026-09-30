@@ -171,6 +171,24 @@ export function launchGame(gameId, serverId) {
   }, 1300);
 }
 
+// Rooms (phone/PC app): join a friend's game by its code.
+export function joinFriendDialog() {
+  const input = el('input', { class: 'input', placeholder: 'ABC123', maxlength: 6, autocomplete: 'off', style: { textTransform: 'uppercase', fontSize: '22px', letterSpacing: '4px', textAlign: 'center' } });
+  const go = () => {
+    const code = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (code.length !== 6) { toast('The room code has 6 letters and numbers.', 'error'); return false; }
+    location.href = `/play?room=${code}`;
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  modal({
+    title: 'Join a friend',
+    body: el('div', {}, el('p', { text: 'Ask your friend to open a game and tap "Play with friends". Enter the room code they see:' }), input,
+      el('p', { class: 'small muted', style: { marginTop: '8px' }, text: 'Both of you need internet. It works best on the same Wi-Fi, but also over mobile data.' })),
+    buttons: [{ text: 'Cancel' }, { text: 'Join', cls: 'btn-green', onClick: go }],
+  });
+  setTimeout(() => input.focus(), 50);
+}
+
 // Builders Club tier names (2019 style).
 export const MEMBERSHIP = {
   BuildersClub: { name: 'Builders Club', short: 'BC', color: '#f68802' },

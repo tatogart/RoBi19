@@ -26,6 +26,15 @@ export class Mirror {
         if (inst) inst.Parent = svc;
       }
     }
+    // References to things loaded later in the snapshot (e.g. Player.Team ->
+    // a Team in the Teams service) couldn't resolve in the first pass.
+    const fix = (cd) => {
+      const inst = game.getById(cd.id);
+      const schema = inst && inst.constructor.schema;
+      if (schema) for (const [k, v] of Object.entries(cd.p || {})) if (schema[k] && schema[k].type === 'ref' && v) setEncodedProp(inst, k, v, this.lookup);
+      for (const ch of cd.ch || []) fix(ch);
+    };
+    for (const s of services) for (const cd of s.ch || []) fix(cd);
   }
 
   apply(op) {

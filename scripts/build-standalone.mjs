@@ -31,6 +31,7 @@ const vendor = [
   ['node_modules/three/build/three.module.js', 'vendor/three/build/three.module.js'],
   ['node_modules/three/build/three.core.js', 'vendor/three/build/three.core.js'],
   ['node_modules/three/examples/jsm/controls/TransformControls.js', 'vendor/three/examples/jsm/controls/TransformControls.js'],
+  ['node_modules/peerjs/dist/peerjs.min.js', 'vendor/peerjs/peerjs.min.js'],
   ['node_modules/codemirror/lib', 'vendor/codemirror/lib'],
   ['node_modules/codemirror/mode/lua', 'vendor/codemirror/mode/lua'],
   ['node_modules/codemirror/addon/edit', 'vendor/codemirror/addon/edit'],

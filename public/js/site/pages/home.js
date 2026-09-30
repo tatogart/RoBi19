@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, gameCard, avatarCard, headshotImg, toast, spinner, MEMBERSHIP } from '../ui.js';
+import { el, gameCard, avatarCard, headshotImg, toast, spinner, MEMBERSHIP, joinFriendDialog } from '../ui.js';
 
 const me = await initPage({ active: 'home' });
 const app = document.getElementById('app');
@@ -10,7 +10,8 @@ const greeting = el('div', { class: 'section row greet', style: { gap: '20px' } 
   el('div', {},
     el('h1', { style: { margin: 0 }, text: `Hello, ${me.username}!` }),
     MEMBERSHIP[me.membership] ? el('div', { class: 'pill', style: { background: MEMBERSHIP[me.membership].color, color: '#fff' }, text: MEMBERSHIP[me.membership].name.toUpperCase() }) : null,
-    me.isAdmin ? el('a', { class: 'pill', href: '/admin', style: { background: '#00a2ff', color: '#fff', marginLeft: '6px' }, text: 'ADMIN PANEL' }) : null));
+    me.isAdmin ? el('a', { class: 'pill', href: '/admin', style: { background: '#00a2ff', color: '#fff', marginLeft: '6px' }, text: 'ADMIN PANEL' }) : null,
+    window.ROBIS_STANDALONE ? el('div', { style: { marginTop: '10px' } }, el('button', { class: 'btn btn-green', text: 'Join a friend', onclick: joinFriendDialog })) : null));
 app.append(greeting);
 
 if (me.canClaimStipend) {

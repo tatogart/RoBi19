@@ -9,6 +9,7 @@
   window.ROBIS_ONLINE_URL = '__ONLINE__';
   var backend = null;
   function load() { return backend || (backend = import(BASE + '/js/local/backend.js')); }
+  window.robisBackend = load;
   function token() { try { return localStorage.getItem(TOKEN); } catch (e) { return null; } }
   function setToken(t) {
     try { if (t) localStorage.setItem(TOKEN, t); else localStorage.removeItem(TOKEN); } catch (e) { /* ignore */ }
@@ -59,6 +60,8 @@
 
   var RealWS = window.WebSocket;
   window.WebSocket = function (url, protocols) {
+    // A friend's room (see js/game/rooms.js) or this device's own server.
+    if (/\/ws$/.test(String(url)) && window.ROBIS_ROOM_SOCKET) return window.ROBIS_ROOM_SOCKET();
     if (/\/ws$/.test(String(url))) return new LocalSocket();
     return new RealWS(url, protocols);
   };

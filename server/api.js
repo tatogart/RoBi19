@@ -249,6 +249,9 @@ export function createApi(db, manager, opts = {}) {
     res.json({ ok: true });
   });
 
+  // The avatar as the game renders it (used when joining a friend's room).
+  api.get('/avatar/resolved', requireUser, (req, res) => res.json({ avatar: resolvedAvatar(req.user) }));
+
   // Lets open pages notice a new deploy and reload (see public/js/site/install.js).
   api.get('/version', (req, res) => res.json({ version: opts.version || '' }));
 

@@ -78,7 +78,7 @@
 - Services: Players, Lighting, **TweenService**, **DataStoreService** (persistent), RunService (Heartbeat/Stepped), Debris, HttpService (JSON/GUID), **BadgeService** (badges show up on profiles), ReplicatedStorage, ServerStorage and ServerScriptService. `ModuleScript` works with `require`.
 - Sandboxed: no `io`, `os.execute`, `require` of files or bytecode loading. A 10-second **script timeout** stops runaway loops.
 
-### 🎲 Eleven showcase games
+### 🎲 Fourteen showcase games
 | Game | What it shows |
 |---|---|
 | **Crossroads** | The classic hangout map with a tower, houses, a fountain and a day/night cycle |
@@ -92,6 +92,9 @@
 | **Brick Tycoon** | Claim a plot, droppers send bricks down a conveyor for Cash, buy upgrades with buttons |
 | **Robis Café** | A hangout: bake pizzas and grab sodas (`ClickDetector`), a jukebox dance party with lights |
 | **Sprint Race** | Six lanes, a countdown, gates that open on GO, hurdles and places at the finish line |
+| **Capture the Flag** | **Teams** (Red vs Blue, team spawns, team leaderboard): steal the flag, tag enemies on your half |
+| **Freeze Tag** | Taggers freeze runners with a touch, runners unfreeze each other; 2+ players |
+| **King of the Hill** | Hold the golden crown to score (double when alone), dodge the shockwave |
 
 ## Quick start
 
@@ -110,7 +113,21 @@ Open **http://localhost:3000** and press **Sign Up** to create your own account.
 There are no ready-made accounts with passwords: every player signs up on the landing page (username 3–20 characters, password at least 6).
 
 - **The first account created on a server becomes its admin.** It gets 1,000,000 R$, Outrageous Builders Club and every catalog item, can edit and delete any game, and can open the **Admin Panel** (⚙ menu or More). The panel can give players Robits and all items, change membership, make admins and ban.
-- **Bans** log the player out, kick them from games and also block the **device and IP** they used, so they can't just make a new account (the admins' own devices and IPs are never blocked). In a game, admins can type `:kick name`, `:ban name reason`, `:unban name`, `:players` or `:cmds` in the chat. In the phone version only the account itself is banned, since every phone is its own world.
+- **Bans** (Admin Panel → Ban) log the player out and kick them from games. Choose the type: **Account only** (a normal ban) or **Account + device and IP** (they can't make a new account either; the admins' own devices and IPs are never blocked), and the length: 1 hour, 1/3/7/30 days or forever. Temporary bans lift themselves.
+- **Chat commands** in any game (admins; a game's creator can use the fun ones in their own game). Targets: a name (or its start), `me`, `all`, `others`. Type `:cmds` for the list.
+
+  | Command | Does |
+  |---|---|
+  | `:kill` `:respawn` `:heal` | Kill, respawn or heal |
+  | `:god` / `:ungod`, `:ff` / `:unff` | Can't be hurt / force field |
+  | `:speed name 50`, `:jump name 120` | Walk speed and jump power |
+  | `:freeze` / `:thaw` | Stop and release |
+  | `:explode` `:fire` `:sparkles` `:clean` | Effects (and remove them) |
+  | `:invisible` / `:visible` | Hide the character |
+  | `:tp a b`, `:bring name`, `:to name` | Teleports |
+  | `:mute` / `:unmute`, `:kick name reason` | Moderation |
+  | `:announce text`, `:hint text`, `:time 0-24` | Big message, top bar, time of day |
+  | `:ban name [1h\|1d\|7d\|30d] reason`, `:hardban …`, `:unban name` | Account ban, account + device ban, unban (admins) |
 - **Admin code.** Start the server with `ROBIS_ADMIN_CODE=your-code npm start` and any account can become an admin via ⚙ → **Enter Admin Code**. In the phone version (GitHub Pages) there is no "first account" rule: admin is given **only** by the secret admin code, which only the owner of the repository knows (the app stores just its SHA-256 hash, `standalone/admin-code.sha256`). To use your own code, build with `ROBIS_ADMIN_CODE=your-code npm run build:standalone`.
 - **Robits and Builders Club can't be bought.** Players earn Robits with the daily stipend (25 R$, or 40 / 60 / 85 R$ with BC / TBC / OBC). Only admins give out Robits and memberships, in the Admin Panel. The currency is fictional and no real money is ever charged.
 - Every new player gets **100 R$** and the starter items: Bacon Hair, Pal Hair, Smile, Man Face, Woman Face, Blue Hoodie, Jeans, Robis Logo T-Shirt and Classic Robis Cap. Another 25 R$ can be collected every day.
@@ -153,8 +170,27 @@ To play: pick a game → green ▶ button → turn the phone sideways → fullsc
 
 - **Everything lives on the phone.** Accounts, items, games and DataStore saves are kept in the browser's storage. Clearing the site's data, or removing the app together with its data, starts a new world.
 - **On iPhone, add the icon to the home screen.** Safari may delete data of sites you haven't opened for 7 days, but home-screen apps are exempt.
-- **Each phone has its own world.** Friends on other phones can't join it: the standalone version has no internet server, so all games are single-player. To play together, use the [online server](#online-server-play-with-friends).
+- **Each phone has its own world**, but you can still play together: see [Play with friends in the app](#play-with-friends-in-the-app). For one shared world with shared accounts, use the [online server](#online-server-play-with-friends).
+- **Updates install themselves.** The app checks for a new version when you open it (and every 30 minutes) and reloads with it; during a game it waits until you leave.
 - Use Robis in one tab: two open tabs can overwrite each other's data.
+
+### Play with friends in the app
+
+1. **The host** opens a game and taps **Play with friends**. A **room code** (like `K7QM4X`) appears in the game; tap **Share** to send it.
+2. **Friends** tap **Join a friend** (on Home, on any game page, or in the ⚙ menu) and enter the code.
+3. Everyone plays in the host's game: multiplayer, chat, team games and the host's admin commands and bans all work. Friends appear in the host's world with their own name and avatar.
+
+Both devices need internet (Wi-Fi or mobile data). The public PeerJS server only introduces the devices; the game itself goes directly between them. The room lives as long as the host stays in the game.
+
+### Install on a PC or Mac
+
+The same app installs on a computer as easily as on a phone:
+
+1. Open **https://tatogart.github.io/RoBi19/** in **Chrome** or **Edge** (Windows, macOS, Linux, ChromeOS).
+2. Press **Install Robis** (on the start page or in the ⚙ menu) and confirm. Or click the install icon at the right end of the address bar.
+3. Robis gets its own window and an icon on the desktop / Start menu / Dock, works offline and updates itself.
+
+On a Mac with **Safari**: File → **Add to Dock**. Firefox can't install web apps; use Chrome or Edge.
 
 ### For the repository owner: publishing the link
 
@@ -367,7 +403,7 @@ There are 22 tests. They cover the math types, the instance tree, serialization,
 - Only server `Script`s run. `LocalScript`s and GUI objects (`ScreenGui`) are stored but don't execute on the client yet.
 - The physics is intentionally simple. Unanchored parts fall and stack, but there is no rotation, joints or welds.
 - No real Terrain, meshes, audio assets or image uploads. Everything is procedural.
-- The standalone (phone) version is single-player: it has no shared server or multiplayer. To play with friends, use the [online server](#online-server-play-with-friends).
+- In the standalone (phone/PC) app every device has its own world; multiplayer works through [rooms](#play-with-friends-in-the-app) hosted by one player, or the [online server](#online-server-play-with-friends).
 - Ideas: LocalScripts running in the browser, Tools with `Activated`, ScreenGui, teams, Team Create in Studio and trading.
 
 ## License

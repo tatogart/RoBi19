@@ -1,6 +1,6 @@
 import { initPage } from '../layout.js';
 import { api } from '../api.js';
-import { el, icon, iconSvg, fmtNum, fmtFull, fmtDate, qs, toast, launchGame, headshotImg, gameCard, spinner } from '../ui.js';
+import { el, icon, iconSvg, fmtNum, fmtFull, fmtDate, qs, toast, launchGame, headshotImg, gameCard, spinner, joinFriendDialog } from '../ui.js';
 import { gameThumbnail } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'games', requireAuth: false });
@@ -43,6 +43,10 @@ const details = el('div', { class: 'game-details' },
   !game.isPublic ? el('div', { class: 'pill', style: { marginTop: '8px', background: '#ffe3e3' }, text: 'Private — only you can play this' }) : null,
   el('div', { class: 'spacer' }),
   playBtn,
+  // Phone/PC app: host this game for friends (they join with the room code).
+  window.ROBIS_STANDALONE && game.isPublic ? el('div', { class: 'row', style: { marginTop: '8px', gap: '8px' } },
+    el('button', { class: 'btn btn-primary', style: { flex: 1 }, text: 'Play with friends', onclick: () => { if (!needLogin()) location.href = `/play?placeId=${id}&host=1`; } }),
+    el('button', { class: 'btn', style: { flex: 1 }, text: 'Join a friend', onclick: () => { if (!needLogin()) joinFriendDialog(); } })) : null,
   el('div', { class: 'row', style: { marginTop: '12px', justifyContent: 'space-between' } }, favBtn, el('div', { class: 'row', style: { gap: '6px' } }, upBtn, downBtn)),
   voteBar,
   game.canEdit ? el('div', { class: 'row', style: { marginTop: '12px' } },

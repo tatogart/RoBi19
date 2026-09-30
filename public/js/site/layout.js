@@ -1,6 +1,6 @@
 // Builds the shared page chrome (blue header, left navigation, footer).
 import { api, getMe } from './api.js';
-import { el, icon, iconSvg, fmtNum, headshotImg, toast, modal } from './ui.js';
+import { el, icon, iconSvg, fmtNum, headshotImg, toast, modal, joinFriendDialog } from './ui.js';
 import { installApp, isInstalled } from './install.js';
 
 const NAV = [
@@ -70,6 +70,7 @@ function buildHeader(me, active) {
         el('a', { href: '/studio', text: 'Robis Studio' }),
         el('a', { href: '/robits', text: 'Robits & Builders Club' }),
         me.isAdmin ? el('a', { href: '/admin', text: 'Admin Panel' }) : el('button', { text: 'Enter Admin Code', onclick: adminCodeDialog }),
+        window.ROBIS_STANDALONE ? el('button', { text: 'Join a friend', onclick: joinFriendDialog }) : null,
         isInstalled() ? null : el('button', { text: 'Install Robis app', onclick: installApp }),
         el('a', { href: '/help', text: 'Help' }),
         el('button', { text: 'Logout', onclick: async () => { await api.post('/auth/logout'); location.href = '/'; } }));
