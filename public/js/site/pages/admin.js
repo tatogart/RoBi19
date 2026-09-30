@@ -56,7 +56,7 @@ function row(u) {
     el('div', { class: 'admin-info' },
       el('div', {}, el('a', { href: `/profile?id=${u.id}` }, el('b', { text: u.username })),
         u.isAdmin ? el('span', { class: 'pill admin-pill', text: 'Admin' }) : null,
-        u.banned ? el('span', { class: 'pill ban-pill', text: 'Banned' }) : null),
+        u.banned ? el('span', { class: 'pill ban-pill', text: (u.deviceBan ? 'Device ban' : 'Banned') + (u.banUntil ? ' until ' + new Date(u.banUntil).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') }) : null),
       el('div', { class: 'small muted', text: `R$ ${fmtFull(u.robits)} · ${u.items} items · ${u.games} games · joined ${timeAgo(u.created)}` })),
     el('div', { class: 'admin-actions' },
       el('button', { class: 'btn btn-small btn-green', text: 'Give Robits', onclick: () => giveRobits(u) }),
@@ -79,10 +79,18 @@ function giveRobits(u) {
 function ban(u) {
   if (u.banned) { act(`/admin/users/${u.id}/ban`, { banned: false }, `${u.username} was unbanned`); return; }
   const reason = el('input', { class: 'input', placeholder: 'Reason (optional)' });
+  const duration = el('select', { class: 'input' },
+    [['', 'Forever'], ['1h', '1 hour'], ['1d', '1 day'], ['3d', '3 days'], ['7d', '7 days'], ['30d', '30 days']].map(([v, t]) => el('option', { value: v, text: t })));
+  const kind = el('select', { class: 'input' },
+    el('option', { value: 'account', text: 'Account only' }),
+    el('option', { value: 'device', text: 'Account + device and IP (no new accounts)' }));
   modal({
     title: `Ban ${u.username}?`,
-    body: el('div', {}, el('p', { text: 'They will be logged out and kicked from any game.' }), reason),
-    buttons: [{ text: 'Ban', cls: 'btn-red', onClick: () => act(`/admin/users/${u.id}/ban`, { banned: true, reason: reason.value }, `${u.username} was banned`) }, { text: 'Cancel' }],
+    body: el('div', {}, el('p', { text: 'They will be logged out and kicked from any game.' }),
+      el('label', { class: 'field' }, 'Type', kind),
+      el('label', { class: 'field' }, 'Length', duration),
+      el('label', { class: 'field' }, 'Reason', reason)),
+    buttons: [{ text: 'Ban', cls: 'btn-red', onClick: () => act(`/admin/users/${u.id}/ban`, { banned: true, reason: reason.value, duration: duration.value, device: kind.value === 'device' }, `${u.username} was banned`) }, { text: 'Cancel' }],
   });
 }
 

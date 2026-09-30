@@ -215,6 +215,15 @@ export class GameServer {
       logs: session.isDeveloper ? this.logs.slice(-200) : [],
     });
     this.broadcast({ t: 'playerJoined', player: this.playerInfo(session) }, session);
+    // Auto-assign to the smallest AutoAssignable team, like Roblox.
+    const teams = this.game.GetService('Teams').GetTeams().filter((t) => t._p.AutoAssignable);
+    if (teams.length) {
+      const count = (t) => players.GetPlayers().filter((p) => p._p.Team === t).length;
+      const team = teams.slice().sort((a, b) => count(a) - count(b))[0];
+      player._p.Team = team;
+      player._p.TeamColor = team._p.TeamColor;
+      player._p.Neutral = false;
+    }
     player.Parent = players;
     players._fire('PlayerAdded', player);
     this.log('info', `${user.username} joined the game`);
@@ -243,31 +252,114 @@ export class GameServer {
     }
   }
 
-  // Chat commands for admins: :kick, :ban, :unban, :players.
+  // Chat commands. Admins can use all of them; the game's creator can use
+  // the fun ones and :kick in their own game.
   adminCommand(session, text) {
-    const [cmd, name = '', ...rest] = text.slice(1).trim().split(/\s+/);
-    const reason = rest.join(' ').slice(0, 200);
+    const parts = text.slice(1).trim().split(/\s+/);
+    const c = (parts.shift() || '').toLowerCase();
     const say = (msg) => this.send(session, { t: 'sys', text: msg });
-    const c = cmd.toLowerCase();
-    if (!['kick', 'ban', 'unban', 'players', 'cmds'].includes(c)) return false;
-    if (c === 'cmds') { say(':kick name [reason] · :ban name [reason] · :unban name · :players'); return true; }
-    if (c === 'players') { say([...this.sessions.values()].map((s) => s.user.username).join(', ')); return true; }
-    const hooks = this.manager && this.manager.admin;
-    const target = name && (hooks ? hooks.findUser(name) : [...this.sessions.values()].find((s) => s.user.username.toLowerCase() === name.toLowerCase())?.user);
-    if (!target) { say(`No player named "${name}".`); return true; }
-    if (target.id === session.user.id) { say('You can\'t do that to yourself.'); return true; }
-    if (target.isAdmin && c !== 'unban') { say(`${target.username} is an admin.`); return true; }
-    if (c === 'kick') {
-      const s = this.sessions.get(target.id);
-      if (!s) { say(`${target.username} is not in this server.`); return true; }
-      this.kick(s, reason || `Kicked by ${session.user.username}`);
-      say(`Kicked ${target.username}.`);
-    } else if (!hooks) {
-      say('Bans are not available here.');
-    } else {
-      hooks.ban(target, c === 'ban', reason);
-      say(c === 'ban' ? `Banned ${target.username}.` : `Unbanned ${target.username}.`);
+    const isAdmin = !!session.user.isAdmin;
+    const FUN = ['kill', 'respawn', 'heal', 'god', 'ungod', 'speed', 'jump', 'tp', 'bring', 'to', 'freeze', 'thaw', 'explode',
+      'fire', 'sparkles', 'ff', 'unff', 'invisible', 'visible', 'clean', 'announce', 'hint', 'time', 'mute', 'unmute', 'kick', 'players', 'cmds'];
+    const MOD = ['ban', 'hardban', 'unban'];
+    if (!FUN.includes(c) && !MOD.includes(c)) return false;
+    if (!isAdmin && (MOD.includes(c) || session.user.id !== this.creatorId)) return false;
+    if (c === 'cmds') {
+      say(':kill :respawn :heal :god :ungod :speed n :jump n :freeze :thaw :explode :fire :sparkles :ff :unff :invisible :visible :clean :tp a b :bring :to :mute :unmute :kick · :announce text · :hint text · :time 0-24 · :players'
+        + (isAdmin ? ' · :ban name [1h|1d|7d|30d] reason · :hardban (also device) · :unban name' : '')
+        + '  —  targets: name, me, all, others');
+      return true;
     }
+    if (c === 'players') { say([...this.sessions.values()].map((s) => s.user.username).join(', ')); return true; }
+    if (c === 'announce' || c === 'hint') {
+      const m = new CLASSES[c === 'announce' ? 'Message' : 'Hint']();
+      m.Text = `${session.user.username}: ${parts.join(' ').slice(0, 150)}`;
+      m.Parent = this.game.Workspace;
+      setTimeout(() => { if (!m._destroyed) m.Destroy(); }, c === 'announce' ? 5000 : 8000);
+      return true;
+    }
+    if (c === 'time') {
+      const t = +parts[0];
+      if (!Number.isFinite(t)) { say('Usage: :time 0-24'); return true; }
+      this.game.GetService('Lighting').ClockTime = ((t % 24) + 24) % 24;
+      return true;
+    }
+    const hooks = this.manager && this.manager.admin;
+    if (MOD.includes(c)) {
+      const target = parts[0] && (hooks ? hooks.findUser(parts[0]) : null);
+      if (!hooks) { say('Bans are not available here.'); return true; }
+      if (!target) { say(`No player named "${parts[0] || ''}".`); return true; }
+      if (target.id === session.user.id) { say('You can\'t do that to yourself.'); return true; }
+      if (target.isAdmin) { say(`${target.username} is an admin.`); return true; }
+      if (c === 'unban') { hooks.ban(target, false); say(`Unbanned ${target.username}.`); return true; }
+      const dur = hooks.banTimes[parts[1]] ? parts[1] : '';
+      const reason = parts.slice(dur ? 2 : 1).join(' ').slice(0, 200);
+      hooks.ban(target, true, reason, { device: c === 'hardban', ms: hooks.banTimes[dur] || 0 });
+      say(`Banned ${target.username}${dur ? ' for ' + dur : ''}${c === 'hardban' ? ' (account + device)' : ''}.`);
+      return true;
+    }
+    // Everything else acts on players in this server.
+    const all = [...this.sessions.values()];
+    const pick = (word) => {
+      const w = String(word || 'me').toLowerCase();
+      if (w === 'me') return [session];
+      if (w === 'all') return all;
+      if (w === 'others') return all.filter((s) => s !== session);
+      const exact = all.filter((s) => s.user.username.toLowerCase() === w);
+      return exact.length ? exact : all.filter((s) => s.user.username.toLowerCase().startsWith(w));
+    };
+    const targets = pick(parts[0]);
+    if (!targets.length) { say(`No player named "${parts[0]}".`); return true; }
+    const hum = (s) => s.character && s.character.FindFirstChildOfClass('Humanoid');
+    const torso = (s) => s.character && s.character.FindFirstChild('Torso');
+    const add = (s, cls) => { const t = torso(s); if (t) { const e = new CLASSES[cls](); e.Parent = t; } };
+    const num = (v, lo, hi, def) => { const n = +v; return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : def; };
+    for (const s of targets) {
+      const h = hum(s);
+      switch (c) {
+        case 'kill': if (h) { h._god = false; h.Health = 0; } break;
+        case 'respawn': this.loadCharacter(s.player); break;
+        case 'heal': if (h) h.Health = h.MaxHealth; break;
+        case 'god': if (h) { h._god = true; h.Health = h.MaxHealth; } break;
+        case 'ungod': if (h) h._god = false; break;
+        case 'speed': if (h) h.WalkSpeed = num(parts[1], 0, 200, 50); break;
+        case 'jump': if (h) h.JumpPower = num(parts[1], 0, 300, 120); break;
+        case 'freeze': if (h) { h.WalkSpeed = 0; h.JumpPower = 0; } break;
+        case 'thaw': if (h) { h.WalkSpeed = 16; h.JumpPower = 50; } break;
+        case 'explode': {
+          const t = torso(s);
+          if (t) { const e = new CLASSES.Explosion(); e.Position = t.Position; e.BlastRadius = 6; e.Parent = this.game.Workspace; }
+          break;
+        }
+        case 'fire': add(s, 'Fire'); break;
+        case 'sparkles': add(s, 'Sparkles'); break;
+        case 'ff': if (s.character) new CLASSES.ForceField().Parent = s.character; break;
+        case 'unff': for (const f of s.character ? s.character.GetChildren() : []) if (f.ClassName === 'ForceField') f.Destroy(); break;
+        case 'invisible': case 'visible':
+          for (const p of s.character ? s.character.GetDescendants() : []) {
+            if (p instanceof BasePart && p.Name !== 'HumanoidRootPart') p.Transparency = c === 'invisible' ? 1 : 0;
+          }
+          break;
+        case 'clean':
+          for (const e of s.character ? s.character.GetDescendants() : []) if (['Fire', 'Sparkles', 'Smoke'].includes(e.ClassName)) e.Destroy();
+          break;
+        case 'tp': case 'bring': case 'to': {
+          const dest = c === 'bring' ? session : c === 'to' ? s : pick(parts[1])[0];
+          const who = c === 'to' ? session : s;
+          const dt = dest && torso(dest);
+          if (dt && who.character && who !== dest) this.teleport(who.character, CFrame.fromPosition(dt.Position.add(new Vector3(0, 0, 4))));
+          break;
+        }
+        case 'mute': if (s !== session) { s.muted = true; this.send(s, { t: 'sys', text: 'You have been muted.' }); } break;
+        case 'unmute': s.muted = false; break;
+        case 'kick':
+          if (s === session || s.user.isAdmin) break;
+          this.kick(s, parts.slice(1).join(' ') || `Kicked by ${session.user.username}`);
+          break;
+      }
+      if (c === 'to') break;
+    }
+    say(`:${c} → ${targets.map((s) => s.user.username).join(', ')}`);
     return true;
   }
 
@@ -280,8 +372,13 @@ export class GameServer {
   findSpawn(player) {
     const rl = player.RespawnLocation;
     if (rl && rl instanceof SpawnLocation && rl.IsDescendantOf(this.game.Workspace)) return rl;
-    const spawns = this.game.Workspace.GetDescendants().filter((d) => d instanceof SpawnLocation && d.Enabled);
+    let spawns = this.game.Workspace.GetDescendants().filter((d) => d instanceof SpawnLocation && d.Enabled);
     if (!spawns.length) return null;
+    // Team spawns: players on a team spawn on SpawnLocations of their TeamColor.
+    const team = player._p.Team;
+    const same = (a, b) => a && b && a.toHex() === b.toHex();
+    const mine = team ? spawns.filter((sp) => !sp._p.Neutral && same(sp._p.TeamColor, team._p.TeamColor)) : spawns.filter((sp) => sp._p.Neutral);
+    if (mine.length) spawns = mine;
     return spawns[Math.floor(Math.random() * spawns.length)];
   }
 
@@ -371,7 +468,8 @@ export class GameServer {
           this.broadcast({ t: 'emote', userId: session.user.id, emote: text.slice(3).trim().toLowerCase() });
           return;
         }
-        if (text[0] === ':' && session.user.isAdmin && this.adminCommand(session, text)) return;
+        if (text[0] === ':' && this.adminCommand(session, text)) return;
+        if (session.muted) { this.send(session, { t: 'sys', text: 'You are muted.' }); return; }
         const clean = filterChat(text);
         this.broadcast({ t: 'chat', userId: session.user.id, name: session.user.username, text: clean });
         session.player._fire('Chatted', clean);

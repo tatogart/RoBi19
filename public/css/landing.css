@@ -32,3 +32,5 @@ body.landing { background: #fff; }
 }
 .online-link { display: block; width: 100%; text-align: center; box-sizing: border-box; }
 .online-note { font-size: 12px; color: #666; margin: 6px 0 14px; text-align: center; }
+.install-box { text-align: center; margin: 0 auto 30px; max-width: 520px; }
+.install-box p { color: #666; margin: 6px 0 14px; }

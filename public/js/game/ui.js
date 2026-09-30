@@ -164,7 +164,8 @@ export class HUD {
         if (!cols.includes(v.Name)) cols.push(v.Name);
         stats[v.Name] = v._p.Value;
       }
-      return { name: p.Name, me: p._p.UserId === myUserId, stats };
+      const team = p._p.Team;
+      return { name: p.Name, me: p._p.UserId === myUserId, stats, team: team ? team.Name : '', color: team ? team._p.TeamColor.toHex() : '' };
     });
     cols = cols.slice(0, 4);
     if (cols.length) rows.sort((a, b) => (+b.stats[cols[0]] || 0) - (+a.stats[cols[0]] || 0));
@@ -172,8 +173,17 @@ export class HUD {
     const key = JSON.stringify([rows, cols]);
     if (key === this._boardKey) return;
     this._boardKey = key;
+    const row = (r) => `<tr class="${r.me ? 'me' : ''}"><td>${esc(r.name)}</td>${cols.map((c) => `<td>${esc(fmt(r.stats[c]))}</td>`).join('')}</tr>`;
+    // Group by team (with the team's colour and summed first stat), like 2019.
+    const teams = [...new Set(rows.map((r) => r.team))];
+    const body = teams.length > 1 || teams[0] ? teams.map((t) => {
+      const list = rows.filter((r) => r.team === t);
+      const sum = cols.length ? list.reduce((a, r) => a + (+r.stats[cols[0]] || 0), 0) : '';
+      const color = list[0].color || '#888888';
+      return `<tr class="team"><td style="background:${color}">${esc(t || 'Neutral')}</td>${cols.map((c, i) => `<td style="background:${color}">${i === 0 ? esc(fmt(sum)) : ''}</td>`).join('')}</tr>${list.map(row).join('')}`;
+    }).join('') : rows.map(row).join('');
     this.board.innerHTML = `<table>${cols.length ? `<tr><th>Players</th>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>` : `<tr><th>Players</th></tr>`}
-      ${rows.map((r) => `<tr class="${r.me ? 'me' : ''}"><td>${esc(r.name)}</td>${cols.map((c) => `<td>${esc(fmt(r.stats[c]))}</td>`).join('')}</tr>`).join('')}</table>`;
+      ${body}</table>`;
     this.health.style.top = this.board.offsetHeight + 10 + 'px';
   }
   toggleBoard() {

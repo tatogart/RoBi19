@@ -47,7 +47,7 @@ export function userFromToken(db, token) {
   if (!s) return null;
   if (s.expires < Date.now()) { delete db.data.sessions[token]; db.save(); return null; }
   const user = db.data.users[s.userId];
-  if (!user || user.banned) { delete db.data.sessions[token]; db.save(); return null; }
+  if (!user || isBanned(user)) { delete db.data.sessions[token]; db.save(); return null; }
   return user;
 }
 
@@ -84,10 +84,30 @@ export function noteClient(db, user, info) {
   if (changed) db.save();
 }
 
+// Whether a ban is in force; temporary bans lift themselves when they run out.
+export function isBanned(user) {
+  if (!user || !user.banned) return false;
+  if (user.banUntil && Date.now() >= user.banUntil) {
+    user.banned = false;
+    user.banReason = '';
+    user.banUntil = 0;
+    user.bannedDevices = [];
+    user.bannedIps = [];
+    return false;
+  }
+  return true;
+}
+
+// "Reason: ... (until Oct 3, 14:00)" for ban messages.
+export function banDetails(user) {
+  const until = user.banUntil ? ` Until ${new Date(user.banUntil).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}.` : ' This ban is permanent.';
+  return `${user.banReason ? ' Reason: ' + user.banReason + '.' : ''}${until}`;
+}
+
 // The banned account whose device or IP this client uses, if any.
 export function bannedClient(db, info) {
   if (!info || (!info.device && !info.ip)) return null;
-  return Object.values(db.data.users).find((b) => b.banned
+  return Object.values(db.data.users).find((b) => isBanned(b)
     && ((info.device && (b.bannedDevices || []).includes(info.device)) || (info.ip && (b.bannedIps || []).includes(info.ip)))) || null;
 }
 

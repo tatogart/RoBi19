@@ -57,13 +57,36 @@ export class Database {
     return id;
   }
 
+  // Writes made in the same task go into one transaction. settled() resolves
+  // once everything written so far is committed, so API calls can finish
+  // only after their data is safely on the device (pages often navigate
+  // right after a call, which would abort unfinished transactions).
   _put(key, value) {
-    const tx = this.idb.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(value, key);
+    if (!this._batch) {
+      this._batch = new Map();
+      queueMicrotask(() => this._commit());
+    }
+    this._batch.set(key, value);
   }
 
-  // Pages navigate right after API calls (e.g. sign-up -> /home), so writes
-  // can't wait on a timer: queue them in the same task instead.
+  _commit() {
+    const batch = this._batch;
+    this._batch = null;
+    if (!batch || !batch.size) return;
+    const tx = this.idb.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    for (const [k, v] of batch) store.put(v, k);
+    const done = new Promise((resolve) => { tx.oncomplete = tx.onerror = tx.onabort = () => resolve(); });
+    this._pending = (this._pending || Promise.resolve()).then(() => done);
+  }
+
+  async settled() {
+    await new Promise((r) => queueMicrotask(r));
+    if (this._queued) this.flush();
+    if (this._batch) this._commit();
+    await this._pending;
+  }
+
   save() {
     if (this._queued) return;
     this._queued = true;

@@ -446,6 +446,7 @@ export const SpawnLocation = defineClass('SpawnLocation', Part, {
   props: {
     Enabled: { type: 'bool', default: true, cat: 'Behavior' },
     Neutral: { type: 'bool', default: true, cat: 'Teams' },
+    TeamColor: { type: 'Color3', default: C3(255, 255, 255), cat: 'Teams' },
     Duration: { type: 'number', default: 10, cat: 'Forcefield' },
   },
 });
@@ -651,6 +652,13 @@ export const BindableEvent = defineClass('BindableEvent', Instance, {
   events: ['Event'],
 });
 export const Team = defineClass('Team', Instance, {
+  cls: class extends Instance {
+    GetPlayers() {
+      const root = this.getRoot && this.getRoot();
+      const players = root && root.GetService ? root.GetService('Players').GetPlayers() : [];
+      return players.filter((p) => p._p.Team === this);
+    }
+  },
   icon: 'team',
   props: {
     TeamColor: { type: 'Color3', default: C3(255, 255, 255), cat: 'Data' },
@@ -674,6 +682,7 @@ export const Humanoid = defineClass('Humanoid', Instance, {
     set Health(v) {
       const was = this._p.Health;
       const n = Math.max(0, Math.min(this._p.MaxHealth, +v || 0));
+      if (this._god && n < was) return; // :god admin command
       this._set('Health', n);
       if (n !== was) this._fire('HealthChanged', n);
       if (was > 0 && n <= 0) this._fire('Died');

@@ -66,6 +66,6 @@
 
   // Offline support: cache the whole app on the device.
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-    addEventListener('load', function () { navigator.serviceWorker.register(BASE + '/sw.js').catch(function () {}); });
+    addEventListener('load', function () { navigator.serviceWorker.register(BASE + '/sw.js', { updateViaCache: 'none' }).catch(function () {}); });
   }
 })();

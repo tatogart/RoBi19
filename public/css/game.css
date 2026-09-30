@@ -165,3 +165,5 @@
 .crosshair::after { top: 10px; left: 0; width: 22px; height: 2px; }
 .fps { position: absolute; bottom: 4px; left: 6px; font-size: 12px; color: rgba(255, 255, 255, .6); pointer-events: none; }
 .game-root .hidden, .game-root.touch .fs-btn.hidden { display: none !important; }
+
+.leaderboard tr.team td, .board tr.team td { font-weight: 700; color: #fff; text-shadow: 0 0 2px #000; }

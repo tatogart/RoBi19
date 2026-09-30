@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 11);
+  assert.equal(data.games, 14);
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -108,7 +108,18 @@ test('signup, login validation, avatar and purchases', async () => {
   assert.equal((await call('POST', `/admin/users/${sid}/membership`, { tier: 'TurboBuildersClub' }, cookie)).status, 200);
   assert.equal((await call('GET', '/auth/me', null, c2)).data.user.stipend, 60);
   assert.equal((await call('POST', `/admin/users/${me.id}/ban`, { banned: true }, cookie)).status, 400);
+  // a normal ban only blocks the account itself
   await call('POST', `/admin/users/${sid}/ban`, { banned: true, reason: 'test' }, cookie);
+  const devOnly = c2.split('; ').find((c) => c.startsWith('robis_device='));
+  assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' }, devOnly)).status, 403);
+  assert.equal((await call('POST', '/auth/signup', { username: 'NewOne', password: 'secret123' }, devOnly)).status, 200);
+  // a temporary ban lifts itself
+  await call('POST', `/admin/users/${sid}/ban`, { banned: true, duration: '1h' }, cookie);
+  assert.match((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).data.error, /Until/);
+  srv.db.data.users[sid].banUntil = Date.now() - 1;
+  assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' }, devOnly)).status, 200);
+  // a device ban blocks the device too
+  await call('POST', `/admin/users/${sid}/ban`, { banned: true, reason: 'test', device: true }, cookie);
   assert.equal((await call('GET', '/auth/me', null, c2)).data.user, null);
   assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 403);
   // the banned player's device can't make a new account or use another one
@@ -255,10 +266,19 @@ test('admins can kick and ban from the in-game chat', async () => {
   p.ws.send(JSON.stringify({ t: 'chat', text: ':ban Tester_1' }));
   const echoed = await a.wait((m) => m.t === 'chat' && m.name === 'Griefer');
   assert.equal(echoed.text, ':ban Tester_1');
+  // fun commands
+  a.ws.send(JSON.stringify({ t: 'chat', text: ':speed griefer 80' }));
+  await a.wait((m) => m.t === 'sys' && m.text === ':speed → Griefer');
+  a.ws.send(JSON.stringify({ t: 'chat', text: ':mute Griefer' }));
+  await p.wait((m) => m.t === 'sys' && m.text === 'You have been muted.');
+  p.ws.send(JSON.stringify({ t: 'chat', text: 'spam spam' }));
+  await p.wait((m) => m.t === 'sys' && m.text === 'You are muted.');
+  a.ws.send(JSON.stringify({ t: 'chat', text: ':kill others' }));
+  await p.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'died'));
   a.ws.send(JSON.stringify({ t: 'chat', text: ':ban Griefer griefing' }));
   const kicked = await p.wait((m) => m.t === 'kick');
   assert.match(kicked.msg, /banned.*griefing/);
-  assert.equal((await a.wait((m) => m.t === 'sys')).text, 'Banned Griefer.');
+  await a.wait((m) => m.t === 'sys' && m.text === 'Banned Griefer.');
   assert.equal((await call('POST', '/auth/login', { username: 'Griefer', password: 'secret123' })).status, 403);
   a.ws.send(JSON.stringify({ t: 'chat', text: ':unban griefer' }));
   await a.wait((m) => m.t === 'sys' && m.text === 'Unbanned Griefer.');
@@ -269,7 +289,7 @@ test('admins can kick and ban from the in-game chat', async () => {
 test('every showcase game starts without script errors', async () => {
   const { cookie } = await call('POST', '/auth/signup', { username: 'Tourist', password: 'secret123' });
   const games = (await call('GET', '/games?sort=popular&limit=50')).data.games;
-  assert.ok(games.length >= 11);
+  assert.ok(games.length >= 14);
   for (const g of games) {
     const c = await join(cookie, { placeId: g.id });
     await c.wait((m) => m.t === 'welcome');

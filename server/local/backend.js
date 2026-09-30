@@ -55,6 +55,7 @@ export async function handle({ method, path, query, body, token }) {
     },
   };
   await api.handle(req, res);
+  if (method !== 'GET') await db.settled();
   return { status: res.statusCode, headers: res.headers, body: res.body, token: res.token };
 }
 

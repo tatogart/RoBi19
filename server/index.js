@@ -1,5 +1,6 @@
 // Robis server: website + REST API + WebSocket game servers.
 import http from 'node:http';
+import fs from 'node:fs';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -15,6 +16,20 @@ import { handleConnection } from './connection.js';
 import { backupConfig, restore, startBackups } from './backup.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// The deployed commit (Render sets RENDER_GIT_COMMIT; otherwise read .git).
+function buildVersion() {
+  if (process.env.RENDER_GIT_COMMIT) return process.env.RENDER_GIT_COMMIT;
+  try {
+    const head = fs.readFileSync(path.join(ROOT, '.git/HEAD'), 'utf8').trim();
+    if (!head.startsWith('ref: ')) return head;
+    const ref = head.slice(5);
+    const file = path.join(ROOT, '.git', ref);
+    if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8').trim();
+    const packed = fs.readFileSync(path.join(ROOT, '.git/packed-refs'), 'utf8');
+    return (packed.split('\n').find((l) => l.endsWith(' ' + ref)) || '').split(' ')[0];
+  } catch { return ''; }
+}
 
 export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROOT, 'data'), quiet = false, adminCode } = {}) {
   const db = new Database(dataDir);
@@ -47,7 +62,7 @@ export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROO
   // code set (public servers) the first account is no longer made admin.
   const code = adminCode ?? process.env.ROBIS_ADMIN_CODE;
   const adminCodeHash = code ? crypto.createHash('sha256').update(code.trim().toUpperCase()).digest('hex') : '';
-  app.use('/api', createApi(db, manager, { adminCodeHash, firstUserIsAdmin: !adminCodeHash }));
+  app.use('/api', createApi(db, manager, { adminCodeHash, firstUserIsAdmin: !adminCodeHash, version: buildVersion() }));
   const staticOpts = { maxAge: 0 };
   app.use('/vendor/three', express.static(path.join(ROOT, 'node_modules/three'), staticOpts));
   app.use('/vendor/codemirror', express.static(path.join(ROOT, 'node_modules/codemirror'), staticOpts));

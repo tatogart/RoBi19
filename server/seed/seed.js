@@ -3,6 +3,7 @@ import { hashPassword } from '../auth.js';
 import { CATALOG } from '../../shared/avatar.js';
 import { SEED_GAMES } from './places.js';
 import { MORE_GAMES } from './places2.js';
+import { TEAM_GAMES } from './places3.js';
 
 export const STARTER_ITEMS = ['Bacon Hair', 'Smile', 'Blue Hoodie', 'Jeans', 'Robis Logo T-Shirt', 'Classic Robis Cap', 'Pal Hair', 'Man Face', 'Woman Face'];
 export const STARTER_WEARING = ['Bacon Hair', 'Smile', 'Blue Hoodie', 'Jeans'];
@@ -87,7 +88,7 @@ export function addSeedGames(db) {
     ...g,
     visits: [48213, 125903, 8721, 67390, 3321][i], up: [912, 2210, 144, 1398, 67][i], down: [48, 190, 21, 120, 9][i],
     favorites: [3002, 9120, 311, 5120, 82][i], copyable: g.key !== 'obby', age: 40 - i * 7,
-  })), ...MORE_GAMES.map((g) => ({ ...g, copyable: true, age: 3 }))];
+  })), ...MORE_GAMES.map((g) => ({ ...g, copyable: true, age: 3 })), ...TEAM_GAMES.map((g) => ({ ...g, copyable: true, age: 1 }))];
   for (const sg of all) {
     if (done.has(sg.key)) continue;
     done.add(sg.key);

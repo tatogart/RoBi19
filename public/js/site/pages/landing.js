@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { api, getMe } from '../api.js';
 import { el, toast } from '../ui.js';
+import { installButton } from '../install.js';
 import { DataModel } from '/shared/engine/instances.js';
 import { loadPlace } from '/shared/engine/serialize.js';
 import { SceneSync } from '../../render/scene.js';
@@ -92,3 +93,12 @@ async function hero() {
   requestAnimationFrame(loop);
 }
 hero();
+
+// One-click install on PC and phones.
+const install = installButton('btn btn-green btn-large');
+if (install) {
+  install.classList.add('install-cta');
+  document.querySelector('.landing-section')?.prepend(el('div', { class: 'install-box' },
+    el('h2', { text: 'Get Robis on your PC or phone' }),
+    el('p', { text: 'Install it like an app: its own icon and window, works offline and updates itself.' }), install));
+}

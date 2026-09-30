@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import {
-  checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies, bannedClient, noteClient,
+  checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies, bannedClient, noteClient, isBanned, banDetails,
 } from './auth.js';
 import { createUser, addSeedGames } from './seed/seed.js';
 import { TEMPLATES } from './seed/places.js';
@@ -87,31 +87,36 @@ export function createApi(db, manager, opts = {}) {
     db.save();
   }
 
-  // Bans an account together with the devices and IPs it used, except ones
-  // an admin also uses (so the owner's own phone or Wi-Fi never gets banned).
-  const setBan = (u, banned, reason) => {
+  // Bans an account. opts.device also blocks the devices and IPs it used,
+  // except ones an admin also uses (so the owner's own phone or Wi-Fi never
+  // gets banned). opts.ms makes it temporary.
+  const BAN_TIMES = { '1h': 3600e3, '1d': 86400e3, '3d': 3 * 86400e3, '7d': 7 * 86400e3, '30d': 30 * 86400e3 };
+  const setBan = (u, banned, reason, opts = {}) => {
     u.banned = banned;
     u.banReason = banned ? String(reason || '').slice(0, 200) : '';
+    u.banUntil = banned && opts.ms ? Date.now() + opts.ms : 0;
+    u.bannedDevices = [];
+    u.bannedIps = [];
     if (banned) {
-      const admins = Object.values(D.users).filter((a) => a.isAdmin);
-      const safe = (key) => new Set(admins.flatMap((a) => a[key] || []));
-      const dev = safe('devices');
-      const ips = safe('ips');
-      u.bannedDevices = (u.devices || []).filter((d) => !dev.has(d));
-      u.bannedIps = (u.ips || []).filter((i) => !ips.has(i));
+      if (opts.device) {
+        const admins = Object.values(D.users).filter((a) => a.isAdmin);
+        const safe = (key) => new Set(admins.flatMap((a) => a[key] || []));
+        const dev = safe('devices');
+        const ips = safe('ips');
+        u.bannedDevices = (u.devices || []).filter((d) => !dev.has(d));
+        u.bannedIps = (u.ips || []).filter((i) => !ips.has(i));
+      }
+      const msg = `You have been banned.${banDetails(u)}`;
       for (const [t, s] of Object.entries(D.sessions)) if (s.userId === u.id) delete D.sessions[t];
       const f = manager.findUser(u.id);
-      if (f) f.server.kick(f.session, `You have been banned.${u.banReason ? ' Reason: ' + u.banReason : ''}`);
-      // Also kick other accounts playing from the banned device.
-      for (const o of Object.values(D.users)) {
+      if (f) f.server.kick(f.session, msg);
+      // Also kick other accounts playing from a banned device.
+      if (opts.device) for (const o of Object.values(D.users)) {
         if (o.isAdmin || o === u || !bannedClient(db, { device: o.devices?.[0], ip: '' })) continue;
         for (const [t, s] of Object.entries(D.sessions)) if (s.userId === o.id) delete D.sessions[t];
         const g = manager.findUser(o.id);
-        if (g) g.server.kick(g.session, 'You have been banned.');
+        if (g) g.server.kick(g.session, msg);
       }
-    } else {
-      u.bannedDevices = [];
-      u.bannedIps = [];
     }
     db.save();
   };
@@ -119,7 +124,8 @@ export function createApi(db, manager, opts = {}) {
   // Lets admins use :ban / :unban from the in-game chat.
   manager.admin = {
     findUser: (name) => Object.values(D.users).find((u) => !u.system && u.username.toLowerCase() === String(name).toLowerCase()) || null,
-    ban: (u, banned, reason) => setBan(u, banned, reason),
+    ban: (u, banned, reason, opts) => setBan(u, banned, reason, opts),
+    banTimes: BAN_TIMES,
   };
 
   // ------------------------------------------------------------ helpers
@@ -202,12 +208,12 @@ export function createApi(db, manager, opts = {}) {
   // ------------------------------------------------------------ auth
   // Keeps a device cookie the server middleware may have set on this response.
   const setCookie = (res, c) => (res.append ? res.append('Set-Cookie', c) : res.setHeader('Set-Cookie', c));
-  const banMessage = (u) => `This account has been banned.${u.banReason ? ' Reason: ' + u.banReason : ''}`;
+  const banMessage = (u) => `This account has been banned.${banDetails(u)}`;
 
   api.post('/auth/signup', (req, res) => {
     const { username, password } = req.body || {};
     const banned = bannedClient(db, req.client);
-    if (banned) return bad(res, `You are banned from this Robis (account ${banned.username}).${banned.banReason ? ' Reason: ' + banned.banReason : ''}`, 403);
+    if (banned) return bad(res, `This device is banned from this Robis (account ${banned.username}).${banDetails(banned)}`, 403);
     if (!validUsername(username)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
     if (typeof password !== 'string' || password.length < 6) return bad(res, 'Password must be at least 6 characters.');
     if (password.toLowerCase() === username.toLowerCase()) return bad(res, 'Password cannot be your username.');
@@ -226,9 +232,9 @@ export function createApi(db, manager, opts = {}) {
     const { username, password } = req.body || {};
     const user = Object.values(D.users).find((u) => u.username.toLowerCase() === String(username || '').toLowerCase());
     if (!user || !checkPassword(user, String(password || ''))) return bad(res, 'Incorrect username or password.', 401);
-    if (user.banned) return bad(res, banMessage(user), 403);
+    if (isBanned(user)) return bad(res, banMessage(user), 403);
     const other = !user.isAdmin && bannedClient(db, req.client);
-    if (other) return bad(res, `You are banned from this Robis (account ${other.username}).${other.banReason ? ' Reason: ' + other.banReason : ''}`, 403);
+    if (other) return bad(res, `This device is banned from this Robis (account ${other.username}).${banDetails(other)}`, 403);
     noteClient(db, user, req.client);
     const token = createSession(db, user.id);
     user.lastOnline = Date.now();
@@ -242,6 +248,9 @@ export function createApi(db, manager, opts = {}) {
     setCookie(res, sessionCookie('', 0));
     res.json({ ok: true });
   });
+
+  // Lets open pages notice a new deploy and reload (see public/js/site/install.js).
+  api.get('/version', (req, res) => res.json({ version: opts.version || '' }));
 
   api.get('/auth/me', (req, res) => {
     if (req.user) noteClient(db, req.user, req.client);
@@ -680,7 +689,7 @@ export function createApi(db, manager, opts = {}) {
     next();
   };
   const adminUser = (u) => ({
-    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, banned: !!u.banned, banReason: u.banReason || '',
+    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
     items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
   });
   const target = (req, res) => {
@@ -742,7 +751,7 @@ export function createApi(db, manager, opts = {}) {
     const u = target(req, res); if (!u) return;
     if (u.id === req.user.id) return bad(res, 'You can\'t ban yourself.');
     if (u.isAdmin && req.body?.banned) return bad(res, 'Remove admin rights before banning an admin.');
-    setBan(u, !!req.body?.banned, req.body?.reason);
+    setBan(u, !!req.body?.banned, req.body?.reason, { device: !!req.body?.device, ms: BAN_TIMES[req.body?.duration] || 0 });
     res.json({ user: adminUser(u) });
   });
 
