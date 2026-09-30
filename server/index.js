@@ -1,5 +1,6 @@
 // Robis server: website + REST API + WebSocket game servers.
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -89,7 +90,11 @@ export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROO
   });
   if (!quiet) server.on('listening', () => {
     const a = server.address();
-    console.log(`\n  ROBIS is running!  →  http://localhost:${a.port}\n`);
+    console.log(`\n  ROBIS is running!  →  http://localhost:${a.port}`);
+    // Addresses a phone on the same Wi-Fi can open.
+    const lan = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal);
+    for (const i of lan) console.log(`  On your phone (same Wi-Fi)  →  http://${i.address}:${a.port}`);
+    console.log('');
   });
   return { app, server, db, manager, close };
 }

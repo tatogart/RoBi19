@@ -25,6 +25,7 @@ export function createApi(db, manager) {
   const toInt = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
 
   const presence = (u) => {
+    if (u.system) return { status: 'offline' };
     const s = manager.findUser(u.id);
     if (s) return { status: s.server.isTest ? 'studio' : 'ingame', gameId: s.server.isTest ? null : s.server.gameId };
     if (Date.now() - (u.lastOnline || 0) < ONLINE_MS) return { status: 'online' };
@@ -35,7 +36,7 @@ export function createApi(db, manager) {
     if (!u) return null;
     const out = {
       id: u.id, username: u.username, created: u.created, status: u.status || '',
-      membership: u.membership || 'None', isAdmin: !!u.isAdmin, presence: presence(u),
+      membership: u.membership || 'None', isAdmin: !!u.isAdmin, isSystem: !!u.system, presence: presence(u),
       avatar: resolvedAvatar(u),
     };
     if (full) {
@@ -95,7 +96,9 @@ export function createApi(db, manager) {
     if (typeof password !== 'string' || password.length < 6) return bad(res, 'Password must be at least 6 characters.');
     if (password.toLowerCase() === username.toLowerCase()) return bad(res, 'Password cannot be your username.');
     if (Object.values(D.users).some((u) => u.username.toLowerCase() === username.toLowerCase())) return bad(res, 'This username is already in use.');
-    const user = createUser(db, username, password);
+    // The very first person to sign up on a fresh server becomes its admin.
+    const isFirst = !Object.values(D.users).some((u) => !u.system);
+    const user = createUser(db, username, password, isFirst ? { isAdmin: true } : {});
     const token = createSession(db, user.id);
     res.setHeader('Set-Cookie', sessionCookie(token));
     res.json({ user: me(user) });
@@ -187,6 +190,7 @@ export function createApi(db, manager) {
     const id = toInt(req.params.id);
     const other = D.users[id];
     if (!other || id === req.user.id) return bad(res, 'Invalid user');
+    if (other.system) return bad(res, 'This account does not accept friend requests.');
     if ((D.friends[req.user.id] || []).includes(id)) return bad(res, 'Already friends');
     // Accept automatically if they already asked us.
     const back = D.friendRequests.findIndex((r) => r.from === id && r.to === req.user.id);
@@ -198,13 +202,6 @@ export function createApi(db, manager) {
     }
     if (!D.friendRequests.some((r) => r.from === req.user.id && r.to === id)) {
       D.friendRequests.push({ from: req.user.id, to: id, created: Date.now() });
-    }
-    // Seed accounts accept instantly so new players have friends to look at.
-    if (other.username !== 'Robis' && ['Builderman2019', 'OofMaster', 'NoobSlayer99', 'PinkPrincess'].includes(other.username)) {
-      D.friendRequests = D.friendRequests.filter((r) => !(r.from === req.user.id && r.to === id));
-      addFriends(req.user.id, id);
-      db.save();
-      return res.json({ status: 'friends' });
     }
     db.save();
     res.json({ status: 'sent' });
@@ -255,6 +252,7 @@ export function createApi(db, manager) {
     const { to, subject, body } = req.body || {};
     const target = D.users[toInt(to)] || Object.values(D.users).find((u) => u.username.toLowerCase() === String(to || '').toLowerCase());
     if (!target) return bad(res, 'Recipient not found');
+    if (target.system) return bad(res, 'This account can\'t receive messages.');
     if (!String(body || '').trim()) return bad(res, 'Message is empty');
     const m = {
       id: db.nextId('message'), from: req.user.id, to: target.id,

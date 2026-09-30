@@ -25,6 +25,7 @@
 
 - [Features](#features)
 - [Quick start](#quick-start)
+- [Install on your phone](#install-on-your-phone)
 - [Screenshots](#screenshots)
 - [Controls](#controls)
 - [Robis Studio](#robis-studio)
@@ -95,41 +96,23 @@ npm install
 npm start
 ```
 
-Open **http://localhost:3000**, then sign up or log in with one of the seeded accounts.
+Open **http://localhost:3000** and press **Sign Up** to create your own account.
 
 ### Accounts
 
-On the first start Robis creates these accounts. They are all friends with `Robis`.
+There are no ready-made accounts with passwords: every player signs up on the landing page (username 3–20 characters, password at least 6).
 
-| # | Username | Password | Role | Robits | Wearing | Status | Owns |
-|---|---|---|---|---|---|---|---|
-| 1 | `Robis` | *shown once in the console* | Admin, Outrageous Builders Club | 1,000,000 R$ | Dominator of Robis, Epic Face, Black Suit, Suit Pants | "Building the future, one brick at a time." | Every catalog item; creator of Crossroads, Mega Fun Obby and Lava Rising |
-| 2 | `Builderman2019` | `password123` | Demo player | 500 R$ | Stylish Top Hat, Smile, Builders Club Shirt, Black Pants | "Robis Studio is my home." | Starter items + outfit |
-| 3 | `OofMaster` | `password123` | Demo player | 500 R$ | Traffic Cone, Epic Face, Red Plaid Shirt, Jeans (classic noob colours) | "oof oof oof" | Starter items + outfit; creator of Coin Rush |
-| 4 | `NoobSlayer99` | `password123` | Demo player | 500 R$ | Golden Crown, Chill, Green Camo Jacket, Camo Pants | "I beat every obby" | Starter items + outfit; creator of Button Mania |
-| 5 | `PinkPrincess` | `password123` | Demo player | 500 R$ | Long Pink Hair, Woman Face, Striped Tee, Khakis, Party Hat | "Lava Rising champion!!" | Starter items + outfit |
-
-New accounts from the sign-up page get **100 R$** and the starter items: Bacon Hair, Pal Hair, Smile, Man Face, Woman Face, Blue Hoodie, Jeans, Robis Logo T-Shirt and Classic Robis Cap.
-
-**Admin password.** The password of `Robis` is not stored anywhere in the code. On the first start the server generates a random one and prints it **once** in the console:
-
-```
-  Admin account created:  Robis / <random password>
-```
-
-Other ways to set it:
-
-```bash
-ROBIS_ADMIN_PASSWORD='my-secret' npm start   # use your own password when the world is created
-npm run admin-password                       # generate a new random one (server stopped)
-npm run admin-password my-new-secret         # set a specific one (server stopped)
-```
+- **The first account created on a server becomes its admin**: it can edit and delete any game.
+- Every new player gets **100 R$** and the starter items: Bacon Hair, Pal Hair, Smile, Man Face, Woman Face, Blue Hoodie, Jeans, Robis Logo T-Shirt and Classic Robis Cap. Another 25 R$ can be collected every day.
+- `Robis` is a built-in "official" system account that owns the catalog and the five showcase games. It has no password: nobody can log into it, message it or send it friend requests.
+- Forgot a password? Stop the server and run `npm run reset-password YourName` to print a new one, or `npm run reset-password YourName new-password` to choose it.
 
 Useful commands:
 
 ```bash
 npm run dev     # restart automatically on server changes (node --watch)
 npm run seed    # WIPE ./data and recreate the default world
+npm run reset-password <user> [password]   # reset a player's password (server stopped)
 npm test        # run the test suite
 ```
 
@@ -139,6 +122,43 @@ Docker:
 docker build -t robis .
 docker run -p 3000:3000 -v robis-data:/data robis
 ```
+
+## Install on your phone
+
+Robis isn't an App Store or Google Play app. The server runs on your computer, your phone opens its website, and you add the site to the home screen so it opens like a normal app, without the address bar.
+
+**1. Start the server on your computer.** Run `npm start`. The console prints an address for your phone:
+
+```
+  ROBIS is running!  →  http://localhost:3000
+  On your phone (same Wi-Fi)  →  http://192.168.1.23:3000
+```
+
+**2. Open it on the phone.** Connect the phone to the **same Wi-Fi** as the computer and type the address from the console (your numbers will differ) into Chrome or Safari.
+If the page doesn't load, a firewall is usually blocking it. On Windows, the first start shows a "Windows Defender Firewall" window: click **Allow access** for Node.js on private networks. If you closed it: Settings → Privacy & security → Windows Security → Firewall → "Allow an app through firewall" → tick Node.js.
+
+**3. Create an account.** Tap **Sign Up** and choose a username and password.
+
+**4. Add Robis to the home screen.**
+- **Android (Chrome):** the **⋮** menu (top right) → **Add to Home screen** (or **Install app**) → **Add**.
+- **iPhone / iPad (Safari):** the **Share** button (square with an up arrow) → **Add to Home Screen** → **Add**.
+
+A blue Robis icon appears on your home screen.
+
+**5. Play.** Open the icon, pick a game and tap the green ▶ button. Turn the phone sideways and tap the **fullscreen** button in the top bar. Controls: thumbstick on the left, jump on the right, swipe to turn the camera, pinch to zoom.
+
+### Playing away from home (over the internet)
+
+A `192.168…` address only works on your own Wi-Fi. To play on mobile data or invite friends, the server needs a public address:
+
+- **Quick and free: a tunnel.** While `npm start` is running, run this in a second terminal:
+  ```bash
+  npx cloudflared tunnel --url http://localhost:3000
+  ```
+  It prints a link like `https://something.trycloudflare.com` that works on any phone and can be added to the home screen the same way. The link lasts while the terminal is open and changes every time.
+- **Permanent: hosting.** Deploy the project to any Node.js or Docker host (a VPS, Render, Railway and so on) with the included `Dockerfile`. Attach a persistent disk for `/data`, or accounts and games are lost on restart.
+
+Over an HTTPS address (tunnel or hosting), Chrome on Android shows a proper **Install app** button.
 
 ## Screenshots
 
@@ -297,7 +317,6 @@ All endpoints live under `/api` and use JSON. Authentication goes through the `r
 |---|---|---|
 | `PORT` | `3000` | HTTP port |
 | `ROBIS_DATA` | `./data` | Folder for `db.json`, place files and thumbnails |
-| `ROBIS_ADMIN_PASSWORD` | random | Password for the `Robis` admin account when the world is first created |
 | `ROBIS_LOG_SCRIPTS` | unset | Set it to `1` to also print game output in the server console |
 
 ## Tests

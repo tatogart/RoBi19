@@ -68,6 +68,13 @@ test('signup, login validation, avatar and purchases', async () => {
   const me = (await call('GET', '/auth/me', null, cookie)).data.user;
   assert.equal(me.username, 'Tester_1');
   assert.equal(me.robits, 100);
+  // the first player on a fresh server is its admin; later ones are not
+  assert.equal(me.isAdmin, true);
+  const second = await call('POST', '/auth/signup', { username: 'Second', password: 'secret123' });
+  assert.equal(second.data.user.isAdmin, false);
+  // the built-in Robis account has no password and can't be logged into
+  assert.equal((await call('POST', '/auth/login', { username: 'Robis', password: '' })).status, 401);
+  assert.equal((await call('POST', '/friends/1/request', {}, cookie)).status, 400);
   // buy a cheap hat
   const cone = (await call('GET', '/catalog?q=Traffic')).data.items[0];
   const buy = await call('POST', `/catalog/${cone.id}/buy`, {}, cookie);

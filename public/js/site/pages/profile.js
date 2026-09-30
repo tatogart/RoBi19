@@ -19,7 +19,7 @@ const own = me && me.id === user.id;
 const actions = el('div', { class: 'row' });
 function renderActions() {
   actions.replaceChildren();
-  if (!me || own) {
+  if (!me || own || user.isSystem) {
     if (own) actions.append(el('a', { class: 'btn', href: '/avatar', text: 'Edit Avatar' }));
     return;
   }
@@ -43,7 +43,8 @@ const header = el('div', { class: 'panel profile-header' },
   el('div', { class: 'profile-main' },
     el('div', { class: 'row' }, el('h1', { style: { margin: 0 }, text: user.username }),
       user.membership !== 'None' ? el('span', { class: 'pill', style: { background: '#393b3d', color: '#fff' }, text: 'OBC' }) : null,
-      user.isAdmin ? el('span', { class: 'pill', style: { background: '#00a2ff', color: '#fff' }, text: 'Admin' }) : null),
+      user.isAdmin ? el('span', { class: 'pill', style: { background: '#00a2ff', color: '#fff' }, text: 'Admin' }) : null,
+      user.isSystem ? el('span', { class: 'pill', style: { background: '#00a2ff', color: '#fff' }, text: 'Official' }) : null),
     statusLine,
     el('div', { class: 'muted small', text: presenceText(user.presence) }),
     el('div', { class: 'profile-counts' },
