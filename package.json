@@ -8,6 +8,7 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "seed": "node server/seed/reset.js",
+    "admin-password": "node server/seed/admin-password.js",
     "test": "node --test \"test/**/*.test.js\""
   },
   "engines": {

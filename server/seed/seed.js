@@ -1,4 +1,5 @@
 // Fills an empty database with the Robis account, the catalog and showcase games.
+import crypto from 'node:crypto';
 import { hashPassword } from '../auth.js';
 import { CATALOG } from '../../shared/avatar.js';
 import { SEED_GAMES } from './places.js';
@@ -45,7 +46,10 @@ export function seed(db) {
       limited: !!it.limited, remaining: it.limited ? 100 : null,
     };
   }
-  const robis = createUser(db, 'Robis', 'robis2019', {
+  // The admin password is never stored in the code: take it from the environment
+  // or generate a random one and show it once in the console.
+  const adminPassword = process.env.ROBIS_ADMIN_PASSWORD || crypto.randomBytes(9).toString('base64url');
+  const robis = createUser(db, 'Robis', adminPassword, {
     isAdmin: true, robits: 1_000_000, membership: 'OutrageousBuildersClub',
     blurb: 'Welcome to Robis! We are a user-generated gaming platform where you can play and build games. Powered by imagination since 2019.',
     status: 'Building the future, one brick at a time.',
@@ -89,5 +93,9 @@ export function seed(db) {
     };
   }
   db.flush();
-  console.log('[seed] done. Admin login: Robis / robis2019');
+  console.log('[seed] done.');
+  if (!process.env.ROBIS_ADMIN_PASSWORD) {
+    console.log(`\n  Admin account created:  Robis / ${adminPassword}`);
+    console.log('  Save this password now — it is shown only once. Reset it any time with: npm run admin-password\n');
+  }
 }

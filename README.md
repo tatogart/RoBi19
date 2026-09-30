@@ -95,12 +95,35 @@ npm install
 npm start
 ```
 
-Open **http://localhost:3000**, then sign up or log in with a seeded account:
+Open **http://localhost:3000**, then sign up or log in with one of the seeded accounts.
 
-| Username | Password | Notes |
-|---|---|---|
-| `Robis` | `robis2019` | Admin, owns everything, 1,000,000 R$ |
-| `Builderman2019`, `OofMaster`, `NoobSlayer99`, `PinkPrincess` | `password123` | Demo players |
+### Accounts
+
+On the first start Robis creates these accounts. They are all friends with `Robis`.
+
+| # | Username | Password | Role | Robits | Wearing | Status | Owns |
+|---|---|---|---|---|---|---|---|
+| 1 | `Robis` | *shown once in the console* | Admin, Outrageous Builders Club | 1,000,000 R$ | Dominator of Robis, Epic Face, Black Suit, Suit Pants | "Building the future, one brick at a time." | Every catalog item; creator of Crossroads, Mega Fun Obby and Lava Rising |
+| 2 | `Builderman2019` | `password123` | Demo player | 500 R$ | Stylish Top Hat, Smile, Builders Club Shirt, Black Pants | "Robis Studio is my home." | Starter items + outfit |
+| 3 | `OofMaster` | `password123` | Demo player | 500 R$ | Traffic Cone, Epic Face, Red Plaid Shirt, Jeans (classic noob colours) | "oof oof oof" | Starter items + outfit; creator of Coin Rush |
+| 4 | `NoobSlayer99` | `password123` | Demo player | 500 R$ | Golden Crown, Chill, Green Camo Jacket, Camo Pants | "I beat every obby" | Starter items + outfit; creator of Button Mania |
+| 5 | `PinkPrincess` | `password123` | Demo player | 500 R$ | Long Pink Hair, Woman Face, Striped Tee, Khakis, Party Hat | "Lava Rising champion!!" | Starter items + outfit |
+
+New accounts from the sign-up page get **100 R$** and the starter items: Bacon Hair, Pal Hair, Smile, Man Face, Woman Face, Blue Hoodie, Jeans, Robis Logo T-Shirt and Classic Robis Cap.
+
+**Admin password.** The password of `Robis` is not stored anywhere in the code. On the first start the server generates a random one and prints it **once** in the console:
+
+```
+  Admin account created:  Robis / <random password>
+```
+
+Other ways to set it:
+
+```bash
+ROBIS_ADMIN_PASSWORD='my-secret' npm start   # use your own password when the world is created
+npm run admin-password                       # generate a new random one (server stopped)
+npm run admin-password my-new-secret         # set a specific one (server stopped)
+```
 
 Useful commands:
 
@@ -274,6 +297,7 @@ All endpoints live under `/api` and use JSON. Authentication goes through the `r
 |---|---|---|
 | `PORT` | `3000` | HTTP port |
 | `ROBIS_DATA` | `./data` | Folder for `db.json`, place files and thumbnails |
+| `ROBIS_ADMIN_PASSWORD` | random | Password for the `Robis` admin account when the world is first created |
 | `ROBIS_LOG_SCRIPTS` | unset | Set it to `1` to also print game output in the server console |
 
 ## Tests

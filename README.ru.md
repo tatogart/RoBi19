@@ -95,12 +95,35 @@ npm install
 npm start
 ```
 
-Откройте **http://localhost:3000**, зарегистрируйтесь или войдите под одним из готовых аккаунтов:
+Откройте **http://localhost:3000**, зарегистрируйтесь или войдите под одним из готовых аккаунтов.
 
-| Логин | Пароль | Примечание |
-|---|---|---|
-| `Robis` | `robis2019` | Администратор, у него все вещи и 1 000 000 R$ |
-| `Builderman2019`, `OofMaster`, `NoobSlayer99`, `PinkPrincess` | `password123` | Демо-игроки |
+### Аккаунты
+
+При первом запуске Robis создаёт эти аккаунты. Все они в друзьях у `Robis`.
+
+| # | Логин | Пароль | Роль | Robits | Надето | Статус | Владеет |
+|---|---|---|---|---|---|---|---|
+| 1 | `Robis` | *показывается один раз в консоли* | Администратор, Outrageous Builders Club | 1 000 000 R$ | Dominator of Robis, Epic Face, Black Suit, Suit Pants | «Building the future, one brick at a time.» | Все вещи каталога; автор Crossroads, Mega Fun Obby и Lava Rising |
+| 2 | `Builderman2019` | `password123` | Демо-игрок | 500 R$ | Stylish Top Hat, Smile, Builders Club Shirt, Black Pants | «Robis Studio is my home.» | Стартовые вещи + наряд |
+| 3 | `OofMaster` | `password123` | Демо-игрок | 500 R$ | Traffic Cone, Epic Face, Red Plaid Shirt, Jeans (классические цвета «нуба») | «oof oof oof» | Стартовые вещи + наряд; автор Coin Rush |
+| 4 | `NoobSlayer99` | `password123` | Демо-игрок | 500 R$ | Golden Crown, Chill, Green Camo Jacket, Camo Pants | «I beat every obby» | Стартовые вещи + наряд; автор Button Mania |
+| 5 | `PinkPrincess` | `password123` | Демо-игрок | 500 R$ | Long Pink Hair, Woman Face, Striped Tee, Khakis, Party Hat | «Lava Rising champion!!» | Стартовые вещи + наряд |
+
+Новые аккаунты со страницы регистрации получают **100 R$** и стартовые вещи: Bacon Hair, Pal Hair, Smile, Man Face, Woman Face, Blue Hoodie, Jeans, Robis Logo T-Shirt и Classic Robis Cap.
+
+**Пароль администратора.** Пароля `Robis` нет нигде в коде. При первом запуске сервер генерирует случайный пароль и **один раз** выводит его в консоль:
+
+```
+  Admin account created:  Robis / <случайный пароль>
+```
+
+Другие способы задать пароль:
+
+```bash
+ROBIS_ADMIN_PASSWORD='my-secret' npm start   # свой пароль при создании мира
+npm run admin-password                       # сгенерировать новый случайный (сервер остановлен)
+npm run admin-password my-new-secret         # задать конкретный (сервер остановлен)
+```
 
 Полезные команды:
 
@@ -274,6 +297,7 @@ robis/
 |---|---|---|
 | `PORT` | `3000` | HTTP-порт |
 | `ROBIS_DATA` | `./data` | Папка для `db.json`, файлов мест и миниатюр |
+| `ROBIS_ADMIN_PASSWORD` | случайный | Пароль админа `Robis` при первом создании мира |
 | `ROBIS_LOG_SCRIPTS` | не задана | `1` — дублировать вывод игр в консоль сервера |
 
 ## Тесты
