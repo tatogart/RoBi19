@@ -28,6 +28,7 @@ export class GameServer {
     this.isTest = !!opts.test;
     this.backend = opts.backend || {};
     this.onClose = opts.onClose || (() => {});
+    this.manager = opts.manager || null;
     this.sessions = new Map(); // userId -> session
     this.queue = [];
     this.setIndex = new Map();
@@ -242,6 +243,34 @@ export class GameServer {
     }
   }
 
+  // Chat commands for admins: :kick, :ban, :unban, :players.
+  adminCommand(session, text) {
+    const [cmd, name = '', ...rest] = text.slice(1).trim().split(/\s+/);
+    const reason = rest.join(' ').slice(0, 200);
+    const say = (msg) => this.send(session, { t: 'sys', text: msg });
+    const c = cmd.toLowerCase();
+    if (!['kick', 'ban', 'unban', 'players', 'cmds'].includes(c)) return false;
+    if (c === 'cmds') { say(':kick name [reason] · :ban name [reason] · :unban name · :players'); return true; }
+    if (c === 'players') { say([...this.sessions.values()].map((s) => s.user.username).join(', ')); return true; }
+    const hooks = this.manager && this.manager.admin;
+    const target = name && (hooks ? hooks.findUser(name) : [...this.sessions.values()].find((s) => s.user.username.toLowerCase() === name.toLowerCase())?.user);
+    if (!target) { say(`No player named "${name}".`); return true; }
+    if (target.id === session.user.id) { say('You can\'t do that to yourself.'); return true; }
+    if (target.isAdmin && c !== 'unban') { say(`${target.username} is an admin.`); return true; }
+    if (c === 'kick') {
+      const s = this.sessions.get(target.id);
+      if (!s) { say(`${target.username} is not in this server.`); return true; }
+      this.kick(s, reason || `Kicked by ${session.user.username}`);
+      say(`Kicked ${target.username}.`);
+    } else if (!hooks) {
+      say('Bans are not available here.');
+    } else {
+      hooks.ban(target, c === 'ban', reason);
+      say(c === 'ban' ? `Banned ${target.username}.` : `Unbanned ${target.username}.`);
+    }
+    return true;
+  }
+
   kick(session, msg) {
     this.send(session, { t: 'kick', msg });
     this.leave(session, 'was kicked');
@@ -342,6 +371,7 @@ export class GameServer {
           this.broadcast({ t: 'emote', userId: session.user.id, emote: text.slice(3).trim().toLowerCase() });
           return;
         }
+        if (text[0] === ':' && session.user.isAdmin && this.adminCommand(session, text)) return;
         const clean = filterChat(text);
         this.broadcast({ t: 'chat', userId: session.user.id, name: session.user.username, text: clean });
         session.player._fire('Chatted', clean);

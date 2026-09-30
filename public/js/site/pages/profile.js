@@ -6,11 +6,11 @@ import { avatarFullBody } from '../../render/thumbs.js';
 const me = await initPage({ active: 'profile', requireAuth: false });
 const app = document.getElementById('app');
 const uid = +qs('id') || me?.id;
-if (!uid) location.href = '/';
+if (!uid) { location.href = '/?returnUrl=/profile'; await new Promise(() => {}); }
 let user;
 try { ({ user } = await api.get(`/users/${uid}`)); } catch {
   app.append(el('div', { class: 'panel empty', text: 'User not found.' }));
-  throw new Error('not found');
+  await new Promise(() => {});
 }
 document.title = `${user.username} - Robis`;
 const own = me && me.id === user.id;

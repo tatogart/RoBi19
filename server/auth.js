@@ -46,7 +46,49 @@ export function userFromToken(db, token) {
   const s = db.data.sessions[token];
   if (!s) return null;
   if (s.expires < Date.now()) { delete db.data.sessions[token]; db.save(); return null; }
-  return db.data.users[s.userId] || null;
+  const user = db.data.users[s.userId];
+  if (!user || user.banned) { delete db.data.sessions[token]; db.save(); return null; }
+  return user;
+}
+
+// ---- bans by device and IP (server version) ----
+// Every browser gets a long-lived random device id, so a banned player can't
+// just sign up again. Accounts remember the devices and IPs they were used from.
+export const DEVICE_COOKIE = 'robis_device';
+
+export function clientInfo(req) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  const ip = (fwd || req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+  const device = parseCookies(req.headers.cookie)[DEVICE_COOKIE];
+  return { ip, device: /^[a-f0-9]{32}$/.test(device || '') ? device : '' };
+}
+
+export function newDeviceCookie() {
+  const id = crypto.randomBytes(16).toString('hex');
+  return { id, cookie: `${DEVICE_COOKIE}=${id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${5 * 365 * 86400}` };
+}
+
+export function noteClient(db, user, info) {
+  if (!info || user.system) return;
+  let changed = false;
+  for (const [key, v] of [['devices', info.device], ['ips', info.ip]]) {
+    if (!v) continue;
+    const list = user[key] || (user[key] = []);
+    if (list[0] === v) continue;
+    const i = list.indexOf(v);
+    if (i >= 0) list.splice(i, 1);
+    list.unshift(v);
+    list.length = Math.min(list.length, 20);
+    changed = true;
+  }
+  if (changed) db.save();
+}
+
+// The banned account whose device or IP this client uses, if any.
+export function bannedClient(db, info) {
+  if (!info || (!info.device && !info.ip)) return null;
+  return Object.values(db.data.users).find((b) => b.banned
+    && ((info.device && (b.bannedDevices || []).includes(info.device)) || (info.ip && (b.bannedIps || []).includes(info.ip)))) || null;
 }
 
 export function userFromRequest(db, req) {

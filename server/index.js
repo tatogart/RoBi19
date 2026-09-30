@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { Database } from './db.js';
-import { userFromRequest } from './auth.js';
+import { userFromRequest, clientInfo, newDeviceCookie, bannedClient } from './auth.js';
 import { createApi } from './api.js';
 import { GameManager } from './game/manager.js';
 import { seed } from './seed/seed.js';
@@ -18,6 +18,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROOT, 'data'), quiet = false, adminCode } = {}) {
   const db = new Database(dataDir);
+  // A logged-in account on a banned device or IP counts as logged out (admins excepted).
+  const currentUser = (req, info) => {
+    const u = userFromRequest(db, req);
+    return u && !u.isAdmin && bannedClient(db, info) ? null : u;
+  };
   if (db.isEmpty) seed(db);
   const manager = new GameManager(db);
   const app = express();
@@ -25,8 +30,15 @@ export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROO
   app.use(express.json({ limit: '25mb' }));
 
   // Authenticate every request via the session cookie.
+  app.set('trust proxy', true);
   app.use((req, res, next) => {
-    req.user = userFromRequest(db, req);
+    req.client = clientInfo(req);
+    if (!req.client.device) {
+      const d = newDeviceCookie();
+      req.client.device = d.id;
+      res.append('Set-Cookie', d.cookie);
+    }
+    req.user = currentUser(req, req.client);
     if (req.user) req.user.lastOnline = Date.now();
     next();
   });
@@ -46,7 +58,7 @@ export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROO
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 32 * 1024 * 1024 });
 
-  wss.on('connection', (ws, req) => handleConnection(ws, userFromRequest(db, req), { db, manager }));
+  wss.on('connection', (ws, req) => handleConnection(ws, currentUser(req, clientInfo(req)), { db, manager }));
 
   const close = () => new Promise((resolve) => {
     manager.shutdown();

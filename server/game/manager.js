@@ -45,7 +45,7 @@ export class GameManager {
   }
 
   _create(opts) {
-    const server = new GameServer({ ...opts, onClose: (s) => this.servers.delete(s.id) });
+    const server = new GameServer({ ...opts, manager: this, onClose: (s) => this.servers.delete(s.id) });
     this.servers.set(server.id, server);
     return server;
   }

@@ -289,7 +289,7 @@ export async function toolboxThumb(entry) {
     const inst = entry.build();
     if (inst.IsA('BaseScript')) return null;
     inst.Parent = game.Workspace;
-    return renderPlace(null, 176, { game, minRadius: 5 });
+    return renderPlace(null, 176, { game, fit: true });
   })();
   thumbCache.set(entry.name, p);
   return p;

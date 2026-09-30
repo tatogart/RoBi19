@@ -43,7 +43,8 @@ export class FollowCamera {
     let focus = this.focus.clone();
     if (this.shiftLock && this.zoom > 1) focus.add(this.right.multiplyScalar(1.75));
     this.firstPerson = this.zoom < 1;
-    let dist = this.firstPerson ? 0 : this.zoom;
+    // Phones held upright see much less sideways, so pull the camera back.
+    let dist = this.firstPerson ? 0 : this.zoom * (this.camera.aspect < 1 ? 1.7 : 1);
     if (dist > 0 && this.world) {
       const hit = this.world.raycast(focus, dir, dist + 0.5);
       if (hit < dist + 0.5) dist = Math.max(0.5, hit - 0.5);

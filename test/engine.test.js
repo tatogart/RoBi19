@@ -128,3 +128,28 @@ test('character controller lands on the floor and walks', () => {
   stepCharacter(s, { mx: 0, mz: 0, jump: true }, 1 / 60, world, hum);
   assert.ok(!s.grounded && s.vy > 40);
 });
+
+test('walking into a TrussPart climbs it, walls do not', () => {
+  const setup = (cls) => {
+    const game = new DataModel();
+    const grid = new SpatialGrid();
+    const add = (p) => { const b = partBox(p); grid.insert(b, boxAABB(b)); };
+    const floor = createInstance('Part', game.Workspace);
+    floor.Size = new Vector3(100, 2, 100);
+    floor.Position = new Vector3(0, -1, 0);
+    add(floor);
+    const ladder = createInstance(cls, game.Workspace);
+    ladder.Size = new Vector3(2, 20, 2);
+    ladder.Position = new Vector3(0, 10, -4);
+    add(ladder);
+    return { query: (...a) => grid.query(...a), gravity: 196.2 };
+  };
+  const hum = { WalkSpeed: 16, JumpPower: 50 };
+  const run = (world) => {
+    const s = { x: 0, y: 3, z: 0, vx: 0, vy: 0, vz: 0, grounded: true };
+    for (let i = 0; i < 60; i++) stepCharacter(s, { mx: 0, mz: -1, jump: false }, 1 / 60, world, hum);
+    return s.y;
+  };
+  assert.ok(run(setup('TrussPart')) > 8);
+  close(run(setup('Part')), 3, 0.1);
+});

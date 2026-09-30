@@ -2,9 +2,9 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import {
-  checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies,
+  checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies, bannedClient, noteClient,
 } from './auth.js';
-import { createUser } from './seed/seed.js';
+import { createUser, addSeedGames } from './seed/seed.js';
 import { TEMPLATES } from './seed/places.js';
 import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES } from '../shared/avatar.js';
 import { PLACE_FORMAT } from '../shared/engine/serialize.js';
@@ -56,6 +56,9 @@ export function createApi(db, manager, opts = {}) {
   if (opts.requireAdminCode) for (const u of Object.values(D.users)) if (u.isAdmin && !u.adminByCode) revokeAdmin(u);
   // Also for admins created before perks existed.
   for (const u of Object.values(D.users)) grantAdminPerks(u);
+  // New showcase places reach existing worlds too.
+  addSeedGames(db);
+
   // The free Robits packs and self-service Builders Club are gone: take back
   // what players gave themselves (runs once per database).
   if (!D.meta.freeDonateRevoked) {
@@ -83,6 +86,41 @@ export function createApi(db, manager, opts = {}) {
     }
     db.save();
   }
+
+  // Bans an account together with the devices and IPs it used, except ones
+  // an admin also uses (so the owner's own phone or Wi-Fi never gets banned).
+  const setBan = (u, banned, reason) => {
+    u.banned = banned;
+    u.banReason = banned ? String(reason || '').slice(0, 200) : '';
+    if (banned) {
+      const admins = Object.values(D.users).filter((a) => a.isAdmin);
+      const safe = (key) => new Set(admins.flatMap((a) => a[key] || []));
+      const dev = safe('devices');
+      const ips = safe('ips');
+      u.bannedDevices = (u.devices || []).filter((d) => !dev.has(d));
+      u.bannedIps = (u.ips || []).filter((i) => !ips.has(i));
+      for (const [t, s] of Object.entries(D.sessions)) if (s.userId === u.id) delete D.sessions[t];
+      const f = manager.findUser(u.id);
+      if (f) f.server.kick(f.session, `You have been banned.${u.banReason ? ' Reason: ' + u.banReason : ''}`);
+      // Also kick other accounts playing from the banned device.
+      for (const o of Object.values(D.users)) {
+        if (o.isAdmin || o === u || !bannedClient(db, { device: o.devices?.[0], ip: '' })) continue;
+        for (const [t, s] of Object.entries(D.sessions)) if (s.userId === o.id) delete D.sessions[t];
+        const g = manager.findUser(o.id);
+        if (g) g.server.kick(g.session, 'You have been banned.');
+      }
+    } else {
+      u.bannedDevices = [];
+      u.bannedIps = [];
+    }
+    db.save();
+  };
+
+  // Lets admins use :ban / :unban from the in-game chat.
+  manager.admin = {
+    findUser: (name) => Object.values(D.users).find((u) => !u.system && u.username.toLowerCase() === String(name).toLowerCase()) || null,
+    ban: (u, banned, reason) => setBan(u, banned, reason),
+  };
 
   // ------------------------------------------------------------ helpers
   const requireUser = (req, res, next) => {
@@ -162,8 +200,14 @@ export function createApi(db, manager, opts = {}) {
   };
 
   // ------------------------------------------------------------ auth
+  // Keeps a device cookie the server middleware may have set on this response.
+  const setCookie = (res, c) => (res.append ? res.append('Set-Cookie', c) : res.setHeader('Set-Cookie', c));
+  const banMessage = (u) => `This account has been banned.${u.banReason ? ' Reason: ' + u.banReason : ''}`;
+
   api.post('/auth/signup', (req, res) => {
     const { username, password } = req.body || {};
+    const banned = bannedClient(db, req.client);
+    if (banned) return bad(res, `You are banned from this Robis (account ${banned.username}).${banned.banReason ? ' Reason: ' + banned.banReason : ''}`, 403);
     if (!validUsername(username)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
     if (typeof password !== 'string' || password.length < 6) return bad(res, 'Password must be at least 6 characters.');
     if (password.toLowerCase() === username.toLowerCase()) return bad(res, 'Password cannot be your username.');
@@ -172,8 +216,9 @@ export function createApi(db, manager, opts = {}) {
     const isFirst = firstUserIsAdmin && !Object.values(D.users).some((u) => !u.system);
     const user = createUser(db, username, password, isFirst ? { isAdmin: true } : {});
     grantAdminPerks(user);
+    noteClient(db, user, req.client);
     const token = createSession(db, user.id);
-    res.setHeader('Set-Cookie', sessionCookie(token));
+    setCookie(res, sessionCookie(token));
     res.json({ user: me(user) });
   });
 
@@ -181,21 +226,27 @@ export function createApi(db, manager, opts = {}) {
     const { username, password } = req.body || {};
     const user = Object.values(D.users).find((u) => u.username.toLowerCase() === String(username || '').toLowerCase());
     if (!user || !checkPassword(user, String(password || ''))) return bad(res, 'Incorrect username or password.', 401);
-    if (user.banned) return bad(res, `This account has been banned.${user.banReason ? ' Reason: ' + user.banReason : ''}`, 403);
+    if (user.banned) return bad(res, banMessage(user), 403);
+    const other = !user.isAdmin && bannedClient(db, req.client);
+    if (other) return bad(res, `You are banned from this Robis (account ${other.username}).${other.banReason ? ' Reason: ' + other.banReason : ''}`, 403);
+    noteClient(db, user, req.client);
     const token = createSession(db, user.id);
     user.lastOnline = Date.now();
-    res.setHeader('Set-Cookie', sessionCookie(token));
+    setCookie(res, sessionCookie(token));
     res.json({ user: me(user) });
   });
 
   api.post('/auth/logout', (req, res) => {
     const token = parseCookies(req.headers.cookie)[COOKIE];
     if (token) destroySession(db, token);
-    res.setHeader('Set-Cookie', sessionCookie('', 0));
+    setCookie(res, sessionCookie('', 0));
     res.json({ ok: true });
   });
 
-  api.get('/auth/me', (req, res) => res.json({ user: req.user ? me(req.user) : null }));
+  api.get('/auth/me', (req, res) => {
+    if (req.user) noteClient(db, req.user, req.client);
+    res.json({ user: req.user ? me(req.user) : null });
+  });
 
   // ------------------------------------------------------------ users
   api.get('/users', (req, res) => {
@@ -690,11 +741,8 @@ export function createApi(db, manager, opts = {}) {
   api.post('/admin/users/:id/ban', requireAdmin, (req, res) => {
     const u = target(req, res); if (!u) return;
     if (u.id === req.user.id) return bad(res, 'You can\'t ban yourself.');
-    u.banned = !!req.body?.banned;
-    u.banReason = u.banned ? String(req.body?.reason || '').slice(0, 200) : '';
-    if (u.banned) for (const [t, s] of Object.entries(D.sessions)) if (s.userId === u.id) delete D.sessions[t];
-    if (u.banned) { const f = manager.findUser(u.id); if (f) f.server.kick(f.session, 'You have been banned.'); }
-    db.save();
+    if (u.isAdmin && req.body?.banned) return bad(res, 'Remove admin rights before banning an admin.');
+    setBan(u, !!req.body?.banned, req.body?.reason);
     res.json({ user: adminUser(u) });
   });
 

@@ -6,7 +6,7 @@ const me = await initPage({ active: 'admin' });
 const app = document.getElementById('app');
 if (!me.isAdmin) {
   app.append(el('div', { class: 'panel empty', text: 'Only admins can open this page.' }));
-  throw new Error('not admin');
+  await new Promise(() => {});
 }
 
 app.append(el('h1', { text: 'Admin Panel' }));

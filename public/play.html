@@ -22,7 +22,7 @@ import { GameClient } from '/js/game/client.js';
 import { getMe } from '/js/site/api.js';
 
 const params = new URLSearchParams(location.search);
-const placeId = +params.get('placeId');
+const placeId = +(params.get('placeId') || params.get('id'));
 const me = await getMe();
 if (!me) location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search);
 let gameInfo = null;

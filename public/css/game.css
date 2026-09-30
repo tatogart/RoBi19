@@ -119,7 +119,8 @@
 .jump-btn svg { width: 100%; height: 100%; }
 .jump-btn.down { background: rgba(255, 255, 255, .35); transform: scale(.94); }
 .fs-btn { display: none !important; }
-.rotate-hint { position: absolute; left: 50%; top: 44px; transform: translateX(-50%); background: rgba(31, 31, 31, .75); border-radius: 16px; padding: 6px 12px; font-size: 14px; display: none; align-items: center; gap: 8px; white-space: nowrap; z-index: 4; }
+.rotate-hint { position: absolute; left: 50%; bottom: calc(210px + env(safe-area-inset-bottom)); transition: opacity .6s; transform: translateX(-50%); background: rgba(31, 31, 31, .75); border-radius: 16px; padding: 6px 12px; font-size: 14px; display: none; align-items: center; gap: 8px; white-space: nowrap; z-index: 4; }
+.rotate-hint.fade { opacity: 0; pointer-events: none; }
 .rotate-hint button { background: none; border: 0; color: #fff; font-size: 18px; padding: 0 2px; }
 .game-root.touch .touch-stick, .game-root.touch .jump-btn { display: block; }
 .game-root.touch .fs-btn { display: flex !important; }
@@ -135,6 +136,8 @@
 .leaderboard.collapsed tr:not(:first-child) { display: none; }
 .leaderboard.collapsed th:first-child::after { content: ' ▾'; }
 .game-root.touch .hint { top: calc(48px + env(safe-area-inset-top)); font-size: 15px; }
+.has-hint .chat { top: 70px; }
+.game-root.touch .has-hint .chat { top: calc(84px + env(safe-area-inset-top)); }
 .game-root.touch .message-full { font-size: 22px; }
 .game-root.touch .name-tag .nt-name { font-size: 13px; }
 .game-root.touch .bubble { font-size: 13px; max-width: 180px; }

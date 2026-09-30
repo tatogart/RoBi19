@@ -186,7 +186,9 @@ export async function renderPlace(place, size = 384, opts = {}) {
   if (box.isEmpty()) box.set(new THREE.Vector3(-20, 0, -20), new THREE.Vector3(20, 10, 20));
   const center = box.getCenter(new THREE.Vector3());
   const sz = box.getSize(new THREE.Vector3());
-  const radius = Math.min(260, Math.max(opts.minRadius ?? 20, Math.max(sz.x, sz.z) * 0.55, sz.y));
+  // `fit`: frame the whole object (toolbox previews); otherwise a map overview.
+  const radius = opts.fit ? Math.max(1.5, sz.length() / 2) * 1.85
+    : Math.min(260, Math.max(opts.minRadius ?? 20, Math.max(sz.x, sz.z) * 0.55, sz.y));
   const cam = new THREE.PerspectiveCamera(45, 1, 0.5, 10000);
   cam.position.set(center.x + radius * 0.9, center.y + radius * 0.65, center.z + radius * 0.9);
   cam.lookAt(center.x, center.y - sz.y * 0.1, center.z);

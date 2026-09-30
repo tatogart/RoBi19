@@ -105,6 +105,7 @@ export class HUD {
     this.rotateHint = h('div', 'rotate-hint', '<span>📱↻</span> Rotate your device for a better view <button aria-label="Dismiss">×</button>');
     this.rotateHint.querySelector('button').onclick = () => { this.rotateHint.remove(); this.rotateDismissed = true; };
     this.el.append(this.rotateHint);
+    setTimeout(() => this.rotateHint.classList.add('fade'), 6000);
 
     this._buildMenu();
     this._buildConsole();
@@ -187,7 +188,12 @@ export class HUD {
     this.health.firstChild.style.background = f > 0.5 ? '#29d157' : f > 0.2 ? '#f5cd30' : '#e8413c';
   }
 
-  setHint(text) { this.hint.textContent = text; this.hint.style.display = text ? 'block' : 'none'; }
+  setHint(text) {
+    this.hint.textContent = text;
+    this.hint.style.display = text ? 'block' : 'none';
+    // Keep the chat below the hint bar.
+    this.el.classList.toggle('has-hint', !!text);
+  }
   setMessage(text) { this.message.textContent = text; this.message.style.display = text ? 'flex' : 'none'; }
 
   // ------------------------------------------------------------ escape menu

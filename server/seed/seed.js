@@ -2,6 +2,7 @@
 import { hashPassword } from '../auth.js';
 import { CATALOG } from '../../shared/avatar.js';
 import { SEED_GAMES } from './places.js';
+import { MORE_GAMES } from './places2.js';
 
 export const STARTER_ITEMS = ['Bacon Hair', 'Smile', 'Blue Hoodie', 'Jeans', 'Robis Logo T-Shirt', 'Classic Robis Cap', 'Pal Hair', 'Man Face', 'Woman Face'];
 export const STARTER_WEARING = ['Bacon Hair', 'Smile', 'Blue Hoodie', 'Jeans'];
@@ -68,20 +69,41 @@ export function seed(db) {
     wearing: [find('Dominator of Robis'), find('Epic Face'), find('Black Suit'), find('Suit Pants')],
   };
 
-  for (const [i, sg] of SEED_GAMES.entries()) {
-    const id = db.nextId('game');
-    const place = sg.build();
-    db.writePlace(id, place);
-    const creatorId = robis.id;
-    db.data.games[id] = {
-      id, name: sg.name, description: sg.description, creatorId, genre: sg.genre,
-      created: now - (40 - i * 7) * 86400e3, updated: now - i * 3600e3,
-      visits: [48213, 125903, 8721, 67390, 3321][i] || 0,
-      maxPlayers: sg.maxPlayers, isPublic: true, featured: sg.featured, copyable: i !== 1,
-      upVotes: [912, 2210, 144, 1398, 67][i] || 0, downVotes: [48, 190, 21, 120, 9][i] || 0,
-      favorites: [3002, 9120, 311, 5120, 82][i] || 0,
-    };
-  }
+  addSeedGames(db);
   db.flush();
   console.log('[seed] done. Open the site and sign up — the first account you create becomes the admin (with ROBIS_ADMIN_CODE set: whoever enters that code).');
+}
+
+// Adds showcase games this world doesn't have yet (so older worlds get new
+// places too). Returns how many were added.
+export function addSeedGames(db) {
+  const D = db.data;
+  const robis = Object.values(D.users).find((u) => u.system && u.username === 'Robis');
+  if (!robis) return 0;
+  const done = new Set(D.meta.seedKeys || []);
+  const now = Date.now();
+  let added = 0;
+  const all = [...SEED_GAMES.map((g, i) => ({
+    ...g,
+    visits: [48213, 125903, 8721, 67390, 3321][i], up: [912, 2210, 144, 1398, 67][i], down: [48, 190, 21, 120, 9][i],
+    favorites: [3002, 9120, 311, 5120, 82][i], copyable: g.key !== 'obby', age: 40 - i * 7,
+  })), ...MORE_GAMES.map((g) => ({ ...g, copyable: true, age: 3 }))];
+  for (const sg of all) {
+    if (done.has(sg.key)) continue;
+    done.add(sg.key);
+    // Worlds from before seedKeys existed already have the first five.
+    if (Object.values(D.games).some((g) => g.creatorId === robis.id && g.name === sg.name)) continue;
+    const id = db.nextId('game');
+    db.writePlace(id, sg.build());
+    D.games[id] = {
+      id, name: sg.name, description: sg.description, creatorId: robis.id, genre: sg.genre,
+      created: now - sg.age * 86400e3, updated: now - 3600e3,
+      visits: sg.visits || 0, maxPlayers: sg.maxPlayers, isPublic: true, featured: sg.featured, copyable: sg.copyable,
+      upVotes: sg.up || 0, downVotes: sg.down || 0, favorites: sg.favorites || 0,
+    };
+    added++;
+  }
+  D.meta.seedKeys = [...done];
+  db.save();
+  return added;
 }

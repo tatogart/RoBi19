@@ -29,7 +29,7 @@ async function call(method, url, body, cookie) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => null);
-  return { status: res.status, data, cookie: (res.headers.get('set-cookie') || '').split(';')[0] };
+  return { status: res.status, data, cookie: res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ') };
 }
 
 function join(cookie, msg) {
@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 5);
+  assert.equal(data.games, 11);
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -111,8 +111,19 @@ test('signup, login validation, avatar and purchases', async () => {
   await call('POST', `/admin/users/${sid}/ban`, { banned: true, reason: 'test' }, cookie);
   assert.equal((await call('GET', '/auth/me', null, c2)).data.user, null);
   assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 403);
+  // the banned player's device can't make a new account or use another one
+  const alt = await call('POST', '/auth/signup', { username: 'AltAcc', password: 'secret123' });
+  assert.equal(alt.status, 200);
+  const devSecond = c2.split('; ').find((c) => c.startsWith('robis_device='));
+  assert.equal((await call('POST', '/auth/signup', { username: 'Sneaky', password: 'secret123' }, devSecond)).status, 403);
+  assert.equal((await call('POST', '/auth/login', { username: 'AltAcc', password: 'secret123' }, devSecond)).status, 403);
+  assert.equal((await call('GET', '/auth/me', null, devSecond + '; ' + alt.cookie.split('; ').find((c) => c.startsWith('robis_session=')))).data.user, null);
+  // but the admin's own device and IP never get banned
+  assert.equal((await call('GET', '/auth/me', null, cookie)).data.user.username, 'Tester_1');
+  assert.equal((await call('POST', `/admin/users/${me.id}/ban`, { banned: true }, cookie)).status, 400);
   await call('POST', `/admin/users/${sid}/ban`, { banned: false }, cookie);
-  assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 200);
+  assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' }, devSecond)).status, 200);
+  assert.equal((await call('POST', '/auth/signup', { username: 'Sneaky', password: 'secret123' }, devSecond)).status, 200);
 });
 
 test('with an admin code only the code makes admins, and backups round-trip', async () => {
@@ -122,7 +133,7 @@ test('with an admin code only the code makes admins, and backups round-trip', as
   const url = `http://127.0.0.1:${s2.server.address().port}/api`;
   const post = async (u, body, cookie) => {
     const res = await fetch(url + u, { method: 'POST', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(body) });
-    return { status: res.status, data: await res.json(), cookie: (res.headers.get('set-cookie') || '').split(';')[0] };
+    return { status: res.status, data: await res.json(), cookie: res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ') };
   };
   try {
     const first = await post('/auth/signup', { username: 'Owner', password: 'secret123' });
@@ -231,4 +242,40 @@ test('free Robits and self-joined memberships are taken back once', async () => 
   assert.equal(s.db.data.users[1].robits, 500);
   await s.close();
   fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('admins can kick and ban from the in-game chat', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const pleb = (await call('POST', '/auth/signup', { username: 'Griefer', password: 'secret123' })).cookie;
+  const gameId = (await call('GET', '/games?sort=popular')).data.games[0].id;
+  const a = await join(admin, { placeId: gameId });
+  await a.wait((m) => m.t === 'welcome');
+  const p = await join(pleb, { placeId: gameId });
+  await p.wait((m) => m.t === 'welcome');
+  p.ws.send(JSON.stringify({ t: 'chat', text: ':ban Tester_1' }));
+  const echoed = await a.wait((m) => m.t === 'chat' && m.name === 'Griefer');
+  assert.equal(echoed.text, ':ban Tester_1');
+  a.ws.send(JSON.stringify({ t: 'chat', text: ':ban Griefer griefing' }));
+  const kicked = await p.wait((m) => m.t === 'kick');
+  assert.match(kicked.msg, /banned.*griefing/);
+  assert.equal((await a.wait((m) => m.t === 'sys')).text, 'Banned Griefer.');
+  assert.equal((await call('POST', '/auth/login', { username: 'Griefer', password: 'secret123' })).status, 403);
+  a.ws.send(JSON.stringify({ t: 'chat', text: ':unban griefer' }));
+  await a.wait((m) => m.t === 'sys' && m.text === 'Unbanned Griefer.');
+  assert.equal((await call('POST', '/auth/login', { username: 'Griefer', password: 'secret123' })).status, 200);
+  a.ws.close(); p.ws.close();
+});
+
+test('every showcase game starts without script errors', async () => {
+  const { cookie } = await call('POST', '/auth/signup', { username: 'Tourist', password: 'secret123' });
+  const games = (await call('GET', '/games?sort=popular&limit=50')).data.games;
+  assert.ok(games.length >= 11);
+  for (const g of games) {
+    const c = await join(cookie, { placeId: g.id });
+    await c.wait((m) => m.t === 'welcome');
+    await new Promise((r) => setTimeout(r, 400));
+    const errors = c.inbox.filter((m) => (m.t === 'output' && m.level === 'error') || m.t === 'error');
+    assert.deepEqual(errors, [], g.name);
+    c.ws.close();
+  }
 });

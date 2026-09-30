@@ -238,21 +238,30 @@ export function stepCharacter(state, input, dt, world, humanoid) {
     state.grounded = false;
     state.jumped = true;
   }
-  state.vy -= gravity * dt;
+  // Walking into a TrussPart climbs it (the classic ladder).
+  const moving = input.mx !== 0 || input.mz !== 0;
+  if (state.onTruss && moving && !input.jump) {
+    state.vy = speed * 0.75;
+    state.jumped = false;
+  } else {
+    state.vy -= gravity * dt;
+  }
   if (state.vy < -250) state.vy = -250;
 
   // Sub-step to avoid tunnelling through thin parts.
   const dist = Math.hypot(state.vx, state.vy, state.vz) * dt;
   const steps = Math.max(1, Math.ceil(dist / 0.5));
   const sdt = dt / steps;
-  let grounded = false, groundPart = null;
+  let grounded = false, groundPart = null, onTruss = false;
   for (let s = 0; s < steps; s++) {
     state.x += state.vx * sdt;
     state.y += state.vy * sdt;
     state.z += state.vz * sdt;
     const r = resolve(state, world);
     if (r.grounded) { grounded = true; groundPart = r.groundPart; }
+    if (r.truss) onTruss = true;
   }
+  state.onTruss = onTruss;
   // Snap down onto the ground when walking down slopes/steps.
   if (!grounded && state.grounded && state.vy <= 0 && !state.jumped) {
     const saveY = state.y;
@@ -269,7 +278,7 @@ export function stepCharacter(state, input, dt, world, humanoid) {
 function resolve(state, world) {
   const R = CHAR.radius;
   const boxes = world.query(state.x - 3, state.z - 3, state.x + 3, state.z + 3);
-  let grounded = false, groundPart = null;
+  let grounded = false, groundPart = null, truss = false;
   for (let iter = 0; iter < 4; iter++) {
     let any = false;
     for (let si = 0; si < CHAR.spheres.length; si++) {
@@ -297,6 +306,7 @@ function resolve(state, world) {
             continue;
           }
         }
+        if (Math.abs(ny) < 0.5 && b.part && b.part.ClassName === 'TrussPart') truss = true;
         state.x += nx * depth;
         state.y += ny * depth;
         state.z += nz * depth;
@@ -306,7 +316,7 @@ function resolve(state, world) {
     }
     if (!any) break;
   }
-  return { grounded, groundPart };
+  return { grounded, groundPart, truss };
 }
 
 function stepTop(b, state) {

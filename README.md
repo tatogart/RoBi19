@@ -78,7 +78,7 @@
 - Services: Players, Lighting, **TweenService**, **DataStoreService** (persistent), RunService (Heartbeat/Stepped), Debris, HttpService (JSON/GUID), **BadgeService** (badges show up on profiles), ReplicatedStorage, ServerStorage and ServerScriptService. `ModuleScript` works with `require`.
 - Sandboxed: no `io`, `os.execute`, `require` of files or bytecode loading. A 10-second **script timeout** stops runaway loops.
 
-### 🎲 Five showcase games
+### 🎲 Eleven showcase games
 | Game | What it shows |
 |---|---|
 | **Crossroads** | The classic hangout map with a tower, houses, a fountain and a day/night cycle |
@@ -86,6 +86,12 @@
 | **Coin Rush** | Spinning coins (`RunService.Heartbeat`), leaderstats and a saved best score |
 | **Lava Rising** | A round-based game loop with `Hint` timers, a rising lava tween and Wins |
 | **Button Mania** | `ClickDetector` buttons, raining unanchored bricks, explosions and a party mode |
+| **Disaster Island** | Rounds with random disasters: a flash flood, a meteor shower (tweens + `Explosion`) and an earthquake that unanchors buildings; the map is restored with `Clone()` |
+| **Tower of Robis** | A spiral tower obby with lava, **truss climbing**, checkpoints, Wins and a badge |
+| **Speed Run** | A neon course with a timer (`tick()`), speed pads and a best time saved in a DataStore |
+| **Brick Tycoon** | Claim a plot, droppers send bricks down a conveyor for Cash, buy upgrades with buttons |
+| **Robis Café** | A hangout: bake pizzas and grab sodas (`ClickDetector`), a jukebox dance party with lights |
+| **Sprint Race** | Six lanes, a countdown, gates that open on GO, hurdles and places at the finish line |
 
 ## Quick start
 
@@ -104,10 +110,11 @@ Open **http://localhost:3000** and press **Sign Up** to create your own account.
 There are no ready-made accounts with passwords: every player signs up on the landing page (username 3–20 characters, password at least 6).
 
 - **The first account created on a server becomes its admin.** It gets 1,000,000 R$, Outrageous Builders Club and every catalog item, can edit and delete any game, and can open the **Admin Panel** (⚙ menu or More). The panel can give players Robits and all items, change membership, make admins and ban.
+- **Bans** log the player out, kick them from games and also block the **device and IP** they used, so they can't just make a new account (the admins' own devices and IPs are never blocked). In a game, admins can type `:kick name`, `:ban name reason`, `:unban name`, `:players` or `:cmds` in the chat. In the phone version only the account itself is banned, since every phone is its own world.
 - **Admin code.** Start the server with `ROBIS_ADMIN_CODE=your-code npm start` and any account can become an admin via ⚙ → **Enter Admin Code**. In the phone version (GitHub Pages) there is no "first account" rule: admin is given **only** by the secret admin code, which only the owner of the repository knows (the app stores just its SHA-256 hash, `standalone/admin-code.sha256`). To use your own code, build with `ROBIS_ADMIN_CODE=your-code npm run build:standalone`.
 - **Robits and Builders Club can't be bought.** Players earn Robits with the daily stipend (25 R$, or 40 / 60 / 85 R$ with BC / TBC / OBC). Only admins give out Robits and memberships, in the Admin Panel. The currency is fictional and no real money is ever charged.
 - Every new player gets **100 R$** and the starter items: Bacon Hair, Pal Hair, Smile, Man Face, Woman Face, Blue Hoodie, Jeans, Robis Logo T-Shirt and Classic Robis Cap. Another 25 R$ can be collected every day.
-- `Robis` is a built-in "official" system account that owns the catalog and the five showcase games. It has no password: nobody can log into it, message it or send it friend requests.
+- `Robis` is a built-in "official" system account that owns the catalog and the showcase games. It has no password: nobody can log into it, message it or send it friend requests.
 - Forgot a password? Stop the server and run `npm run reset-password YourName` to print a new one, or `npm run reset-password YourName new-password` to choose it.
 
 Useful commands:
