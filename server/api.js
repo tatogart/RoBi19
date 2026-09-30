@@ -5,8 +5,9 @@ import {
   checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies, bannedClient, noteClient, isBanned, banDetails,
 } from './auth.js';
 import { createUser, addSeedGames } from './seed/seed.js';
+import { hashPassword } from './auth.js';
 import { TEMPLATES } from './seed/places.js';
-import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES } from '../shared/avatar.js';
+import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES, CATALOG } from '../shared/avatar.js';
 import { PLACE_FORMAT } from '../shared/engine/serialize.js';
 
 const ONLINE_MS = 2 * 60 * 1000;
@@ -20,6 +21,14 @@ export const MEMBERSHIPS = {
   OutrageousBuildersClub: { name: 'Outrageous Builders Club', short: 'OBC', stipend: 85 },
 };
 const ADMIN_ROBITS = 1_000_000;
+// Rights an admin can give other players in the Admin Panel. Admins have all.
+export const PERMISSIONS = {
+  moderator: 'Moderator: ban, kick and mute players',
+  economy: 'Economy: give Robits, items and Builders Club',
+  items: 'Item Creator (BETA): make catalog items',
+  games: 'Game Curator: feature games on the front page',
+};
+export const can = (u, perm) => !!u && (u.isAdmin || (u.perms || []).includes(perm));
 
 // opts.firstUserIsAdmin: the first account on a fresh server becomes admin (shared server).
 // opts.adminCodeHash: sha256 of a secret admin code; entering it makes any account an admin.
@@ -126,11 +135,24 @@ export function createApi(db, manager, opts = {}) {
     findUser: (name) => Object.values(D.users).find((u) => !u.system && u.username.toLowerCase() === String(name).toLowerCase()) || null,
     ban: (u, banned, reason, opts) => setBan(u, banned, reason, opts),
     banTimes: BAN_TIMES,
+    can: (u, perm) => can(D.users[u.id] || u, perm),
   };
 
   // ------------------------------------------------------------ helpers
   const requireUser = (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'You must be logged in.' });
+    next();
+  };
+  // Admins, or players given this right in the Admin Panel.
+  const requirePerm = (perm) => (req, res, next) => {
+    if (!req.user) return bad(res, 'You must be logged in.', 401);
+    if (!can(req.user, perm)) return bad(res, 'You don\'t have permission to do that.', 403);
+    next();
+  };
+  const staff = (u) => can(u, 'moderator') || can(u, 'economy');
+  const requireStaff = (req, res, next) => {
+    if (!req.user) return bad(res, 'You must be logged in.', 401);
+    if (!staff(req.user)) return bad(res, 'Admins only.', 403);
     next();
   };
   const bad = (res, msg, code = 400) => res.status(code).json({ error: msg });
@@ -156,6 +178,7 @@ export function createApi(db, manager, opts = {}) {
       out.friendCount = (D.friends[u.id] || []).length;
       out.badges = (D.badges[u.id] || []).slice(-50);
       out.placeVisits = Object.values(D.games).filter((g) => g.creatorId === u.id).reduce((a, g) => a + g.visits, 0);
+      out.previousNames = u.previousNames || [];
     }
     return out;
   };
@@ -170,6 +193,7 @@ export function createApi(db, manager, opts = {}) {
   const me = (u) => ({
     ...publicUser(u, true), robits: u.robits, canClaimStipend: Date.now() - (u.lastStipend || 0) > STIPEND_MS,
     stipend: stipendFor(u), rawAvatar: normalizeAvatar(u.avatar),
+    perms: u.isAdmin ? Object.keys(PERMISSIONS) : (u.perms || []),
   });
 
   const publicGame = (g, user) => {
@@ -195,7 +219,7 @@ export function createApi(db, manager, opts = {}) {
     return {
       id: it.id, name: it.name, type: it.type, price: it.price, data: it.data, description: it.description,
       creator: creator ? { id: creator.id, username: creator.username } : null,
-      created: it.created, sales: it.sales, limited: it.limited, remaining: it.remaining,
+      created: it.created, sales: it.sales, limited: it.limited, remaining: it.remaining, custom: !!it.custom,
       owned: user ? (D.inventory[user.id] || []).includes(it.id) : false,
     };
   };
@@ -306,6 +330,67 @@ export function createApi(db, manager, opts = {}) {
     if (typeof status === 'string') req.user.status = status.slice(0, 254);
     db.save();
     res.json({ user: me(req.user) });
+  });
+
+  // ------------------------------------------------------------ game invites
+  // A player in a game invites a friend; the friend sees a popup with a Join
+  // button (on any page or in their own game) for 10 minutes.
+  const INVITE_MS = 10 * 60 * 1000;
+  if (!D.invites) D.invites = [];
+  api.post('/invites', requireUser, (req, res) => {
+    const to = D.users[toInt(req.body?.toUserId)];
+    const game = D.games[toInt(req.body?.gameId)];
+    if (!to || to.system) return bad(res, 'User not found', 404);
+    if (!(D.friends[req.user.id] || []).includes(to.id)) return bad(res, 'You can only invite friends.');
+    if (!game) return bad(res, 'Game not found', 404);
+    const now = Date.now();
+    D.invites = D.invites.filter((i) => now - i.created < INVITE_MS && !(i.from === req.user.id && i.to === to.id));
+    D.invites.push({ id: db.nextId('message'), from: req.user.id, to: to.id, gameId: game.id, serverId: String(req.body?.serverId || '').slice(0, 64), created: now });
+    if (D.invites.length > 500) D.invites.splice(0, D.invites.length - 500);
+    db.save();
+    res.json({ ok: true });
+  });
+  api.get('/invites', requireUser, (req, res) => {
+    const now = Date.now();
+    const list = (D.invites || []).filter((i) => i.to === req.user.id && now - i.created < INVITE_MS && D.users[i.from] && D.games[i.gameId]);
+    res.json({ invites: list.map((i) => ({ id: i.id, from: publicUser(D.users[i.from]), game: { id: i.gameId, name: D.games[i.gameId].name }, serverId: i.serverId, created: i.created })) });
+  });
+  api.post('/invites/:id/dismiss', requireUser, (req, res) => {
+    const id = toInt(req.params.id);
+    D.invites = (D.invites || []).filter((i) => !(i.id === id && i.to === req.user.id));
+    db.save();
+    res.json({ ok: true });
+  });
+
+  // ------------------------------------------------------------ account settings
+  // Changing your username costs 1,000 R$ (like in 2019); old names stay on the profile.
+  const USERNAME_PRICE = 1000;
+  api.post('/account/username', requireUser, (req, res) => {
+    const u = req.user;
+    const name = String(req.body?.username || '').trim();
+    if (!checkPassword(u, String(req.body?.password || ''))) return bad(res, 'Incorrect password.', 401);
+    if (!validUsername(name)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
+    if (name === u.username) return bad(res, 'That is already your username.');
+    if (Object.values(D.users).some((o) => o !== u && o.username.toLowerCase() === name.toLowerCase())) return bad(res, 'This username is already in use.');
+    const price = u.isAdmin ? 0 : USERNAME_PRICE;
+    if (u.robits < price) return bad(res, `You need R$${USERNAME_PRICE} to change your username.`);
+    u.robits -= price;
+    u.previousNames = [u.username, ...(u.previousNames || [])].filter((n) => n.toLowerCase() !== name.toLowerCase()).slice(0, 10);
+    u.username = name;
+    log(u.id, -price, `Username changed to ${name}`);
+    db.save();
+    res.json({ user: me(u) });
+  });
+
+  api.post('/account/password', requireUser, (req, res) => {
+    const u = req.user;
+    const next = String(req.body?.newPassword || '');
+    if (!checkPassword(u, String(req.body?.password || ''))) return bad(res, 'Incorrect password.', 401);
+    if (next.length < 6) return bad(res, 'Password must be at least 6 characters.');
+    if (next.toLowerCase() === u.username.toLowerCase()) return bad(res, 'Password cannot be your username.');
+    Object.assign(u, hashPassword(next));
+    db.save();
+    res.json({ ok: true });
   });
 
   api.get('/users/:id/friends', (req, res) => {
@@ -448,6 +533,7 @@ export function createApi(db, manager, opts = {}) {
     const { type, q, sort } = req.query;
     let items = Object.values(D.items).filter((i) => (!type || type === 'All' || i.type === type || (type === 'Accessories' && (i.type === 'Hat' || i.type === 'Hair')) || (type === 'Clothing' && ['Shirt', 'Pants', 'TShirt'].includes(i.type)) || (type === 'Collectibles' && i.limited)));
     if (q) items = items.filter((i) => i.name.toLowerCase().includes(String(q).toLowerCase()));
+    if (req.query.creator) items = items.filter((i) => i.creatorId === toInt(req.query.creator));
     if (sort === 'price-asc') items.sort((a, b) => a.price - b.price);
     else if (sort === 'price-desc') items.sort((a, b) => b.price - a.price);
     else if (sort === 'recent') items.sort((a, b) => b.created - a.created);
@@ -459,6 +545,71 @@ export function createApi(db, manager, opts = {}) {
     const it = D.items[toInt(req.params.id)];
     if (!it) return bad(res, 'Item not found', 404);
     res.json({ item: publicItem(it, req.user) });
+  });
+
+  // ------------------------------------------------------------ custom items (BETA)
+  // Players with the "items" right (and admins) make their own catalog items:
+  // T-shirts and faces from a picture, shirts and pants from a pattern and
+  // colours, hats and hair from the classic models in their own colours.
+  const HEX6 = /^#[0-9a-f]{6}$/i;
+  const IMG = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+  const MODELS = {
+    Hat: [...new Set(CATALOG.filter((i) => i.type === 'Hat').map((i) => i.data.model))],
+    Hair: [...new Set(CATALOG.filter((i) => i.type === 'Hair').map((i) => i.data.model))],
+  };
+  const PATTERNS = ['plain', 'stripes', 'plaid', 'camo', 'hoodie', 'jeans', 'suit', 'bc'];
+  const cleanItemData = (type, d = {}) => {
+    const color = HEX6.test(d.color) ? d.color.toLowerCase() : '#c4281c';
+    const accent = HEX6.test(d.accent) ? d.accent.toLowerCase() : '#f8f8f8';
+    const image = typeof d.image === 'string' && IMG.test(d.image) && d.image.length <= 60000 ? d.image : null;
+    if (type === 'TShirt' || type === 'Face') {
+      if (!image) throw new Error('Upload or draw a picture first.');
+      return type === 'Face' ? { face: 'custom', image } : { graphic: 'custom', image };
+    }
+    if (type === 'Shirt' || type === 'Pants') return { color, accent, pattern: PATTERNS.includes(d.pattern) ? d.pattern : 'plain' };
+    if (type === 'Hat' || type === 'Hair') {
+      if (!MODELS[type].includes(d.model)) throw new Error('Pick a model.');
+      return { model: d.model, color, accent };
+    }
+    throw new Error('This item type can\'t be created yet.');
+  };
+
+  api.get('/create/options', requireUser, (req, res) => {
+    res.json({ types: ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair'], models: MODELS, patterns: PATTERNS, allowed: can(req.user, 'items') });
+  });
+
+  api.post('/catalog/create', requirePerm('items'), (req, res) => {
+    const b = req.body || {};
+    const type = String(b.type || '');
+    const name = String(b.name || '').trim().slice(0, 50);
+    if (name.length < 3) return bad(res, 'The name needs at least 3 characters.');
+    const price = Math.trunc(+b.price || 0);
+    if (price < 0 || price > 100000) return bad(res, 'The price must be between 0 and 100,000.');
+    const mine = Object.values(D.items).filter((i) => i.creatorId === req.user.id && i.custom).length;
+    if (mine >= 100 && !req.user.isAdmin) return bad(res, 'You have reached the maximum number of items.');
+    let data;
+    try { data = cleanItemData(type, b.data); } catch (e) { return bad(res, e.message); }
+    const id = db.nextId('item');
+    D.items[id] = {
+      id, name, type, price, data, description: String(b.description || '').slice(0, 500),
+      creatorId: req.user.id, created: Date.now(), sales: 0, limited: false, remaining: null, custom: true,
+    };
+    (D.inventory[req.user.id] || (D.inventory[req.user.id] = [])).push(id);
+    db.save();
+    res.json({ item: publicItem(D.items[id], req.user) });
+  });
+
+  // The creator can take their item off sale; moderators can remove anything made by players.
+  api.delete('/catalog/:id', requireUser, (req, res) => {
+    const it = D.items[toInt(req.params.id)];
+    if (!it) return bad(res, 'Item not found', 404);
+    if (!it.custom) return bad(res, 'Built-in items can\'t be deleted.');
+    if (it.creatorId !== req.user.id && !can(req.user, 'moderator')) return bad(res, 'You don\'t have permission to do that.', 403);
+    delete D.items[it.id];
+    for (const list of Object.values(D.inventory)) { const i = list.indexOf(it.id); if (i >= 0) list.splice(i, 1); }
+    for (const u of Object.values(D.users)) if (u.avatar && Array.isArray(u.avatar.wearing)) u.avatar.wearing = u.avatar.wearing.filter((x) => x !== it.id);
+    db.save();
+    res.json({ ok: true });
   });
 
   api.post('/catalog/:id/buy', requireUser, (req, res) => {
@@ -672,6 +823,15 @@ export function createApi(db, manager, opts = {}) {
     res.json({ game: publicGame(g, req.user) });
   });
 
+  // Game Curators (and admins) choose the Featured games.
+  api.post('/games/:id/feature', requirePerm('games'), (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    g.featured = !!req.body?.featured;
+    db.save();
+    res.json({ game: publicGame(g, req.user) });
+  });
+
   api.post('/games/:id/favorite', requireUser, (req, res) => {
     const g = D.games[toInt(req.params.id)];
     if (!g) return bad(res, 'Game not found', 404);
@@ -710,7 +870,7 @@ export function createApi(db, manager, opts = {}) {
     next();
   };
   const adminUser = (u) => ({
-    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
+    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, perms: u.perms || [], banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
     items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
   });
   const target = (req, res) => {
@@ -719,7 +879,7 @@ export function createApi(db, manager, opts = {}) {
     return u;
   };
 
-  api.get('/admin/overview', requireAdmin, (req, res) => {
+  api.get('/admin/overview', requireStaff, (req, res) => {
     const users = Object.values(D.users).filter((u) => !u.system);
     res.json({
       stats: {
@@ -729,10 +889,11 @@ export function createApi(db, manager, opts = {}) {
       },
       users: users.sort((a, b) => b.lastOnline - a.lastOnline).map(adminUser),
       memberships: Object.entries(MEMBERSHIPS).map(([id, m]) => ({ id, name: m.name })),
+      permissions: Object.entries(PERMISSIONS).map(([id, label]) => ({ id, label })),
     });
   });
 
-  api.post('/admin/users/:id/robits', requireAdmin, (req, res) => {
+  api.post('/admin/users/:id/robits', requirePerm('economy'), (req, res) => {
     const u = target(req, res); if (!u) return;
     const amount = Math.trunc(+req.body?.amount || 0);
     if (!amount || Math.abs(amount) > 1e9) return bad(res, 'Enter an amount.');
@@ -742,7 +903,7 @@ export function createApi(db, manager, opts = {}) {
     res.json({ user: adminUser(u) });
   });
 
-  api.post('/admin/users/:id/membership', requireAdmin, (req, res) => {
+  api.post('/admin/users/:id/membership', requirePerm('economy'), (req, res) => {
     const u = target(req, res); if (!u) return;
     if (!MEMBERSHIPS[req.body?.tier]) return bad(res, 'Unknown membership.');
     u.membership = req.body.tier;
@@ -751,7 +912,7 @@ export function createApi(db, manager, opts = {}) {
     res.json({ user: adminUser(u) });
   });
 
-  api.post('/admin/users/:id/items', requireAdmin, (req, res) => {
+  api.post('/admin/users/:id/items', requirePerm('economy'), (req, res) => {
     const u = target(req, res); if (!u) return;
     const ids = req.body?.all ? Object.keys(D.items).map(Number) : [toInt(req.body?.itemId)].filter((i) => D.items[i]);
     if (!ids.length) return bad(res, 'Item not found.');
@@ -768,10 +929,20 @@ export function createApi(db, manager, opts = {}) {
     res.json({ user: adminUser(u) });
   });
 
-  api.post('/admin/users/:id/ban', requireAdmin, (req, res) => {
+  api.post('/admin/users/:id/perms', requireAdmin, (req, res) => {
+    const u = target(req, res); if (!u) return;
+    const perms = Array.isArray(req.body?.perms) ? req.body.perms.filter((p) => PERMISSIONS[p]) : [];
+    u.perms = [...new Set(perms)];
+    log(u.id, 0, `Permissions set by ${req.user.username}: ${u.perms.join(', ') || 'none'}`);
+    db.save();
+    res.json({ user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/ban', requirePerm('moderator'), (req, res) => {
     const u = target(req, res); if (!u) return;
     if (u.id === req.user.id) return bad(res, 'You can\'t ban yourself.');
     if (u.isAdmin && req.body?.banned) return bad(res, 'Remove admin rights before banning an admin.');
+    if (!req.user.isAdmin && staff(u) && req.body?.banned) return bad(res, 'Only admins can ban other staff.');
     setBan(u, !!req.body?.banned, req.body?.reason, { device: !!req.body?.device, ms: BAN_TIMES[req.body?.duration] || 0 });
     res.json({ user: adminUser(u) });
   });

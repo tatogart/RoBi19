@@ -50,6 +50,11 @@
 - **Profile** with status, blurb, *Currently Wearing*, friends, favorite games, **player badges** earned in games, and creations.
 - **Friends** with requests and player search, **Messages** (inbox, sent, compose, reply), **Inventory**, **Robits** (daily stipend and transaction history), **Create** page, a blog, help and a 404 page (*"Oof!"*).
 - All thumbnails (headshots, full-body renders, items, game icons) are rendered in the browser with Three.js. Game thumbnails are cached on the server.
+- **Settings**: **Dark Theme** (like 2019's) and **English / Русский**, change your **username for R$1,000** (old names stay on the profile), change your password.
+- **Chat & Party** bar (bottom right, like 2016–2019): friends online, one click to join their game.
+- **Game invites**: Esc menu → Players → *Invite Friends*; the friend gets a popup with **Join** on any page or in their game.
+- **Create Item (BETA)**: draw a T-shirt or face in the pixel editor (or upload a picture), or make shirts, pants, hats and hair from patterns, models and colours. Items go on sale in the Catalog; the creator gets 70%. Needs the *Item Creator* right.
+- **Rights from the Admin Panel**: admins give players *Moderator* (ban, kick, mute), *Economy* (Robits, items, Builders Club), *Item Creator (BETA)* and *Game Curator* (choose Featured games).
 
 ### 🎮 Game client
 - Multiplayer over WebSocket with a server-authoritative world and client-side character movement.
@@ -78,7 +83,7 @@
 - Services: Players, Lighting, **TweenService**, **DataStoreService** (persistent), RunService (Heartbeat/Stepped), Debris, HttpService (JSON/GUID), **BadgeService** (badges show up on profiles), ReplicatedStorage, ServerStorage and ServerScriptService. `ModuleScript` works with `require`.
 - Sandboxed: no `io`, `os.execute`, `require` of files or bytecode loading. A 10-second **script timeout** stops runaway loops.
 
-### 🎲 Fourteen showcase games
+### 🎲 Seventeen showcase games
 | Game | What it shows |
 |---|---|
 | **Crossroads** | The classic hangout map with a tower, houses, a fountain and a day/night cycle |
@@ -95,6 +100,9 @@
 | **Capture the Flag** | **Teams** (Red vs Blue, team spawns, team leaderboard): steal the flag, tag enemies on your half |
 | **Freeze Tag** | Taggers freeze runners with a touch, runners unfreeze each other; 2+ players |
 | **King of the Hill** | Hold the golden crown to score (double when alone), dodge the shockwave |
+| **Happy Home in Robisia** | The classic family house: TV channels, fridge snacks, light switch, doorbell, pool, trampoline, the family car |
+| **Minigame Mania** | A random minigame each round: Spleef, Color Crazy, Hot Floor, Shrinking Floor |
+| **Robis Theme Park** | Ferris wheel, carousel and Drop Tower that carry you along, ice cream stand, balloons |
 
 ## Quick start
 

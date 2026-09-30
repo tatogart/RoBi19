@@ -41,7 +41,7 @@ const header = el('div', { class: 'panel profile-header' },
   el('div', { class: 'profile-headshot' }, headshotImg(user, 300),
     user.presence.status !== 'offline' ? el('span', { class: 'presence-dot ' + user.presence.status, style: { width: '26px', height: '26px', right: '10px', bottom: '10px' } }) : null),
   el('div', { class: 'profile-main' },
-    el('div', { class: 'row' }, el('h1', { style: { margin: 0 }, text: user.username }),
+    el('div', { class: 'row' }, el('h1', { class: 'no-i18n', style: { margin: 0 }, text: user.username }),
       MEMBERSHIP[user.membership] ? el('span', { class: 'pill', title: MEMBERSHIP[user.membership].name, style: { background: MEMBERSHIP[user.membership].color, color: '#fff' }, text: MEMBERSHIP[user.membership].short }) : null,
       user.isAdmin ? el('span', { class: 'pill', style: { background: '#00a2ff', color: '#fff' }, text: 'Admin' }) : null,
       user.isSystem ? el('span', { class: 'pill', style: { background: '#00a2ff', color: '#fff' }, text: 'Official' }) : null),
@@ -75,7 +75,9 @@ async function about() {
   const statsP = el('div', { class: 'panel' }, el('h3', { text: 'Statistics' }),
     el('div', { class: 'stat-row', style: { border: 0, marginTop: 0, paddingTop: 0 } },
       el('div', {}, el('div', { class: 'label', text: 'Join Date' }), el('div', { class: 'value', text: fmtDate(user.created) })),
-      el('div', {}, el('div', { class: 'label', text: 'Place Visits' }), el('div', { class: 'value', text: fmtFull(user.placeVisits) }))));
+      el('div', {}, el('div', { class: 'label', text: 'Place Visits' }), el('div', { class: 'value', text: fmtFull(user.placeVisits) }))),
+    user.previousNames && user.previousNames.length ? el('div', { class: 'small muted', style: { marginTop: '10px' } },
+      el('span', { text: 'Previous usernames' }), ': ', el('span', { class: 'no-i18n', text: user.previousNames.join(', ') })) : null);
   body.replaceChildren(aboutPanel, wearing, friendsP, favP, badgesP, statsP);
   const [fr, fav] = await Promise.all([api.get(`/users/${uid}/friends`), api.get(`/users/${uid}/favorites`)]);
   friendsP.lastChild.replaceWith(fr.friends.length ? el('div', { class: 'friends-row', style: { padding: 0 } }, fr.friends.slice(0, 9).map(avatarCard)) : el('div', { class: 'muted', text: 'No friends yet.' }));

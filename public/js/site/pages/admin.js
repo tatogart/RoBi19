@@ -4,7 +4,8 @@ import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner } from
 
 const me = await initPage({ active: 'admin' });
 const app = document.getElementById('app');
-if (!me.isAdmin) {
+const perm = (p) => me.isAdmin || (me.perms || []).includes(p);
+if (!perm('moderator') && !perm('economy')) {
   app.append(el('div', { class: 'panel empty', text: 'Only admins can open this page.' }));
   await new Promise(() => {});
 }
@@ -56,14 +57,30 @@ function row(u) {
     el('div', { class: 'admin-info' },
       el('div', {}, el('a', { href: `/profile?id=${u.id}` }, el('b', { text: u.username })),
         u.isAdmin ? el('span', { class: 'pill admin-pill', text: 'Admin' }) : null,
+        ...(u.perms || []).map((p) => el('span', { class: 'pill perm-pill', text: { moderator: 'Moderator', economy: 'Economy', items: 'Item Creator', games: 'Curator' }[p] || p })),
         u.banned ? el('span', { class: 'pill ban-pill', text: (u.deviceBan ? 'Device ban' : 'Banned') + (u.banUntil ? ' until ' + new Date(u.banUntil).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') }) : null),
       el('div', { class: 'small muted', text: `R$ ${fmtFull(u.robits)} · ${u.items} items · ${u.games} games · joined ${timeAgo(u.created)}` })),
     el('div', { class: 'admin-actions' },
-      el('button', { class: 'btn btn-small btn-green', text: 'Give Robits', onclick: () => giveRobits(u) }),
-      el('button', { class: 'btn btn-small', text: 'Give all items', onclick: () => act(`/admin/users/${u.id}/items`, { all: true }, `${u.username} now owns every item`) }),
-      tier,
-      self ? null : el('button', { class: 'btn btn-small', text: u.isAdmin ? 'Remove admin' : 'Make admin', onclick: () => act(`/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin }, u.isAdmin ? 'Admin removed' : `${u.username} is now an admin`) }),
-      self ? null : el('button', { class: 'btn btn-small btn-red', text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) })));
+      perm('economy') ? el('button', { class: 'btn btn-small btn-green', text: 'Give Robits', onclick: () => giveRobits(u) }) : null,
+      perm('economy') ? el('button', { class: 'btn btn-small', text: 'Give all items', onclick: () => act(`/admin/users/${u.id}/items`, { all: true }, `${u.username} now owns every item`) }) : null,
+      perm('economy') ? tier : null,
+      self || !me.isAdmin ? null : el('button', { class: 'btn btn-small', text: u.isAdmin ? 'Remove admin' : 'Make admin', onclick: () => act(`/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin }, u.isAdmin ? 'Admin removed' : `${u.username} is now an admin`) }),
+      self || !me.isAdmin || u.isAdmin ? null : el('button', { class: 'btn btn-small', text: 'Permissions', onclick: () => permsDialog(u) }),
+      self || !perm('moderator') ? null : el('button', { class: 'btn btn-small btn-red', text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) })));
+}
+
+// Admins give other players rights (see PERMISSIONS in server/api.js).
+function permsDialog(u) {
+  const boxes = data.permissions.map((p) => {
+    const cb = el('input', { type: 'checkbox', checked: (u.perms || []).includes(p.id) });
+    cb.dataset.perm = p.id;
+    return el('label', { class: 'perm-row' }, cb, el('span', { text: p.label }));
+  });
+  modal({
+    title: `Permissions for ${u.username}`,
+    body: el('div', {}, el('p', { class: 'small muted', text: 'Admins have every right. Give other players only what they need.' }), boxes),
+    buttons: [{ text: 'Save', cls: 'btn-primary', onClick: () => act(`/admin/users/${u.id}/perms`, { perms: boxes.map((b) => b.firstChild).filter((c) => c.checked).map((c) => c.dataset.perm) }, 'Permissions saved') }, { text: 'Cancel' }],
+  });
 }
 
 function giveRobits(u) {
@@ -112,5 +129,7 @@ style.textContent = `
 .admin-actions select.input { padding: 4px 6px; font-size: 13px; }
 .admin-pill { background: var(--blue); color: #fff; margin-left: 6px; }
 .ban-pill { background: #d0021b; color: #fff; margin-left: 6px; }
+.perm-pill { background: #6b327c; color: #fff; margin-left: 6px; }
+.perm-row { display: flex; gap: 10px; align-items: center; padding: 6px 0; cursor: pointer; }
 `;
 document.head.append(style);

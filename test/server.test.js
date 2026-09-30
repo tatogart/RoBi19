@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 14);
+  assert.equal(data.games, 17);
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -289,7 +289,7 @@ test('admins can kick and ban from the in-game chat', async () => {
 test('every showcase game starts without script errors', async () => {
   const { cookie } = await call('POST', '/auth/signup', { username: 'Tourist', password: 'secret123' });
   const games = (await call('GET', '/games?sort=popular&limit=50')).data.games;
-  assert.ok(games.length >= 14);
+  assert.ok(games.length >= 17);
   for (const g of games) {
     const c = await join(cookie, { placeId: g.id });
     await c.wait((m) => m.t === 'welcome');
@@ -308,4 +308,89 @@ test('password guessing from one address is slowed down', async () => {
   assert.equal(last.status, 429);
   const other = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.10' }, body: JSON.stringify({ username: 'Tester_1', password: 'secret123' }) });
   assert.equal(other.status, 200);
+});
+
+test('changing the username costs R$1,000 and keeps the old name', async () => {
+  const { cookie } = await call('POST', '/auth/signup', { username: 'OldName', password: 'secret123' });
+  assert.equal((await call('POST', '/account/username', { username: 'NewName', password: 'secret123' }, cookie)).status, 400); // only 100 R$
+  const uid = (await call('GET', '/auth/me', null, cookie)).data.user.id;
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  await call('POST', `/admin/users/${uid}/robits`, { amount: 1000 }, admin);
+  assert.equal((await call('POST', '/account/username', { username: 'NewName', password: 'wrong' }, cookie)).status, 401);
+  assert.equal((await call('POST', '/account/username', { username: 'tester_1', password: 'secret123' }, cookie)).status, 400);
+  const r = await call('POST', '/account/username', { username: 'NewName', password: 'secret123' }, cookie);
+  assert.equal(r.data.user.username, 'NewName');
+  assert.equal(r.data.user.robits, 100);
+  assert.deepEqual((await call('GET', `/users/${uid}`)).data.user.previousNames, ['OldName']);
+  assert.equal((await call('POST', '/auth/login', { username: 'NewName', password: 'secret123' })).status, 200);
+  assert.equal((await call('POST', '/account/password', { password: 'secret123', newPassword: 'another1' }, cookie)).status, 200);
+  assert.equal((await call('POST', '/auth/login', { username: 'NewName', password: 'another1' })).status, 200);
+});
+
+test('friends can invite each other to a game', async () => {
+  const a = (await call('POST', '/auth/signup', { username: 'Inviter', password: 'secret123' })).cookie;
+  const b = (await call('POST', '/auth/signup', { username: 'Invitee', password: 'secret123' })).cookie;
+  const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
+  const aid = (await call('GET', '/auth/me', null, a)).data.user.id;
+  const gameId = (await call('GET', '/games?sort=popular')).data.games[0].id;
+  assert.equal((await call('POST', '/invites', { toUserId: bid, gameId }, a)).status, 400); // not friends yet
+  await call('POST', `/friends/${bid}/request`, {}, a);
+  await call('POST', `/friends/${aid}/request`, {}, b);
+  assert.equal((await call('POST', '/invites', { toUserId: bid, gameId, serverId: 'srv1' }, a)).status, 200);
+  const { invites } = (await call('GET', '/invites', null, b)).data;
+  assert.equal(invites.length, 1);
+  assert.equal(invites[0].from.username, 'Inviter');
+  assert.equal(invites[0].serverId, 'srv1');
+  await call('POST', `/invites/${invites[0].id}/dismiss`, {}, b);
+  assert.equal((await call('GET', '/invites', null, b)).data.invites.length, 0);
+});
+
+test('admins give players rights in the admin panel', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const mod = (await call('POST', '/auth/signup', { username: 'ModGuy', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'KidGuy', password: 'secret123' })).cookie;
+  const modId = (await call('GET', '/auth/me', null, mod)).data.user.id;
+  const kidId = (await call('GET', '/auth/me', null, kid)).data.user.id;
+  assert.equal((await call('GET', '/admin/overview', null, mod)).status, 403);
+  // only admins hand out rights
+  assert.equal((await call('POST', `/admin/users/${modId}/perms`, { perms: ['moderator'] }, kid)).status, 403);
+  const r = await call('POST', `/admin/users/${modId}/perms`, { perms: ['moderator', 'nonsense'] }, admin);
+  assert.deepEqual(r.data.user.perms, ['moderator']);
+  assert.deepEqual((await call('GET', '/auth/me', null, mod)).data.user.perms, ['moderator']);
+  // a moderator can open the panel and ban, but not give Robits
+  assert.equal((await call('GET', '/admin/overview', null, mod)).status, 200);
+  assert.equal((await call('POST', `/admin/users/${kidId}/robits`, { amount: 5 }, mod)).status, 403);
+  assert.equal((await call('POST', `/admin/users/${kidId}/ban`, { banned: true }, mod)).status, 200);
+  assert.equal((await call('POST', `/admin/users/${kidId}/ban`, { banned: false }, mod)).status, 200);
+  // game curators feature games
+  const gid = (await call('GET', '/games?sort=popular')).data.games[0].id;
+  assert.equal((await call('POST', `/games/${gid}/feature`, { featured: true }, mod)).status, 403);
+  await call('POST', `/admin/users/${modId}/perms`, { perms: ['moderator', 'games'] }, admin);
+  assert.equal((await call('POST', `/games/${gid}/feature`, { featured: true }, mod)).data.game.featured, true);
+});
+
+test('item creators make custom catalog items (BETA)', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const maker = (await call('POST', '/auth/signup', { username: 'Maker', password: 'secret123' })).cookie;
+  const buyer = (await call('POST', '/auth/signup', { username: 'Buyer', password: 'secret123' })).cookie;
+  const makerId = (await call('GET', '/auth/me', null, maker)).data.user.id;
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const tee = { type: 'TShirt', name: 'My Cool Tee', price: 10, data: { image: png } };
+  assert.equal((await call('POST', '/catalog/create', tee, maker)).status, 403); // needs the right
+  await call('POST', `/admin/users/${makerId}/perms`, { perms: ['items'] }, admin);
+  assert.equal((await call('POST', '/catalog/create', { ...tee, data: { image: 'javascript:alert(1)' } }, maker)).status, 400);
+  assert.equal((await call('POST', '/catalog/create', { type: 'Hat', name: 'Bad Hat', data: { model: 'nope' } }, maker)).status, 400);
+  const made = (await call('POST', '/catalog/create', tee, maker)).data.item;
+  assert.equal(made.custom, true);
+  assert.equal(made.data.image, png);
+  const hat = (await call('POST', '/catalog/create', { type: 'Hat', name: 'Green Crown', price: 0, data: { model: 'crown', color: '#00ff00', accent: '#<script>' } }, maker)).data.item;
+  assert.deepEqual(hat.data, { model: 'crown', color: '#00ff00', accent: '#f8f8f8' });
+  // sold in the catalog; the creator gets 70%
+  assert.ok((await call('GET', '/catalog?q=Cool')).data.items.some((i) => i.id === made.id));
+  assert.equal((await call('POST', `/catalog/${made.id}/buy`, {}, buyer)).status, 200);
+  assert.equal((await call('GET', '/auth/me', null, maker)).data.user.robits, 107);
+  // others can't delete it; the creator can
+  assert.equal((await call('DELETE', `/catalog/${made.id}`, null, buyer)).status, 403);
+  assert.equal((await call('DELETE', `/catalog/${made.id}`, null, maker)).status, 200);
+  assert.equal((await call('GET', `/catalog/${made.id}`)).status, 404);
 });

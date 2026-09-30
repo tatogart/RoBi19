@@ -118,8 +118,18 @@ export class HUD {
       <div class="ls-name">${esc(name || 'Loading')}</div>
       <div class="ls-by">${by ? 'By ' + esc(by) : ''}</div>
       <img class="ls-logo" src="/img/icon.svg" alt="">
-      <div class="ls-status">Loading...</div>`);
+      <div class="ls-status">Loading...</div>
+      <div class="ls-tip"></div>`);
     this.root.append(this.loading);
+    // Classic loading screen tips.
+    const TIPS = ['Press / to chat.', 'Try /e dance in the chat!', 'Press Shift to toggle Shift Lock.', 'Press Esc to open the menu.',
+      'Make your own games with Robis Studio.', 'Invite friends from the Esc menu → Players.', 'Collect your daily Robits on the Home page.',
+      'Right-click and drag to turn the camera.', 'Walk into a truss to climb it.'];
+    const tip = this.loading.querySelector('.ls-tip');
+    let i = Math.floor(Math.random() * TIPS.length);
+    const next = () => { if (this.loading) { tip.textContent = 'Tip: ' + TIPS[i++ % TIPS.length]; } };
+    next();
+    this._tipTimer = setInterval(next, 3500);
   }
   setLoadingStatus(s) { if (this.loading) this.loading.querySelector('.ls-status').textContent = s; }
   setLoadingName(name, by) {
@@ -128,6 +138,7 @@ export class HUD {
     this.loading.querySelector('.ls-by').textContent = by ? 'By ' + by : '';
   }
   hideLoading() {
+    clearInterval(this._tipTimer);
     if (!this.loading) return;
     const l = this.loading;
     this.loading = null;
@@ -287,6 +298,41 @@ export class HUD {
       row.append(img, name, prof);
       this.menuBody.append(row);
     }
+    // Invite friends to this server (not in Studio tests or friends' rooms).
+    if (this.client.opts.placeId && !this.client.opts.testPlace) {
+      const inv = h('button', 'esc-invite', 'Invite Friends');
+      inv.onclick = () => this._inviteFriends();
+      this.menuBody.append(inv);
+    }
+  }
+
+  async _inviteFriends() {
+    this.pendingConfirm = null;
+    this.menuBody.innerHTML = '<div class="esc-sub">Invite Friends</div>';
+    const list = h('div', 'esc-friends');
+    this.menuBody.append(list);
+    try {
+      const me = await (await fetch('/api/auth/me')).json();
+      const { friends } = await (await fetch(`/api/users/${me.user.id}/friends`)).json();
+      const { sendInvite } = await import('/js/site/invites.js');
+      if (!friends.length) { list.append(h('div', 'esc-empty', 'No friends yet.')); return; }
+      friends.sort((a, b) => (b.presence.status !== 'offline') - (a.presence.status !== 'offline'));
+      for (const f of friends) {
+        const row = h('div', 'esc-player');
+        const img = h('img');
+        avatarHeadshot(f.avatar, 88).then((u) => { img.src = u; });
+        const online = f.presence.status !== 'offline';
+        const name = h('div', '', `<b>${esc(f.username)}</b> <span style="color:${online ? '#02b757' : '#aaa'}">${online ? 'Online' : 'Offline'}</span>`);
+        name.style.flex = '1';
+        const b = h('button', 'primary', 'Invite');
+        b.onclick = async () => {
+          b.disabled = true;
+          try { await sendInvite(f.id, this.client.opts.placeId, this.client.serverId); b.textContent = 'Invited!'; } catch (e) { b.textContent = e.message; }
+        };
+        row.append(img, name, b);
+        list.append(row);
+      }
+    } catch { list.append(h('div', 'esc-empty', 'Could not load friends.')); }
   }
 
   _settingsTab() {

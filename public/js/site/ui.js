@@ -1,4 +1,5 @@
 // Shared UI helpers: DOM builder, icons, cards, modals, formatting.
+import { LANG } from '../i18n.js';
 import { avatarHeadshot, gameThumbnail, itemThumbnail } from '../render/thumbs.js';
 
 export function el(tag, attrs = {}, ...children) {
@@ -67,7 +68,7 @@ export function fmtNum(n) {
   return n.toLocaleString('en-US');
 }
 export function fmtFull(n) { return (+n || 0).toLocaleString('en-US'); }
-export function fmtDate(t) { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+export function fmtDate(t) { return new Date(t).toLocaleDateString(LANG === 'ru' ? 'ru-RU' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
 export function timeAgo(t) {
   const s = Math.floor((Date.now() - t) / 1000);
   if (s < 60) return 'just now';
@@ -124,10 +125,11 @@ export function itemCard(it, opts = {}) {
   itemThumbnail(it).then((u) => thumb.append(el('img', { src: u, alt: it.name })));
   const card = el(opts.onClick ? 'div' : 'a', { class: 'item-card', href: opts.onClick ? null : `/item?id=${it.id}`, title: it.name, onclick: opts.onClick },
     it.limited ? el('span', { class: 'limited-tag', text: 'LIMITED' }) : null,
+    it.custom ? el('span', { class: 'limited-tag beta-tag', text: 'BETA' }) : null,
     it.owned && !opts.onClick ? el('span', { class: 'owned-tag', text: 'Owned' }) : null,
     thumb,
     el('div', { class: 'info' },
-      el('div', { class: 'name', text: it.name }),
+      el('div', { class: 'name no-i18n', text: it.name }),
       opts.hidePrice ? null : el('div', { class: 'price' + (it.price ? '' : ' free') }, it.price ? [icon('robits', 'robits-icon'), fmtNum(it.price)] : 'Free')));
   return card;
 }

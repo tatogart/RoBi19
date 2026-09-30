@@ -12,13 +12,13 @@ const thumb = el('div', { class: 'item-big-thumb' });
 itemThumbnail(item, 420).then((u) => thumb.append(el('img', { src: u, alt: item.name })));
 const buyArea = el('div');
 function renderBuy() {
-  buyArea.replaceChildren(
+  buyArea.replaceChildren(...[
     el('div', { class: 'price-line' }, el('span', { class: 'muted', text: 'Price' }),
       item.price ? el('span', { class: 'big-price' }, icon('robits', 'robits-icon'), fmtFull(item.price)) : el('span', { class: 'big-price', text: 'Free' })),
     item.owned
       ? el('div', { class: 'row' }, el('span', { class: 'pill', text: '✓ You own this item' }), el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
       : el('button', { class: 'btn btn-green btn-large', text: item.price ? 'Buy' : 'Get', disabled: item.limited && item.remaining === 0, onclick: buy }),
-    item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: `Limited — ${item.remaining} remaining` }) : null);
+    item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: `Limited — ${item.remaining} remaining` }) : null].filter(Boolean));
 }
 async function buy() {
   if (!me) { location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search); return; }
@@ -45,10 +45,16 @@ app.append(el('div', { class: 'panel item-page' }, thumb,
     el('h1', { text: item.name }),
     el('div', { class: 'muted' }, 'By ', item.creator ? el('a', { href: `/profile?id=${item.creator.id}`, text: item.creator.username }) : 'Robis'),
     item.limited ? el('span', { class: 'pill', style: { background: '#02b757', color: '#fff', marginTop: '8px' }, text: 'LIMITED' }) : null,
+    item.custom ? el('span', { class: 'pill', style: { background: '#6b327c', color: '#fff', marginTop: '8px' }, text: 'BETA · made by a player' }) : null,
+    item.custom && me && (item.creator?.id === me.id || me.isAdmin || (me.perms || []).includes('moderator'))
+      ? el('button', { class: 'btn btn-small btn-red', style: { marginTop: '10px', marginLeft: '8px' }, text: item.creator?.id === me.id ? 'Delete my item' : 'Delete (moderation)', onclick: async () => {
+        if (!confirm('Delete this item? Everyone who owns it will lose it.')) return;
+        try { await api.del(`/catalog/${item.id}`); toast('Item deleted', 'success'); location.href = '/catalog'; } catch (e) { toast(e.message, 'error'); }
+      } }) : null,
     el('hr', { style: { border: 0, borderTop: '1px solid #e3e3e3', margin: '16px 0' } }),
     buyArea,
     el('table', { class: 'list', style: { marginTop: '20px' } },
-      el('tr', {}, el('td', { class: 'muted', text: 'Type' }), el('td', { text: item.type })),
+      el('tr', {}, el('td', { class: 'muted', text: 'Type' }), el('td', { text: { TShirt: 'T-Shirt' }[item.type] || item.type })),
       el('tr', {}, el('td', { class: 'muted', text: 'Created' }), el('td', { text: fmtDate(item.created) })),
       el('tr', {}, el('td', { class: 'muted', text: 'Sold' }), el('td', { text: fmtFull(item.sales) })),
       el('tr', {}, el('td', { class: 'muted', text: 'Description' }), el('td', { text: item.description }))))));

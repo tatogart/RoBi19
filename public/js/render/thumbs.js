@@ -1,7 +1,7 @@
 // Client-side thumbnail renderer: avatar headshots, full bodies, catalog items
 // and game thumbnails, all drawn with one shared offscreen WebGL renderer.
 import * as THREE from 'three';
-import { buildAvatar } from './avatar.js';
+import { buildAvatar, preloadAvatar } from './avatar.js';
 
 let renderer = null;
 let queue = Promise.resolve();
@@ -50,6 +50,7 @@ export function avatarHeadshot(avatar, size = 150) {
   return schedule('head:' + size + avatarKey(avatar), async () => {
     const scene = new THREE.Scene();
     studioLights(scene);
+    await preloadAvatar(avatar);
     const av = buildAvatar(avatar, { shadow: false });
     av.group.rotation.y = Math.PI + 0.35; // face the camera (avatar faces -Z)
     scene.add(av.group);
@@ -67,6 +68,7 @@ export function avatarFullBody(avatar, size = 420, opts = {}) {
   return schedule('body:' + size + (opts.angle || 0) + avatarKey(avatar), async () => {
     const scene = new THREE.Scene();
     studioLights(scene);
+    await preloadAvatar(avatar);
     const av = buildAvatar(avatar, { shadow: false });
     av.group.rotation.y = Math.PI + 0.45 + (opts.angle || 0);
     if (av.gear) av.animate('idle', 0.5, 0);
@@ -87,6 +89,7 @@ export function itemThumbnail(item, size = 200) {
     const avatar = { bodyColors: grey, items: [{ id: item.id, type: item.type, data: item.data }] };
     const scene = new THREE.Scene();
     studioLights(scene);
+    await preloadAvatar(avatar);
     const av = buildAvatar(avatar, { shadow: false });
     scene.add(av.group);
     const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 100);

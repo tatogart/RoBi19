@@ -217,7 +217,7 @@ table.list { width: 100%; border-collapse: collapse; }
 table.list td, table.list th { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; font-size: 14px; }
 .footer { text-align: center; color: var(--text-light); font-size: 13px; padding: 30px 0 10px; border-top: 1px solid var(--border); margin-top: 40px; }
 .footer a { color: var(--text-light); margin: 0 8px; font-weight: 600; }
-.footer .links { margin-bottom: 8px; }
+.footer .links { margin-bottom: 8px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 0; }
 
 /* ------------------------------------------------------------ launch dialog */
 .launch-dialog { text-align: center; padding: 30px 20px; }
@@ -259,6 +259,8 @@ body { overflow-x: hidden; }
     flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 56px;
     color: var(--text-light); font-size: 11px; font-weight: 600; background: none; border: 0; text-decoration: none !important; font-family: inherit;
   }
+  .tabbar a > span, .tabbar button > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+  .tabbar a, .tabbar button { min-width: 0; }
   .tabbar a.active { color: var(--blue); }
   .tabbar svg { width: 24px; height: 24px; }
   .rbx-header { padding-top: env(safe-area-inset-top); height: calc(var(--header-h) + env(safe-area-inset-top)); padding-left: 8px; padding-right: 8px; }
@@ -289,3 +291,63 @@ body { overflow-x: hidden; }
 @media (hover: none) {
   .game-card:hover, .item-card:hover { transform: none; }
 }
+
+/* ------------------------------------------------------------ dark theme (2019 style) */
+html[data-theme="dark"] {
+  --gray-bg: #232527;
+  --panel: #393b3d;
+  --text: #ffffff;
+  --text-light: #b8b8b8;
+  --border: #4d4f51;
+  --shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+html[data-theme="dark"] body { background: var(--gray-bg); color: var(--text); }
+html[data-theme="dark"] .dropdown,
+html[data-theme="dark"] .modal,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .rbx-leftnav,
+html[data-theme="dark"] .game-card,
+html[data-theme="dark"] .item-card,
+html[data-theme="dark"] .avatar-card { background: var(--panel); color: var(--text); }
+html[data-theme="dark"] .dropdown a, html[data-theme="dark"] .dropdown button { color: var(--text); }
+html[data-theme="dark"] .dropdown a:hover, html[data-theme="dark"] .dropdown button:hover { background: #4d4f51; }
+html[data-theme="dark"] .btn { background: #4d4f51; color: #fff; border-color: #656668; }
+html[data-theme="dark"] .btn:hover { background: #5a5c5e; }
+html[data-theme="dark"] .btn-primary { background: var(--blue); border-color: var(--blue); }
+html[data-theme="dark"] .btn-green { background: var(--green); border-color: var(--green); }
+html[data-theme="dark"] .btn-red { background: var(--red); border-color: var(--red); }
+html[data-theme="dark"] .input, html[data-theme="dark"] select, html[data-theme="dark"] textarea { background: #232527; color: #fff; border-color: #656668; }
+html[data-theme="dark"] .item-card .thumb { background: linear-gradient(#4d4f51, #393b3d); }
+html[data-theme="dark"] .rbx-leftnav a { color: var(--text); }
+html[data-theme="dark"] .rbx-leftnav a:hover, html[data-theme="dark"] .rbx-leftnav a.active { background: #4d4f51; }
+html[data-theme="dark"] .tabbar { background: #393b3d; border-color: var(--border); }
+html[data-theme="dark"] .tabbar a { color: #d0d0d0; }
+html[data-theme="dark"] .modal-head, html[data-theme="dark"] .modal-foot { border-color: var(--border); }
+html[data-theme="dark"] .modal-head button { color: #fff; }
+html[data-theme="dark"] .pill { background: #4d4f51; color: #fff; }
+html[data-theme="dark"] .muted { color: var(--text-light); }
+html[data-theme="dark"] .rbx-footer, html[data-theme="dark"] footer { color: var(--text-light); border-color: var(--border); }
+html[data-theme="dark"] table.list th, html[data-theme="dark"] table.list td { border-color: var(--border); }
+.stipend-banner { background: #fffbe6; border: 1px solid #f6d365; }
+html[data-theme="dark"] .stipend-banner { background: #3d3a28; border-color: #6b5d1c; }
+html[data-theme="dark"] .toast { background: #4d4f51; }
+html[data-theme="dark"] a { color: #33b5ff; }
+html[data-theme="dark"] .rbx-header a, html[data-theme="dark"] .btn, html[data-theme="dark"] .pill[style] { color: #fff; }
+html[data-theme="dark"] .game-card .title, html[data-theme="dark"] .item-card .name, html[data-theme="dark"] .avatar-card .name { color: #fff; }
+
+.item-card .beta-tag { background: #6b327c; }
+
+/* ------------------------------------------------------------ Chat & Party (2016-2019) */
+.chat-party { position: fixed; right: 16px; bottom: 0; z-index: 90; width: 260px; }
+.cp-bar { width: 100%; display: flex; justify-content: space-between; align-items: center; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-bottom: 0; border-radius: 4px 4px 0 0; padding: 8px 12px; font-weight: 700; font-family: inherit; font-size: 15px; cursor: pointer; box-shadow: 0 -1px 6px rgba(0,0,0,.12); }
+.cp-count { background: var(--green); color: #fff; border-radius: 10px; padding: 0 8px; font-size: 13px; }
+.cp-panel { background: var(--panel); border: 1px solid var(--border); border-bottom: 0; max-height: 360px; overflow-y: auto; box-shadow: 0 -2px 10px rgba(0,0,0,.15); }
+.cp-head { padding: 8px 12px; font-weight: 700; border-bottom: 1px solid var(--border); }
+.cp-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.cp-head-img { position: relative; width: 36px; height: 36px; border-radius: 50%; background: #d4d4d4; flex: none; }
+.cp-head-img img { width: 100%; height: 100%; border-radius: 50%; }
+.cp-head-img .presence-dot { width: 11px; height: 11px; right: -1px; bottom: -1px; }
+.cp-info { flex: 1; min-width: 0; font-size: 14px; }
+.cp-info a { color: var(--text); font-weight: 600; }
+.cp-empty { padding: 14px; text-align: center; }

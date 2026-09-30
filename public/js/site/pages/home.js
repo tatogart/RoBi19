@@ -15,7 +15,7 @@ const greeting = el('div', { class: 'section row greet', style: { gap: '20px' } 
 app.append(greeting);
 
 if (me.canClaimStipend) {
-  const banner = el('div', { class: 'panel section row', style: { background: '#fffbe6', border: '1px solid #f6d365' } },
+  const banner = el('div', { class: 'panel section row stipend-banner' },
     el('span', { style: { fontSize: '28px' }, text: '🎁' }),
     el('div', { class: 'spacer' }, el('b', { text: 'Your daily Robits are ready!' }), el('div', { class: 'small muted', text: 'Log in every day to collect a free stipend.' })),
     el('button', { class: 'btn btn-green', text: `Collect R$${me.stipend}`, onclick: async () => {

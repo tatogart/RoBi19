@@ -211,6 +211,7 @@ export class GameClient {
   }
 
   onWelcome(m) {
+    this.serverId = m.serverId;
     if (this.opts.onWelcome) setTimeout(() => this.opts.onWelcome(m));
     this.userId = m.userId;
     this.isDeveloper = m.isDeveloper;

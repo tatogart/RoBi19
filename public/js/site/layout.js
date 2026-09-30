@@ -2,6 +2,10 @@
 import { api, getMe } from './api.js';
 import { el, icon, iconSvg, fmtNum, headshotImg, toast, modal, joinFriendDialog } from './ui.js';
 import { installApp, isInstalled } from './install.js';
+import { startInvites } from './invites.js';
+import { startChatParty } from './chatparty.js';
+
+const isStaff = (me) => me.isAdmin || (me.perms || []).some((p) => p === 'moderator' || p === 'economy');
 
 const NAV = [
   ['home', 'Home', '/home'],
@@ -31,6 +35,8 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     content.append(buildFooter());
   }
   if (me) refreshCounts(me);
+  if (me) startInvites();
+  if (me && nav) startChatParty(me);
   return me;
 }
 
@@ -69,9 +75,11 @@ function buildHeader(me, active) {
         el('a', { href: '/develop', text: 'Create / Develop' }),
         el('a', { href: '/studio', text: 'Robis Studio' }),
         el('a', { href: '/robits', text: 'Robits & Builders Club' }),
-        me.isAdmin ? el('a', { href: '/admin', text: 'Admin Panel' }) : el('button', { text: 'Enter Admin Code', onclick: adminCodeDialog }),
+        isStaff(me) ? el('a', { href: '/admin', text: 'Admin Panel' }) : null,
+        me.isAdmin ? null : el('button', { text: 'Enter Admin Code', onclick: adminCodeDialog }),
         window.ROBIS_STANDALONE ? el('button', { text: 'Join a friend', onclick: joinFriendDialog }) : null,
         isInstalled() ? null : el('button', { text: 'Install Robis app', onclick: installApp }),
+        el('a', { href: '/settings', text: 'Settings' }),
         el('a', { href: '/help', text: 'Help' }),
         el('button', { text: 'Logout', onclick: async () => { await api.post('/auth/logout'); location.href = '/'; } }));
       document.body.append(dd);
@@ -122,7 +130,7 @@ function buildNav(me, active) {
   for (const [ic, label, href, key] of [['games', 'Games', '/games', 'games'], ['catalog', 'Catalog', '/catalog', 'catalog'], ['create', 'Create', '/develop', 'create'], ['robits', 'Robits', '/robits', 'robits']]) {
     nav.append(el('a', { href, class: 'mobile-only' + (active === key ? ' active' : '') }, icon(ic), el('span', { text: label })));
   }
-  if (me.isAdmin) nav.append(el('a', { href: '/admin', class: active === 'admin' ? 'active' : '' }, icon('settings'), el('span', { text: 'Admin Panel' })));
+  if (isStaff(me)) nav.append(el('a', { href: '/admin', class: active === 'admin' ? 'active' : '' }, icon('settings'), el('span', { text: 'Admin Panel' })));
   nav.append(el('div', { class: 'section-label', text: 'Events' }));
   nav.append(el('a', { href: '/game?id=2' }, icon('star'), el('span', { text: 'Obby Week!' })));
   document.addEventListener('click', (e) => {

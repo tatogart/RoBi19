@@ -84,6 +84,7 @@
 .loading-screen.done { opacity: 0; pointer-events: none; }
 .loading-screen .ls-name { font-size: 40px; font-weight: 700; text-align: center; padding: 0 20px; }
 .loading-screen .ls-by { font-size: 18px; color: #bbb; margin-top: 4px; }
+.loading-screen .ls-tip { position: absolute; bottom: 40px; left: 20px; right: 20px; text-align: center; color: #ccc; font-size: 16px; }
 .loading-screen .ls-logo { width: 64px; height: 64px; margin-top: 40px; animation: lsSpin 1.2s linear infinite; }
 .loading-screen .ls-status { margin-top: 18px; color: #ccc; font-size: 16px; }
 @keyframes lsSpin { to { transform: rotate(360deg); } }
@@ -178,3 +179,9 @@
 body:has(.game-root.touch) .room-badge { bottom: auto; top: calc(92px + env(safe-area-inset-top)); left: auto; right: 8px; transform: none; padding: 4px 10px; }
 body:has(.game-root.touch) .room-code { font-size: 18px; }
 body:has(.game-root.touch) .room-hint { display: none; }
+
+.esc-invite { margin-top: 12px; width: 100%; background: #02b757; color: #fff; border: 0; border-radius: 6px; padding: 10px; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.esc-sub { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.esc-empty { opacity: .7; padding: 10px 0; }
+.esc-player button.primary { background: #00a2ff; color: #fff; border: 0; border-radius: 4px; padding: 6px 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.esc-player button:disabled { opacity: .7; }

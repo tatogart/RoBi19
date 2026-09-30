@@ -15,6 +15,36 @@ export function resolveItems(avatar) {
   return r;
 }
 
+// ------------------------------------------------------------ custom pictures (BETA items)
+const IMAGES = new Map(); // data URL -> Promise<HTMLImageElement>
+function loadImage(url) {
+  if (!IMAGES.has(url)) {
+    IMAGES.set(url, new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = url;
+    }));
+  }
+  return IMAGES.get(url);
+}
+const loaded = new Map(); // data URL -> HTMLImageElement, once ready
+async function ready(url) { const img = await loadImage(url); if (img) loaded.set(url, img); return img; }
+// Resolves once every custom picture this avatar uses is loaded (for thumbnails).
+export function preloadAvatar(avatar) {
+  const urls = (avatar?.items || []).map((i) => i.data && i.data.image).filter(Boolean);
+  return Promise.all(urls.map(ready));
+}
+function drawPicture(ctx, url, x, y, w, h) {
+  const img = loaded.get(url);
+  if (!img) return false;
+  const k = Math.min(w / img.width, h / img.height);
+  const dw = img.width * k, dh = img.height * k;
+  ctx.imageSmoothingEnabled = img.width > 48; // keep pixel art crisp
+  ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  return true;
+}
+
 // ------------------------------------------------------------ canvas helpers
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -186,7 +216,8 @@ function drawPattern(ctx, w, h, d, face) {
   }
 }
 
-function drawTShirt(ctx, w, h, g) {
+function drawTShirt(ctx, w, h, g, image) {
+  if (image) { drawPicture(ctx, image, w * 0.12, h * 0.1, w * 0.76, h * 0.76); return; }
   const cx = w / 2, cy = h * 0.45, s = w * 0.3;
   ctx.save();
   if (g === 'logo') {
@@ -213,15 +244,17 @@ function drawTShirt(ctx, w, h, g) {
 
 // Builds the six face materials for a limb box.
 function limbMaterials(kind, skin, look) {
-  const S = 64;
+  const S = kind === 'torso' && look.tshirt && look.tshirt.image ? 128 : 64;
   const faces = ['side', 'side', 'top', 'bottom', 'back', 'front']; // +x -x +y -y +z -z
+  const picture = kind === 'torso' && look.tshirt && look.tshirt.image;
   return faces.map((face) => {
     const [c, ctx] = makeCanvas(S, S);
+    const paint = () => {
     ctx.fillStyle = skin; ctx.fillRect(0, 0, S, S);
     if (kind === 'torso') {
       if (look.shirt) drawPattern(ctx, S, S, look.shirt, face);
       if (face === 'bottom' && look.pants) { ctx.fillStyle = look.pants.color; ctx.fillRect(0, 0, S, S); }
-      if (face === 'front' && look.tshirt) drawTShirt(ctx, S, S, look.tshirt.graphic);
+      if (face === 'front' && look.tshirt) drawTShirt(ctx, S, S, look.tshirt.graphic, look.tshirt.image);
     } else if (kind === 'arm') {
       if (look.shirt && face !== 'bottom') {
         const [c2, ctx2] = makeCanvas(S, S);
@@ -244,7 +277,12 @@ function limbMaterials(kind, skin, look) {
     const g = ctx.createLinearGradient(0, 0, 0, S);
     g.addColorStop(0, 'rgba(255,255,255,.06)'); g.addColorStop(1, 'rgba(0,0,0,.08)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
-    return new THREE.MeshStandardMaterial({ map: toTexture(c), roughness: 0.75 });
+    };
+    paint();
+    const tex = toTexture(c);
+    // A custom T-shirt picture may still be loading: draw it when it arrives.
+    if (picture && face === 'front' && !loaded.has(picture)) ready(picture).then(() => { paint(); tex.needsUpdate = true; });
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.75 });
   });
 }
 
@@ -258,12 +296,16 @@ function headGeometry() {
   return HEAD_GEO;
 }
 
-function faceMesh(face) {
+function faceMesh(faceData) {
   const [c, ctx] = makeCanvas(256, 200);
-  drawFace(ctx, 256, 200, face);
+  const image = faceData && faceData.image;
+  const paint = () => { ctx.clearRect(0, 0, 256, 200); if (!image || !drawPicture(ctx, image, 48, 20, 160, 160)) { if (!image) drawFace(ctx, 256, 200, faceData ? faceData.face : 'smile'); } };
+  paint();
   const span = 1.7;
   const g = new THREE.CylinderGeometry(0.632, 0.632, 0.84, 24, 1, true, Math.PI - span / 2, span);
-  const m = new THREE.MeshStandardMaterial({ map: toTexture(c), transparent: true, roughness: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+  const tex = toTexture(c);
+  if (image && !loaded.has(image)) ready(image).then(() => { paint(); tex.needsUpdate = true; });
+  const m = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
   const mesh = new THREE.Mesh(g, m);
   mesh.name = 'Face';
   return mesh;
@@ -487,7 +529,7 @@ export function buildAvatar(avatar, opts = {}) {
   const head = new THREE.Mesh(headGeometry(), new THREE.MeshStandardMaterial({ color: bc.head, roughness: 0.7 }));
   head.name = 'Head';
   headPivot.add(head);
-  head.add(faceMesh(look.face.face));
+  head.add(faceMesh(look.face));
 
   const limb = (name, kind, color, px, py, len = 2) => {
     const pivot = new THREE.Group();

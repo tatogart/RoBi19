@@ -49,6 +49,9 @@ const details = el('div', { class: 'game-details' },
     el('button', { class: 'btn', style: { flex: 1 }, text: 'Join a friend', onclick: () => { if (!needLogin()) joinFriendDialog(); } })) : null,
   el('div', { class: 'row', style: { marginTop: '12px', justifyContent: 'space-between' } }, favBtn, el('div', { class: 'row', style: { gap: '6px' } }, upBtn, downBtn)),
   voteBar,
+  me && (me.perms || []).includes('games') ? el('button', { class: 'btn btn-small', style: { marginTop: '10px' }, text: game.featured ? 'Remove from Featured' : 'Feature this game', onclick: async (e) => {
+    try { ({ game } = await api.post(`/games/${id}/feature`, { featured: !game.featured })); e.target.textContent = game.featured ? 'Remove from Featured' : 'Feature this game'; toast(game.featured ? 'Game featured!' : 'Removed from Featured', 'success'); } catch (err) { toast(err.message, 'error'); }
+  } }) : null,
   game.canEdit ? el('div', { class: 'row', style: { marginTop: '12px' } },
     el('a', { class: 'btn btn-small', href: `/studio?gameId=${id}`, text: 'Edit in Studio' }),
     el('a', { class: 'btn btn-small', href: `/develop?configure=${id}`, text: 'Configure' })) : null);

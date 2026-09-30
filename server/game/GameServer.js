@@ -259,15 +259,23 @@ export class GameServer {
     const parts = text.slice(1).trim().split(/\s+/);
     const c = (parts.shift() || '').toLowerCase();
     const say = (msg) => this.send(session, { t: 'sys', text: msg });
+    const hooks0 = this.manager && this.manager.admin;
     const isAdmin = !!session.user.isAdmin;
+    const isMod = isAdmin || !!(hooks0 && hooks0.can && hooks0.can(session.user, 'moderator'));
+    const isOwner = isAdmin || session.user.id === this.creatorId;
     const FUN = ['kill', 'respawn', 'heal', 'god', 'ungod', 'speed', 'jump', 'tp', 'bring', 'to', 'freeze', 'thaw', 'explode',
-      'fire', 'sparkles', 'ff', 'unff', 'invisible', 'visible', 'clean', 'announce', 'hint', 'time', 'mute', 'unmute', 'kick', 'players', 'cmds'];
+      'fire', 'sparkles', 'ff', 'unff', 'invisible', 'visible', 'clean', 'announce', 'hint', 'time'];
+    const MODERATE = ['mute', 'unmute', 'kick'];
     const MOD = ['ban', 'hardban', 'unban'];
-    if (!FUN.includes(c) && !MOD.includes(c)) return false;
-    if (!isAdmin && (MOD.includes(c) || session.user.id !== this.creatorId)) return false;
+    const INFO = ['players', 'cmds'];
+    if (![...FUN, ...MODERATE, ...MOD, ...INFO].includes(c)) return false;
+    // Admins: everything. Moderators: kick/mute/ban. Game owners: fun commands and kick/mute in their game.
+    const allowed = isAdmin || (INFO.includes(c) && (isMod || isOwner)) || (FUN.includes(c) && isOwner)
+      || (MODERATE.includes(c) && (isMod || isOwner)) || (MOD.includes(c) && isMod);
+    if (!allowed) return false;
     if (c === 'cmds') {
       say(':kill :respawn :heal :god :ungod :speed n :jump n :freeze :thaw :explode :fire :sparkles :ff :unff :invisible :visible :clean :tp a b :bring :to :mute :unmute :kick · :announce text · :hint text · :time 0-24 · :players'
-        + (isAdmin ? ' · :ban name [1h|1d|7d|30d] reason · :hardban (also device) · :unban name' : '')
+        + (isMod ? ' · :ban name [1h|1d|7d|30d] reason · :hardban (also device) · :unban name' : '')
         + '  —  targets: name, me, all, others');
       return true;
     }
@@ -292,6 +300,7 @@ export class GameServer {
       if (!target) { say(`No player named "${parts[0] || ''}".`); return true; }
       if (target.id === session.user.id) { say('You can\'t do that to yourself.'); return true; }
       if (target.isAdmin) { say(`${target.username} is an admin.`); return true; }
+      if (!isAdmin && hooks.can && (hooks.can(target, 'moderator') || hooks.can(target, 'economy'))) { say('Only admins can ban other staff.'); return true; }
       if (c === 'unban') { hooks.ban(target, false); say(`Unbanned ${target.username}.`); return true; }
       const dur = hooks.banTimes[parts[1]] ? parts[1] : '';
       const reason = parts.slice(dur ? 2 : 1).join(' ').slice(0, 200);
