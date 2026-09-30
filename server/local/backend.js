@@ -14,7 +14,8 @@ export function init() {
       const db = await Database.open();
       if (db.isEmpty) { seed(db); db.flush(); }
       const manager = new GameManager(db);
-      const api = createApi(db, manager);
+      // Every phone is its own world, so being first proves nothing: admins need the code.
+      const api = createApi(db, manager, { firstUserIsAdmin: false, requireAdminCode: true, adminCodeHash: __ROBIS_ADMIN_HASH__ });
       addEventListener('pagehide', () => db.flush());
       return { db, manager, api };
     })();

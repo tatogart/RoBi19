@@ -1,4 +1,5 @@
 // REST API for the Robis website, Studio and client.
+import crypto from 'node:crypto';
 import express from 'express';
 import {
   checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies,
@@ -25,7 +26,13 @@ export const ROBITS_PACKS = [
 ];
 const ADMIN_ROBITS = 1_000_000;
 
-export function createApi(db, manager) {
+// opts.firstUserIsAdmin: the first account on a fresh server becomes admin (shared server).
+// opts.adminCodeHash: sha256 of a secret admin code; entering it makes any account an admin.
+// opts.requireAdminCode: only code-verified accounts may stay admins (phone build, where
+//   every device is its own "server" and anyone would otherwise be first).
+export function createApi(db, manager, opts = {}) {
+  const firstUserIsAdmin = opts.firstUserIsAdmin !== false;
+  const adminCodeHash = (opts.adminCodeHash || '').trim().toLowerCase();
   const api = express.Router();
   const D = db.data;
 
@@ -39,7 +46,20 @@ export function createApi(db, manager) {
     D.transactions.push({ userId: u.id, amount: ADMIN_ROBITS, desc: 'Admin bonus', time: Date.now() });
     db.save();
   };
-  // Also for admins created before this existed (e.g. an existing phone world).
+  const revokeAdmin = (u) => {
+    if (!u.isAdmin) return;
+    u.isAdmin = false;
+    if (u.adminPerks) {
+      u.adminPerks = false;
+      u.robits = Math.max(0, (u.robits || 0) - ADMIN_ROBITS);
+      u.membership = 'None';
+      D.transactions.push({ userId: u.id, amount: -ADMIN_ROBITS, desc: 'Admin bonus removed', time: Date.now() });
+    }
+    db.save();
+  };
+  // Phone build: anyone who became admin just by signing up first loses it.
+  if (opts.requireAdminCode) for (const u of Object.values(D.users)) if (u.isAdmin && !u.adminByCode) revokeAdmin(u);
+  // Also for admins created before perks existed.
   for (const u of Object.values(D.users)) grantAdminPerks(u);
 
   // ------------------------------------------------------------ helpers
@@ -127,7 +147,7 @@ export function createApi(db, manager) {
     if (password.toLowerCase() === username.toLowerCase()) return bad(res, 'Password cannot be your username.');
     if (Object.values(D.users).some((u) => u.username.toLowerCase() === username.toLowerCase())) return bad(res, 'This username is already in use.');
     // The very first person to sign up on a fresh server becomes its admin.
-    const isFirst = !Object.values(D.users).some((u) => !u.system);
+    const isFirst = firstUserIsAdmin && !Object.values(D.users).some((u) => !u.system);
     const user = createUser(db, username, password, isFirst ? { isAdmin: true } : {});
     grantAdminPerks(user);
     const token = createSession(db, user.id);
@@ -359,6 +379,19 @@ export function createApi(db, manager) {
     if (it.limited && it.remaining !== null) it.remaining--;
     db.save();
     res.json({ ok: true, robits: req.user.robits, item: publicItem(it, req.user) });
+  });
+
+  // ------------------------------------------------------------ admin code
+  api.post('/auth/admin-code', requireUser, (req, res) => {
+    if (!adminCodeHash) return bad(res, 'Admin codes are not enabled on this server.');
+    const code = String(req.body?.code || '').trim().toUpperCase();
+    const hash = crypto.createHash('sha256').update(code).digest('hex');
+    if (!code || hash !== adminCodeHash) return bad(res, 'Wrong admin code.', 403);
+    req.user.isAdmin = true;
+    req.user.adminByCode = true;
+    grantAdminPerks(req.user);
+    db.save();
+    res.json({ user: me(req.user) });
   });
 
   // ------------------------------------------------------------ economy
@@ -646,8 +679,7 @@ export function createApi(db, manager) {
   api.post('/admin/users/:id/admin', requireAdmin, (req, res) => {
     const u = target(req, res); if (!u) return;
     if (u.id === req.user.id) return bad(res, 'You can\'t change your own admin rights.');
-    u.isAdmin = !!req.body?.isAdmin;
-    grantAdminPerks(u);
+    if (req.body?.isAdmin) { u.isAdmin = true; u.adminByCode = true; grantAdminPerks(u); } else { u.adminByCode = false; revokeAdmin(u); }
     db.save();
     res.json({ user: adminUser(u) });
   });

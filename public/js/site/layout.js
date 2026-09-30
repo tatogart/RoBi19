@@ -1,6 +1,6 @@
 // Builds the shared page chrome (blue header, left navigation, footer).
 import { api, getMe } from './api.js';
-import { el, icon, iconSvg, fmtNum, headshotImg, toast } from './ui.js';
+import { el, icon, iconSvg, fmtNum, headshotImg, toast, modal } from './ui.js';
 
 const NAV = [
   ['home', 'Home', '/home'],
@@ -33,6 +33,23 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
   return me;
 }
 
+function adminCodeDialog() {
+  const input = el('input', { class: 'input', placeholder: 'XXXX-XXXX-XXXX', autocomplete: 'off', style: { textTransform: 'uppercase' } });
+  modal({
+    title: 'Admin Code',
+    body: el('div', {}, el('p', { text: 'Only the owner of this Robis has the admin code.', style: { marginBottom: '10px' } }), input),
+    buttons: [
+      { text: 'Cancel' },
+      { text: 'Activate', cls: 'btn-primary', onClick: async () => {
+        try { await api.post('/auth/admin-code', { code: input.value }); } catch (e) { toast(e.message || 'Wrong admin code.', 'error'); return false; }
+        toast('You are now an admin!', 'success');
+        setTimeout(() => location.reload(), 600);
+      } },
+    ],
+  });
+  setTimeout(() => input.focus(), 50);
+}
+
 function buildHeader(me, active) {
   const search = el('form', { class: 'search', onsubmit: (e) => { e.preventDefault(); const q = e.target.q.value.trim(); location.href = '/games?q=' + encodeURIComponent(q); } },
     el('input', { name: 'q', placeholder: 'Search', 'aria-label': 'Search' }),
@@ -51,7 +68,7 @@ function buildHeader(me, active) {
         el('a', { href: '/develop', text: 'Create / Develop' }),
         el('a', { href: '/studio', text: 'Robis Studio' }),
         el('a', { href: '/robits', text: 'Buy Robits & Builders Club' }),
-        me.isAdmin ? el('a', { href: '/admin', text: 'Admin Panel' }) : null,
+        me.isAdmin ? el('a', { href: '/admin', text: 'Admin Panel' }) : el('button', { text: 'Enter Admin Code', onclick: adminCodeDialog }),
         el('a', { href: '/help', text: 'Help' }),
         el('button', { text: 'Logout', onclick: async () => { await api.post('/auth/logout'); location.href = '/'; } }));
       document.body.append(dd);

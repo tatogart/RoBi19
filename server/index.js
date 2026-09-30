@@ -1,6 +1,7 @@
 // Robis server: website + REST API + WebSocket game servers.
 import http from 'node:http';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -14,7 +15,7 @@ import { handleConnection } from './connection.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROOT, 'data'), quiet = false } = {}) {
+export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROOT, 'data'), quiet = false, adminCode } = {}) {
   const db = new Database(dataDir);
   if (db.isEmpty) seed(db);
   const manager = new GameManager(db);
@@ -29,7 +30,10 @@ export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROO
     next();
   });
 
-  app.use('/api', createApi(db, manager));
+  // Optional admin code (any account that enters it becomes an admin).
+  const code = adminCode ?? process.env.ROBIS_ADMIN_CODE;
+  const adminCodeHash = code ? crypto.createHash('sha256').update(code.trim().toUpperCase()).digest('hex') : '';
+  app.use('/api', createApi(db, manager, { adminCodeHash }));
   const staticOpts = { maxAge: 0 };
   app.use('/vendor/three', express.static(path.join(ROOT, 'node_modules/three'), staticOpts));
   app.use('/vendor/codemirror', express.static(path.join(ROOT, 'node_modules/codemirror'), staticOpts));

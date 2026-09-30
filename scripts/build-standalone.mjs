@@ -13,6 +13,10 @@ import * as esbuild from 'esbuild';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'dist');
 const BASE = (process.env.ROBIS_BASE || '').replace(/\/+$/, '');
+// Only the sha256 of the admin code ships with the app. Override with ROBIS_ADMIN_CODE.
+const ADMIN_HASH = process.env.ROBIS_ADMIN_CODE
+  ? crypto.createHash('sha256').update(process.env.ROBIS_ADMIN_CODE.trim().toUpperCase()).digest('hex')
+  : fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../standalone/admin-code.sha256'), 'utf8').trim();
 const r = (...p) => path.join(ROOT, ...p);
 
 fs.rmSync(OUT, { recursive: true, force: true });
@@ -62,7 +66,7 @@ await esbuild.build({
     },
   }],
   // fengari reads this unconditionally; everything else checks typeof process.
-  define: { 'process.env.NODE_ENV': '"production"', 'process.env.FENGARICONF': 'undefined' },
+  define: { 'process.env.NODE_ENV': '"production"', 'process.env.FENGARICONF': 'undefined', __ROBIS_ADMIN_HASH__: JSON.stringify(ADMIN_HASH) },
 });
 
 // ---------------------------------------------------------------- boot script, base path

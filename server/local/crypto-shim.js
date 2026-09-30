@@ -90,5 +90,14 @@ function randomUUID() {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-export default { scryptSync, randomBytes, randomUUID };
-export { scryptSync, randomBytes, randomUUID };
+function createHash(alg) {
+  if (alg !== 'sha256') throw new Error('Only sha256 is supported');
+  let data = new Uint8Array(0);
+  return {
+    update(v) { const b = typeof v === 'string' ? enc.encode(v) : v; const n = new Uint8Array(data.length + b.length); n.set(data); n.set(b, data.length); data = n; return this; },
+    digest(format = 'hex') { return wrap(sha256(data)).toString(format); },
+  };
+}
+
+export default { scryptSync, randomBytes, randomUUID, createHash };
+export { scryptSync, randomBytes, randomUUID, createHash };

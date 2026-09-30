@@ -10,7 +10,7 @@ let srv, base, dir;
 
 before(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'robis-test-'));
-  srv = createServer({ dataDir: dir, quiet: true });
+  srv = createServer({ dataDir: dir, quiet: true, adminCode: 'test-code-1' });
   await new Promise((r) => srv.server.listen(0, r));
   base = `http://127.0.0.1:${srv.server.address().port}`;
 });
@@ -109,7 +109,13 @@ test('signup, login validation, avatar and purchases', async () => {
   assert.equal((await call('GET', '/auth/me', null, c2)).data.user, null);
   assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 403);
   await call('POST', `/admin/users/${sid}/ban`, { banned: false }, cookie);
-  assert.equal((await call('POST', '/auth/login', { username: 'Second', password: 'secret123' })).status, 200);
+  const relog = await call('POST', '/auth/login', { username: 'Second', password: 'secret123' });
+  assert.equal(relog.status, 200);
+  // the secret admin code turns any account into an admin
+  assert.equal((await call('POST', '/auth/admin-code', { code: 'nope' }, relog.cookie)).status, 403);
+  const promoted = await call('POST', '/auth/admin-code', { code: ' Test-Code-1 ' }, relog.cookie);
+  assert.equal(promoted.data.user.isAdmin, true);
+  assert.equal((await call('GET', '/admin/overview', null, relog.cookie)).status, 200);
 });
 
 test('create, publish and play a game with scripts over WebSocket', async () => {

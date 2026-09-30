@@ -103,6 +103,7 @@ Open **http://localhost:3000** and press **Sign Up** to create your own account.
 There are no ready-made accounts with passwords: every player signs up on the landing page (username 3–20 characters, password at least 6).
 
 - **The first account created on a server becomes its admin.** It gets 1,000,000 R$, Outrageous Builders Club and every catalog item, can edit and delete any game, and can open the **Admin Panel** (⚙ menu or More). The panel can give players Robits and all items, change membership, make admins and ban.
+- **Admin code.** Start the server with `ROBIS_ADMIN_CODE=your-code npm start` and any account can become an admin via ⚙ → **Enter Admin Code**. In the phone version (GitHub Pages) there is no "first account" rule: admin is given **only** by the secret admin code, which only the owner of the repository knows (the app stores just its SHA-256 hash, `standalone/admin-code.sha256`). To use your own code, build with `ROBIS_ADMIN_CODE=your-code npm run build:standalone`.
 - **Robits and Builders Club** are on the **Robits** page: packs from 400 to 22,500 R$ and BC / TBC / OBC memberships (40 / 60 / 85 R$ a day instead of 25). All free: the currency is fictional and no real money is ever charged.
 - Every new player gets **100 R$** and the starter items: Bacon Hair, Pal Hair, Smile, Man Face, Woman Face, Blue Hoodie, Jeans, Robis Logo T-Shirt and Classic Robis Cap. Another 25 R$ can be collected every day.
 - `Robis` is a built-in "official" system account that owns the catalog and the five showcase games. It has no password: nobody can log into it, message it or send it friend requests.
@@ -132,7 +133,7 @@ Robis has a **standalone version** that runs entirely on the phone, with no comp
 ### Install (1 minute)
 
 1. **Open** **https://tatogart.github.io/RoBi19/** on your phone. The first visit needs internet to download the app (about 3 MB).
-2. **Create an account:** tap **Sign Up** and choose a username and password. The first account on the phone becomes its admin.
+2. **Create an account:** tap **Sign Up** and choose a username and password. Accounts are regular players; the owner gets admin via ⚙ → **Enter Admin Code**.
 3. **Add it to the home screen:**
    - **Android (Chrome):** the **⋮** menu → **Install app** (or **Add to Home screen**) → **Install**.
    - **iPhone / iPad (Safari):** the **Share** button (square with an up arrow) → **Add to Home Screen** → **Add**.
