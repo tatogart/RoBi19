@@ -4,7 +4,7 @@ import { Vector3, Color3, CFrame, BRICK_COLORS, ENUMS } from '/shared/engine/typ
 import { DataModel, CLASSES, BasePart, createInstance } from '/shared/engine/instances.js';
 import { savePlace, loadPlace, clearPlace, serialize, deserialize, PLACE_FORMAT } from '/shared/engine/serialize.js';
 import { api, getMe } from '../site/api.js';
-import { renderPlace } from '../render/thumbs.js';
+import { renderPlace, gameThumbnail } from '../render/thumbs.js';
 import { GameClient } from '../game/client.js';
 import { Viewport } from './viewport.js';
 import { Explorer } from './explorer.js';
@@ -539,7 +539,7 @@ class Studio {
       } else {
         content.replaceChildren(games.length ? h('div', { class: 'start-grid' }, games.map((g) => {
           const img = h('img', { alt: '' });
-          if (g.hasThumbnail) img.src = `/api/games/${g.id}/thumbnail?v=${g.updated}`;
+          if (g.hasThumbnail) gameThumbnail(g, 256).then((u) => { img.src = u; });
           return h('button', { class: 'start-card', onclick: async () => { close(); await this.openGame(g.id); } },
             img, h('b', { text: g.name }), h('span', { text: g.isPublic ? 'Public' : 'Private' }));
         })) : h('div', { text: 'You have no games yet. Pick a template on the New tab!' }));

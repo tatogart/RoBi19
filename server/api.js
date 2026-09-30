@@ -452,9 +452,8 @@ export function createApi(db, manager) {
   const saveThumb = (kind, id, dataUrl) => {
     const m = /^data:image\/(png|jpeg);base64,(.+)$/.exec(dataUrl);
     if (!m) return false;
-    const buf = Buffer.from(m[2], 'base64');
-    if (buf.length > 4 * 1024 * 1024) return false;
-    db.writeThumb(kind, id, buf);
+    if (m[2].length * 0.75 > 4 * 1024 * 1024) return false;
+    db.writeThumb(kind, id, m[2]);
     return true;
   };
 

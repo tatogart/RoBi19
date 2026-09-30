@@ -139,7 +139,13 @@ function placeholder(g) {
 }
 
 export function gameThumbnail(g, size = 384) {
-  if (g.hasThumbnail) return Promise.resolve(`/api/games/${g.id}/thumbnail?v=${g.updated}`);
+  if (g.hasThumbnail) {
+    const url = `/api/games/${g.id}/thumbnail?v=${g.updated}`;
+    // In the standalone (phone) build the API lives inside the page, so <img>
+    // can't load it directly: fetch it and hand out a blob URL instead.
+    if (!window.ROBIS_STANDALONE) return Promise.resolve(url);
+    return schedule('gameimg:' + g.id + ':' + g.updated, async () => URL.createObjectURL(await (await fetch(url)).blob()));
+  }
   return schedule('game:' + g.id + ':' + g.updated, async () => {
     try {
       const res = await fetch(`/api/games/${g.id}/preview`);

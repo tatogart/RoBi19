@@ -83,7 +83,7 @@ export class GameServer {
     for (const s of this.sessions.values()) {
       if (s.isDeveloper) this.send(s, { t: 'output', ...entry });
     }
-    if (process.env.ROBIS_LOG_SCRIPTS) console.log(`[game ${this.gameId}] [${level}] ${text}`);
+    if (typeof process !== 'undefined' && process.env.ROBIS_LOG_SCRIPTS) console.log(`[game ${this.gameId}] [${level}] ${text}`);
   }
 
   // ------------------------------------------------------------ hooks for the engine

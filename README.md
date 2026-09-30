@@ -114,6 +114,7 @@ npm run dev     # restart automatically on server changes (node --watch)
 npm run seed    # WIPE ./data and recreate the default world
 npm run reset-password <user> [password]   # reset a player's password (server stopped)
 npm test        # run the test suite
+npm run build:standalone   # build the phone (standalone) app into dist/
 ```
 
 Docker:
@@ -125,40 +126,39 @@ docker run -p 3000:3000 -v robis-data:/data robis
 
 ## Install on your phone
 
-Robis isn't an App Store or Google Play app. The server runs on your computer, your phone opens its website, and you add the site to the home screen so it opens like a normal app, without the address bar.
+Robis has a **standalone version** that runs entirely on the phone, with no computer needed. The server, Lua scripts, accounts and games run inside the phone's browser, and the data is stored on the phone. After the first visit it works **even without internet**.
 
-**1. Start the server on your computer.** Run `npm start`. The console prints an address for your phone:
+### Install (1 minute)
 
-```
-  ROBIS is running!  →  http://localhost:3000
-  On your phone (same Wi-Fi)  →  http://192.168.1.23:3000
-```
+1. **Open** **https://tatogart.github.io/RoBi19/** on your phone. The first visit needs internet to download the app (about 3 MB).
+2. **Create an account:** tap **Sign Up** and choose a username and password. The first account on the phone becomes its admin.
+3. **Add it to the home screen:**
+   - **Android (Chrome):** the **⋮** menu → **Install app** (or **Add to Home screen**) → **Install**.
+   - **iPhone / iPad (Safari):** the **Share** button (square with an up arrow) → **Add to Home Screen** → **Add**.
+4. **Done.** Open Robis from the blue icon like any other app. You can even turn on airplane mode: games, the avatar editor, the catalog and Studio keep working.
 
-**2. Open it on the phone.** Connect the phone to the **same Wi-Fi** as the computer and type the address from the console (your numbers will differ) into Chrome or Safari.
-If the page doesn't load, a firewall is usually blocking it. On Windows, the first start shows a "Windows Defender Firewall" window: click **Allow access** for Node.js on private networks. If you closed it: Settings → Privacy & security → Windows Security → Firewall → "Allow an app through firewall" → tick Node.js.
+To play: pick a game → green ▶ button → turn the phone sideways → fullscreen button. Thumbstick on the left, jump on the right, swipe to turn the camera, pinch to zoom.
 
-**3. Create an account.** Tap **Sign Up** and choose a username and password.
+### Good to know
 
-**4. Add Robis to the home screen.**
-- **Android (Chrome):** the **⋮** menu (top right) → **Add to Home screen** (or **Install app**) → **Add**.
-- **iPhone / iPad (Safari):** the **Share** button (square with an up arrow) → **Add to Home Screen** → **Add**.
+- **Everything lives on the phone.** Accounts, items, games and DataStore saves are kept in the browser's storage. Clearing the site's data, or removing the app together with its data, starts a new world.
+- **On iPhone, add the icon to the home screen.** Safari may delete data of sites you haven't opened for 7 days, but home-screen apps are exempt.
+- **Each phone has its own world.** Friends on other phones can't join it: the standalone version has no internet server, so all games are single-player. Use the server version below to play together.
+- Use Robis in one tab: two open tabs can overwrite each other's data.
 
-A blue Robis icon appears on your home screen.
+### For the repository owner: publishing the link
 
-**5. Play.** Open the icon, pick a game and tap the green ▶ button. Turn the phone sideways and tap the **fullscreen** button in the top bar. Controls: thumbstick on the left, jump on the right, swipe to turn the camera, pinch to zoom.
+The link above works after the first deployment:
 
-### Playing away from home (over the internet)
+1. Merge the branch into `main`.
+2. On GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+3. The `.github/workflows/pages.yml` workflow builds the standalone app (`npm run build:standalone`) and publishes it. Every push to `main` updates the app, and phones pick up the update the next time they open it online.
 
-A `192.168…` address only works on your own Wi-Fi. To play on mobile data or invite friends, the server needs a public address:
+To build by hand, run `npm run build:standalone`. It produces a `dist/` folder you can put on any static host. If the site isn't served from the domain root, set the path: `ROBIS_BASE=/folder-name npm run build:standalone`.
 
-- **Quick and free: a tunnel.** While `npm start` is running, run this in a second terminal:
-  ```bash
-  npx cloudflared tunnel --url http://localhost:3000
-  ```
-  It prints a link like `https://something.trycloudflare.com` that works on any phone and can be added to the home screen the same way. The link lasts while the terminal is open and changes every time.
-- **Permanent: hosting.** Deploy the project to any Node.js or Docker host (a VPS, Render, Railway and so on) with the included `Dockerfile`. Attach a persistent disk for `/data`, or accounts and games are lost on restart.
+### Playing together over Wi-Fi (server version)
 
-Over an HTTPS address (tunnel or hosting), Chrome on Android shows a proper **Install app** button.
+To share one world, run `npm start` on a computer. The console prints an address like `http://192.168.1.23:3000`; open it on phones on the same Wi-Fi. On Windows, allow Node.js through the firewall for private networks if it doesn't load. To play over the internet, use a tunnel (`npx cloudflared tunnel --url http://localhost:3000`) or deploy with the `Dockerfile`.
 
 ## Screenshots
 
@@ -272,6 +272,7 @@ robis/
 │   │   ├── services.js     TweenService, DataStore, Debris, HttpService, BadgeService…
 │   │   ├── manager.js      finds or creates servers per game, Studio test servers
 │   │   └── chatfilter.js   2019-style "####" filter
+│   ├── local/              standalone build: the same server running in the browser (IndexedDB, in-page socket)
 │   └── seed/               seed accounts, catalog, 5 games, Studio templates
 ├── shared/                 runs on both server and browser (ES modules)
 │   ├── engine/types.js     Vector3, CFrame, Color3, BrickColor, Enum, TweenInfo
@@ -332,6 +333,7 @@ There are 22 tests. They cover the math types, the instance tree, serialization,
 - Only server `Script`s run. `LocalScript`s and GUI objects (`ScreenGui`) are stored but don't execute on the client yet.
 - The physics is intentionally simple. Unanchored parts fall and stack, but there is no rotation, joints or welds.
 - No real Terrain, meshes, audio assets or image uploads. Everything is procedural.
+- The standalone (phone) version is single-player: it has no shared server or multiplayer.
 - Ideas: LocalScripts running in the browser, Tools with `Activated`, ScreenGui, teams, Team Create in Studio and trading.
 
 ## License

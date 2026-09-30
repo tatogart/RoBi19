@@ -12,7 +12,11 @@ export function hashPassword(password, salt = crypto.randomBytes(16).toString('h
 export function checkPassword(user, password) {
   if (!user.hash || !user.salt) return false; // system accounts can't log in
   const { hash } = hashPassword(password, user.salt);
-  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(user.hash, 'hex'));
+  // Constant-time comparison of the two hex strings.
+  if (hash.length !== user.hash.length) return false;
+  let diff = 0;
+  for (let i = 0; i < hash.length; i++) diff |= hash.charCodeAt(i) ^ user.hash.charCodeAt(i);
+  return diff === 0;
 }
 
 export function parseCookies(header = '') {

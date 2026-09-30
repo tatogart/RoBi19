@@ -1,5 +1,9 @@
 // Thin wrapper around the Robis REST API.
 async function request(method, url, body) {
+  // The standalone build prefixes site paths with its base (e.g. /RoBi19);
+  // API paths like '/games' can get caught by that, so undo it here.
+  const base = window.ROBIS_BASE;
+  if (base && url.startsWith(base + '/')) url = url.slice(base.length);
   const res = await fetch('/api' + url, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : {},
