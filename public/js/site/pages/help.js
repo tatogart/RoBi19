@@ -18,7 +18,7 @@ app.append(
   el('div', { class: 'panel' }, el('h2', { text: 'Controls' }),
     el('table', { class: 'list' }, rows.map(([keys, what]) => el('tr', {}, el('td', { style: { width: '40%' } }, keys.flatMap((k, i) => (i ? [' ', kbd(k)] : [kbd(k)]))), el('td', { text: what }))))),
   el('div', { class: 'panel', id: 'parents' }, el('h2', { text: 'For Parents' }),
-    el('p', { text: 'Chat is filtered and there are no real-money purchases — Robits are free and imaginary. Everything runs on the computer where the server is installed.' })),
+    el('p', { text: 'Chat is filtered and there are no real-money purchases — Robits are imaginary: you earn them with the daily stipend, and only admins can give out more. Everything runs on the computer where the server is installed.' })),
   el('div', { class: 'panel', id: 'privacy' }, el('h2', { text: 'Privacy' }),
     el('p', { text: 'Accounts and games are stored in a local JSON database (the data/ folder). Nothing is sent to third parties.' })));
 const style = document.createElement('style');

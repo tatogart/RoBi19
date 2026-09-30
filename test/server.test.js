@@ -97,15 +97,16 @@ test('signup, login validation, avatar and purchases', async () => {
   // stipend once per day, bigger with Builders Club
   assert.equal((await call('POST', '/economy/stipend', {}, c2)).data.amount, 25);
   assert.equal((await call('POST', '/economy/stipend', {}, c2)).status, 400);
-  // free Robits packs and membership
-  assert.equal((await call('POST', '/economy/buy', { amount: 400 }, c2)).data.robits, 75 + 25 + 400);
-  assert.equal((await call('POST', '/economy/buy', { amount: 123 }, c2)).status, 400);
-  assert.equal((await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, c2)).data.user.stipend, 60);
+  // no free Robits or memberships: players can't give themselves any
+  assert.equal((await call('POST', '/economy/buy', { amount: 400 }, c2)).status, 404);
+  assert.equal((await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, c2)).status, 404);
   // admin panel: only admins, gift Robits, ban
   assert.equal((await call('GET', '/admin/overview', null, c2)).status, 403);
   const ov = (await call('GET', '/admin/overview', null, cookie)).data;
   const sid = ov.users.find((u) => u.username === 'Second').id;
-  assert.equal((await call('POST', `/admin/users/${sid}/robits`, { amount: 1000 }, cookie)).data.user.robits, 1500);
+  assert.equal((await call('POST', `/admin/users/${sid}/robits`, { amount: 1000 }, cookie)).data.user.robits, 1100);
+  assert.equal((await call('POST', `/admin/users/${sid}/membership`, { tier: 'TurboBuildersClub' }, cookie)).status, 200);
+  assert.equal((await call('GET', '/auth/me', null, c2)).data.user.stipend, 60);
   assert.equal((await call('POST', `/admin/users/${me.id}/ban`, { banned: true }, cookie)).status, 400);
   await call('POST', `/admin/users/${sid}/ban`, { banned: true, reason: 'test' }, cookie);
   assert.equal((await call('GET', '/auth/me', null, c2)).data.user, null);

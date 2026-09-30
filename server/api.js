@@ -12,18 +12,13 @@ import { PLACE_FORMAT } from '../shared/engine/serialize.js';
 const ONLINE_MS = 2 * 60 * 1000;
 const STIPEND_MS = 24 * 3600 * 1000;
 
-// Builders Club tiers (2019 names). All free: Robits are fictional.
+// Builders Club tiers (2019 names). Only admins can hand them out.
 export const MEMBERSHIPS = {
   None: { name: 'Classic', stipend: 25 },
   BuildersClub: { name: 'Builders Club', short: 'BC', stipend: 40 },
   TurboBuildersClub: { name: 'Turbo Builders Club', short: 'TBC', stipend: 60 },
   OutrageousBuildersClub: { name: 'Outrageous Builders Club', short: 'OBC', stipend: 85 },
 };
-// The 2019 Robux packages (shown with their old prices, but free here).
-export const ROBITS_PACKS = [
-  { amount: 400, price: '$4.99' }, { amount: 800, price: '$9.99' }, { amount: 1700, price: '$19.99' },
-  { amount: 4500, price: '$49.99' }, { amount: 10000, price: '$99.99' }, { amount: 22500, price: '$199.99' },
-];
 const ADMIN_ROBITS = 1_000_000;
 
 // opts.firstUserIsAdmin: the first account on a fresh server becomes admin (shared server).
@@ -407,29 +402,9 @@ export function createApi(db, manager, opts = {}) {
 
   api.get('/economy/store', (req, res) => {
     res.json({
-      packs: ROBITS_PACKS,
       memberships: Object.entries(MEMBERSHIPS).map(([id, m]) => ({ id, ...m })),
       current: req.user ? req.user.membership || 'None' : null,
     });
-  });
-
-  // "Buying" Robits: fictional currency, so the packs are free.
-  api.post('/economy/buy', requireUser, (req, res) => {
-    const pack = ROBITS_PACKS.find((p) => p.amount === +req.body?.amount);
-    if (!pack) return bad(res, 'Unknown package.');
-    req.user.robits += pack.amount;
-    log(req.user.id, pack.amount, `Bought ${pack.amount.toLocaleString('en-US')} Robits`);
-    db.save();
-    res.json({ robits: req.user.robits, amount: pack.amount });
-  });
-
-  api.post('/economy/membership', requireUser, (req, res) => {
-    const tier = String(req.body?.tier || '');
-    if (!MEMBERSHIPS[tier]) return bad(res, 'Unknown membership.');
-    req.user.membership = tier;
-    log(req.user.id, 0, tier === 'None' ? 'Cancelled membership' : `Joined ${MEMBERSHIPS[tier].name}`);
-    db.save();
-    res.json({ user: me(req.user) });
   });
 
   api.get('/economy/transactions', requireUser, (req, res) => {
