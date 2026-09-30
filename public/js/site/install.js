@@ -70,6 +70,8 @@ if ('serviceWorker' in navigator && window.ROBIS_STANDALONE) {
     addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
   }).catch(() => {});
 } else if (!window.ROBIS_STANDALONE) {
+  // Makes the site installable as an app, with an offline notice.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app-sw.js').catch(() => {});
   // Server version: the server tells us its build; a new deploy reloads open pages.
   let first = null;
   const check = async () => {

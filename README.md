@@ -208,21 +208,47 @@ To share one world, run `npm start` on a computer. The console prints an address
 
 ## Online server: play with friends
 
-The phone version keeps a separate world on every phone, so friends can't see each other there. For one shared world (friends, chat, multiplayer, bans from the Admin Panel) run the online server. It's free on [Render](https://render.com) and needs no computer:
+For real multiplayer everyone plays on **one server**: one world, shared accounts, friends, chat, team games, bans. The phone/PC app then simply opens that server.
+
+### Option 1: your own server (recommended)
+
+Rent a small **VPS** (virtual server). What to pick: **Ubuntu 24.04** (or 22.04), **1 CPU, 1–2 GB RAM**, a public IPv4 address. That is enough for dozens of players. Any provider works; for example Timeweb Cloud, Beget, REG.RU or Selectel (roughly 200–400 ₽ a month), or Hetzner abroad (about €4 a month). Prices change, so check on the provider's site.
+
+1. Buy the VPS with **Ubuntu**. The provider gives you its **IP address** and the **root password**.
+2. Connect to it:
+   - Windows / Mac / Linux: open a terminal (on Windows: PowerShell) and type `ssh root@YOUR_IP`, then the password.
+   - Phone: install the **Termius** app → New host → IP, user `root`, password.
+3. Paste this **one command** and press Enter:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/tatogart/RoBi19/main/scripts/install-server.sh | sudo bash
+   ```
+
+   It asks two questions; just press Enter to accept the defaults (a free address like `1-2-3-4.sslip.io` and a random admin code). In 2–3 minutes it prints your **link** and **admin code**.
+4. Open the link, sign up, then ⚙ → **Enter Admin Code** to become the admin. Send the link to your friends.
+
+What the installer sets up: Node.js, Robis as a service that restarts itself, **HTTPS** through Caddy, and **automatic updates**: every 10 minutes the server checks this GitHub repository and updates itself (open pages reload on their own). Data is kept in `/var/lib/robis`.
+
+Your own domain (optional): point its **A record** to the server IP, then run the command again with `ROBIS_DOMAIN=play.example.com` in front of `sudo bash`. Useful commands: `journalctl -u robis -f` (logs), `systemctl restart robis`, settings in `/etc/robis.env`.
+
+### Send the app to your server
+
+Tell the phone/PC app where the server is, and everyone who opens **https://tatogart.github.io/RoBi19/** (or the installed app) lands on your server automatically: add the link in *GitHub → Settings → Secrets and variables → Actions → Variables* as `ROBIS_SERVER_URL` (or put it in `standalone/server-url.txt`) and push to `main`. The server's own site can be installed as an app too (**Install Robis** in the ⚙ menu). With no internet the app can still open the on-device world: add `?offline=1` to the address.
+
+### Option 2: free server on Render
+
+Free, but it falls asleep without players and wipes its disk on restarts (the server keeps an encrypted backup on GitHub to survive that).
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/tatogart/RoBi19)
 
 1. **Make a GitHub token** so accounts survive restarts: [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new) → *Repository access: Only select repositories* → `RoBi19` → *Permissions → Contents: Read and write* → **Generate token**. Copy it.
 2. Tap **Deploy to Render** above and sign in with GitHub.
-3. Fill in the two fields:
-   - `ROBIS_ADMIN_CODE`: your secret admin code (e.g. `ABCD-1234-WXYZ`). Nobody becomes admin automatically on this server; you enter this code via ⚙ → **Enter Admin Code**.
-   - `ROBIS_BACKUP_TOKEN`: the token from step 1.
-4. Tap **Deploy Blueprint** and wait 2–3 minutes. You get a link like `https://robis-xxxx.onrender.com`. Send it to your friends; on phones, open it and **Add to Home Screen**.
-5. Optional: to show a **Play online with friends** button in the phone version, add the link in *GitHub → Settings → Secrets and variables → Actions → Variables* as `ROBIS_SERVER_URL` (or put it in `standalone/server-url.txt`) and push to `main`.
+3. Fill in `ROBIS_ADMIN_CODE` (your secret admin code) and `ROBIS_BACKUP_TOKEN` (the token from step 1).
+4. Tap **Deploy Blueprint** and wait 2–3 minutes. You get a link like `https://robis-xxxx.onrender.com`.
 
 Good to know:
-- The free server **falls asleep after 15 minutes** without players. The first visit after that takes about a minute to load.
-- Render's free plan wipes the disk on every restart, so the server keeps an **encrypted** copy of all accounts and games on the `robis-data` branch (updated every minute while something changes) and restores it on start. The encryption key is your admin code (or `ROBIS_BACKUP_KEY`). If you change the code, set `ROBIS_BACKUP_KEY` to the old code, or the old data can't be read.
+- The free server **falls asleep after 15 minutes** without players. The first visit after that takes about a minute to load. Paid Render plans don't sleep.
+- The encrypted backup lives on the `robis-data` branch, updated every minute while something changes. The encryption key is your admin code (or `ROBIS_BACKUP_KEY`). If you change the code, set `ROBIS_BACKUP_KEY` to the old code, or the old data can't be read.
 - Every push to `main` redeploys the server automatically.
 
 ## Screenshots

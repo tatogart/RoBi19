@@ -57,8 +57,12 @@ export function userFromToken(db, token) {
 export const DEVICE_COOKIE = 'robis_device';
 
 export function clientInfo(req) {
-  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  const ip = (fwd || req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
+  // Behind Cloudflare (Render) its header is reliable; behind one proxy
+  // (Caddy from install-server.sh) the last X-Forwarded-For entry is the one
+  // it added, while earlier entries could be faked by the player.
+  const cf = String(req.headers['cf-connecting-ip'] || '').trim();
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean).pop() || '';
+  const ip = (cf || fwd || req.socket?.remoteAddress || '').replace(/^::ffff:/, '');
   const device = parseCookies(req.headers.cookie)[DEVICE_COOKIE];
   return { ip, device: /^[a-f0-9]{32}$/.test(device || '') ? device : '' };
 }

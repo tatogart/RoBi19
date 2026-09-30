@@ -299,3 +299,13 @@ test('every showcase game starts without script errors', async () => {
     c.ws.close();
   }
 });
+
+test('password guessing from one address is slowed down', async () => {
+  let last;
+  for (let i = 0; i < 22; i++) {
+    last = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' }, body: JSON.stringify({ username: 'Tester_1', password: 'wrong' }) });
+  }
+  assert.equal(last.status, 429);
+  const other = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.10' }, body: JSON.stringify({ username: 'Tester_1', password: 'secret123' }) });
+  assert.equal(other.status, 200);
+});

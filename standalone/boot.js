@@ -7,6 +7,16 @@
   window.ROBIS_BASE = BASE;
   // Shared online server (everyone in one world), if the owner has one.
   window.ROBIS_ONLINE_URL = '__ONLINE__';
+  // With a server, this app is just the way in: go to the same page there.
+  // (?offline=1 keeps the old on-device world, e.g. with no internet.)
+  var offline = /[?&]offline=1/.test(location.search);
+  try { if (offline) sessionStorage.setItem('robis.offline', '1'); offline = offline || sessionStorage.getItem('robis.offline') === '1'; } catch (e) { /* private mode */ }
+  if (window.ROBIS_ONLINE_URL && !offline && navigator.onLine !== false) {
+    var rest = location.pathname.slice(BASE.length) || '/';
+    document.documentElement.style.display = 'none';
+    location.replace(window.ROBIS_ONLINE_URL + rest + location.search + location.hash);
+    return;
+  }
   var backend = null;
   function load() { return backend || (backend = import(BASE + '/js/local/backend.js')); }
   window.robisBackend = load;

@@ -210,7 +210,23 @@ export function createApi(db, manager, opts = {}) {
   const setCookie = (res, c) => (res.append ? res.append('Set-Cookie', c) : res.setHeader('Set-Cookie', c));
   const banMessage = (u) => `This account has been banned.${banDetails(u)}`;
 
+  // Slows down password guessing and account spam on public servers.
+  const hits = new Map();
+  const limited = (req, res, kind, max, ms) => {
+    const ip = req.client && req.client.ip;
+    if (!ip || ip === '127.0.0.1' || ip === '::1') return false; // local play and tests
+    const key = kind + ' ' + ip;
+    const now = Date.now();
+    let h = hits.get(key);
+    if (!h || h.reset < now) { h = { n: 0, reset: now + ms }; hits.set(key, h); }
+    if (hits.size > 10000) for (const [k, v] of hits) if (v.reset < now) hits.delete(k);
+    if (++h.n <= max) return false;
+    bad(res, `Too many attempts. Try again in ${Math.ceil((h.reset - now) / 60000)} min.`, 429);
+    return true;
+  };
+
   api.post('/auth/signup', (req, res) => {
+    if (limited(req, res, 'signup', 10, 3600e3)) return;
     const { username, password } = req.body || {};
     const banned = bannedClient(db, req.client);
     if (banned) return bad(res, `This device is banned from this Robis (account ${banned.username}).${banDetails(banned)}`, 403);
@@ -229,6 +245,7 @@ export function createApi(db, manager, opts = {}) {
   });
 
   api.post('/auth/login', (req, res) => {
+    if (limited(req, res, 'login', 20, 600e3)) return;
     const { username, password } = req.body || {};
     const user = Object.values(D.users).find((u) => u.username.toLowerCase() === String(username || '').toLowerCase());
     if (!user || !checkPassword(user, String(password || ''))) return bad(res, 'Incorrect username or password.', 401);
@@ -468,6 +485,7 @@ export function createApi(db, manager, opts = {}) {
 
   // ------------------------------------------------------------ admin code
   api.post('/auth/admin-code', requireUser, (req, res) => {
+    if (limited(req, res, 'code', 10, 600e3)) return;
     if (!adminCodeHash) return bad(res, 'Admin codes are not enabled on this server.');
     const code = String(req.body?.code || '').trim().toUpperCase();
     const hash = crypto.createHash('sha256').update(code).digest('hex');
