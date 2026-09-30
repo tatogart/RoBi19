@@ -40,7 +40,9 @@ apt-get install -y -q curl git ca-certificates gnupg debian-keyring debian-archi
 IP="$(curl -fsS4 --max-time 10 https://api.ipify.org || hostname -I | awk '{print $1}')"
 OLD_CODE="$( [ -f "$ENV_FILE" ] && sed -n 's/^ROBIS_ADMIN_CODE=//p' "$ENV_FILE" || true)"
 OLD_DOMAIN="$( [ -f "$ENV_FILE" ] && sed -n 's/^ROBIS_DOMAIN=//p' "$ENV_FILE" || true)"
-RANDOM_CODE="$(tr -dc 'A-HJ-NP-Z2-9' </dev/urandom | head -c 12 | sed 's/\(....\)\(....\)\(....\)/\1-\2-\3/')"
+# (head closing the pipe early would stop the script under pipefail, hence || true)
+RANDOM_RAW="$( (tr -dc 'A-HJ-NP-Z2-9' </dev/urandom | head -c 12) || true)"
+RANDOM_CODE="${RANDOM_RAW:0:4}-${RANDOM_RAW:4:4}-${RANDOM_RAW:8:4}"
 DEFAULT_DOMAIN="${OLD_DOMAIN:-${IP//./-}.sslip.io}"
 ask ROBIS_DOMAIN "Domain for Robis [${DEFAULT_DOMAIN}]: " "$DEFAULT_DOMAIN"
 ask ROBIS_ADMIN_CODE "Secret admin code [${OLD_CODE:-random}]: " "${OLD_CODE:-$RANDOM_CODE}"
