@@ -124,7 +124,7 @@ export function partMaterials(inst, geometry) {
   if (shape !== 'Block') return getMaterial(base);
   const side = getMaterial(base);
   const top = inst.ClassName === 'SpawnLocation'
-    ? getMaterial({ ...base, special: 'spawn' })
+    ? getMaterial({ ...base, special: 'spawn', faceSize: [+p.Size.X.toFixed(2), +p.Size.Z.toFixed(2)] })
     : getMaterial({ ...base, surface: p.TopSurface });
   const bottom = getMaterial({ ...base, surface: p.BottomSurface });
   return [side, side, top, bottom, side, side];

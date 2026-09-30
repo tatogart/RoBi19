@@ -1,1 +1,293 @@
-# RoBi19
+<p align="center">
+  <img src="public/img/icon.svg" width="96" alt="Robis logo">
+</p>
+
+<h1 align="center">ROBIS</h1>
+
+<p align="center">
+  <b>A 2019-era Roblox-style game platform, in one Node.js app.</b><br>
+  Website, multiplayer 3D client, Lua scripting and <b>Robis Studio</b>, all running in the browser.
+</p>
+
+<p align="center">
+  🇬🇧 English · <a href="README.ru.md">🇷🇺 Русский</a>
+</p>
+
+![Robis landing page](docs/screenshots/landing.jpg)
+
+> **Disclaimer:** Robis is an open-source, non-commercial fan tribute to the 2019 era of user-generated
+> game platforms. It isn't affiliated with, endorsed by, or connected to Roblox Corporation. All art
+> (logo, textures, avatars, hats, faces, sounds) is generated procedurally in code. The project ships no copyrighted assets.
+
+---
+
+## Contents
+
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Screenshots](#screenshots)
+- [Controls](#controls)
+- [Robis Studio](#robis-studio)
+- [Lua scripting API](#lua-scripting-api)
+- [Architecture](#architecture)
+- [REST API](#rest-api)
+- [Configuration](#configuration)
+- [Tests](#tests)
+- [Limitations and roadmap](#limitations-and-roadmap)
+
+## Features
+
+### 🌐 Website (the 2019 look)
+- Blue top bar, left navigation, `Source Sans Pro` typeface, game cards with like ratio and player counts.
+- **Landing page** with login/sign-up, drawn over a live 3D scene of the *Crossroads* map.
+- **Home**: greeting with your headshot, friends row with presence (Online, In Game, In Studio), *Continue Playing*, recommendations and favorites.
+- **Games**: Popular, Top Rated, Featured, Recently Updated and Most Visited, genre filter and search.
+- **Game page**: big green ▶ button, the 2019 *"Robis is now loading. Get ready to play!"* dialog, likes and dislikes, favorites, stats, and a live **server list** you can join.
+- **Catalog**: 48 items (hats, hair, faces, shirts, pants, T-shirts, gear) and **Limiteds** with stock. Buy them with **Robits (R$)**, the fictional currency.
+- **Avatar editor** with a live, rotatable 3D R6 preview, body colours and a wear/unwear grid.
+- **Profile** with status, blurb, *Currently Wearing*, friends, favorite games, **player badges** earned in games, and creations.
+- **Friends** with requests and player search, **Messages** (inbox, sent, compose, reply), **Inventory**, **Robits** (daily stipend and transaction history), **Create** page, a blog, help and a 404 page (*"Oof!"*).
+- All thumbnails (headshots, full-body renders, items, game icons) are rendered in the browser with Three.js. Game thumbnails are cached on the server.
+
+### 🎮 Game client
+- Multiplayer over WebSocket with a server-authoritative world and client-side character movement.
+- Classic **R6 avatar** with walk, jump, fall, idle and tool-hold animations, emotes (`/e dance`, `/e dance2`, `/e dance3`, `/e wave`, `/e point`, `/e cheer`, `/e laugh`), and the **fall-apart death** with an *oof* sound synthesized with WebAudio.
+- Follow camera: orbit with the right mouse button, zoom, **first person**, **Shift Lock**, and pull-in when walls block the view.
+- Physics: capsule-vs-OBB collision with blocks, spheres, cylinders and wedges. You can climb steps, walk up ramps and **ride moving platforms**.
+- The 2019 HUD: chat with the name-colour hash and **bubble chat**, a **leaderboard** built from `leaderstats`, a health bar, `Hint` and `Message` objects, and the escape menu (Players / Settings / Help, plus *Reset Character* and *Leave Game*). It also has the loading screen, disconnect dialogs, a **developer console (F9)** and **touch controls** for phones.
+- Materials: Plastic with **studs and inlets**, Wood, WoodPlanks, Brick, Slate, Concrete, Marble, Granite, Metal, DiamondPlate, CorrodedMetal, Grass, Sand, Ice, Fabric, Glass, **Neon** and ForceField, all generated procedurally.
+- A sky with procedural clouds, sun, moon and stars, a day/night cycle driven by `Lighting.ClockTime`, fog and shadows.
+- Effects: `Fire`, `Sparkles`, `Smoke`, `PointLight`, `SpotLight`, `Explosion` (with knock-back), `BillboardText`, `ForceField` and `ClickDetector` (with a hover cursor).
+
+### 🛠️ Robis Studio
+- The 2019 layout: a **FILE** menu and HOME / MODEL / TEST / VIEW ribbon tabs, with Toolbox, Explorer, Properties, Output and a Command Bar.
+- A 3D viewport with a fly camera (right mouse button + WASD/QE, wheel, middle-button pan, `F` to focus) and **Select / Move / Scale / Rotate** gizmos with grid and rotation snapping in world or local space.
+- **Explorer**: tree view, multi-select, drag-and-drop reparenting, rename (F2), filter, context menu and *Insert Object*.
+- **Properties**: typed editors (Vector3, Color3 with picker, BrickColor, enums, booleans, numbers) grouped by category.
+- **Script editor** (CodeMirror) with Lua highlighting and tabs.
+- **Play (F5)**: runs your unsaved place on a private test server inside the viewport. Server `print`/`warn`/errors (with stack traces) go to Output, and the Explorer shows the live game.
+- Undo and redo, clipboard, duplicate, group and ungroup, Anchor, Lock, colour and material pickers, 90° rotate and tilt.
+- A **Toolbox** of ready-made scripted models: Kill Brick, Checkpoint, Coin, Spinner, Moving Platform, Disappearing Brick, Speed and Jump Pads, Teleporter, Push Button, Lamp Post, Tree, Campfire, Brick House, a leaderboard script and a day/night script.
+- Templates (Baseplate, Classic, Flat Terrain, Obby), **Publish to Robis** (it renders a thumbnail too), game settings, and save/open `.robis.json` files.
+
+### 📜 Lua 5.3 scripting (server-side)
+- Runs on [fengari](https://github.com/fengari-lua/fengari). Every `Script` is its own coroutine, and `wait()`, `spawn`, `delay`, `:Wait()` and `WaitForChild` really yield.
+- Roblox-like API: `game`, `workspace`, `script`, `Instance.new`, `Vector3`, `CFrame`, `Color3`, `BrickColor`, `Enum`, `TweenInfo`, `UDim2`, `Random` and events (`Touched`, `Changed`, `PlayerAdded`, `Died`, …).
+- Services: Players, Lighting, **TweenService**, **DataStoreService** (persistent), RunService (Heartbeat/Stepped), Debris, HttpService (JSON/GUID), **BadgeService** (badges show up on profiles), ReplicatedStorage, ServerStorage and ServerScriptService. `ModuleScript` works with `require`.
+- Sandboxed: no `io`, `os.execute`, `require` of files or bytecode loading. A 10-second **script timeout** stops runaway loops.
+
+### 🎲 Five showcase games
+| Game | What it shows |
+|---|---|
+| **Crossroads** | The classic hangout map with a tower, houses, a fountain and a day/night cycle |
+| **Mega Fun Obby** | 8 stages, checkpoints, `leaderstats`, **DataStore** save, moving and fading platforms, a spinner, speed and jump pads, a badge |
+| **Coin Rush** | Spinning coins (`RunService.Heartbeat`), leaderstats and a saved best score |
+| **Lava Rising** | A round-based game loop with `Hint` timers, a rising lava tween and Wins |
+| **Button Mania** | `ClickDetector` buttons, raining unanchored bricks, explosions and a party mode |
+
+## Quick start
+
+Requirements: **Node.js 18+** (tested on Node 22) and a browser with WebGL.
+
+```bash
+git clone <this repo> robis && cd robis
+npm install
+npm start
+```
+
+Open **http://localhost:3000**, then sign up or log in with a seeded account:
+
+| Username | Password | Notes |
+|---|---|---|
+| `Robis` | `robis2019` | Admin, owns everything, 1,000,000 R$ |
+| `Builderman2019`, `OofMaster`, `NoobSlayer99`, `PinkPrincess` | `password123` | Demo players |
+
+Useful commands:
+
+```bash
+npm run dev     # restart automatically on server changes (node --watch)
+npm run seed    # WIPE ./data and recreate the default world
+npm test        # run the test suite
+```
+
+Docker:
+
+```bash
+docker build -t robis .
+docker run -p 3000:3000 -v robis-data:/data robis
+```
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Home](docs/screenshots/home.jpg) | ![Games](docs/screenshots/games.jpg) |
+| ![Catalog](docs/screenshots/catalog.jpg) | ![Avatar editor](docs/screenshots/avatar.jpg) |
+| ![In game](docs/screenshots/ingame.jpg) | ![Lava Rising](docs/screenshots/lava.jpg) |
+| ![Robis Studio](docs/screenshots/studio.jpg) | ![Script editor](docs/screenshots/studio-script.jpg) |
+
+## Controls
+
+| Action | Keys |
+|---|---|
+| Move | `W A S D` / arrow keys (touch: left thumbstick) |
+| Jump | `Space` (touch: JUMP button) |
+| Rotate camera | hold the right mouse button (touch: drag) |
+| Zoom / first person | mouse wheel, `I` / `O` |
+| Shift Lock | `Shift` |
+| Chat / emotes | `/` then e.g. `/e dance` |
+| Player list | `Tab` |
+| Menu | `Esc` (then `R` to reset, `L` to leave) |
+| Developer console | `F9` (game owners can run server Lua here) |
+
+## Robis Studio
+
+Open it from **Create → Open Robis Studio**, or from **Edit in Studio** on your game's page.
+
+| Shortcut | Action |
+|---|---|
+| `F5` / `Shift+F5` | Play / Stop |
+| `Ctrl+1..4` | Select / Move / Scale / Rotate |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
+| `Ctrl+C / X / V`, `Ctrl+Shift+V` | Copy / Cut / Paste, Paste Into |
+| `Ctrl+D` | Duplicate |
+| `Ctrl+G` / `Ctrl+U` | Group / Ungroup |
+| `Ctrl+R` / `Ctrl+T` | Rotate 90° / Tilt 90° |
+| `Ctrl+L` | Toggle world or local transform space |
+| `Delete`, `F2`, `F` | Delete, Rename, Focus the selection |
+| `Ctrl+S` | Publish to Robis |
+| Right mouse + `W A S D Q E` | Fly the camera (`Shift` = slow) |
+
+Workflow: pick a template, build with parts and the Toolbox, add a `Script` to **ServerScriptService**, press **F5** to test, then **Publish**. New games start **private**. Open *Game Settings* to make yours public, and it shows up on the Games page.
+
+## Lua scripting API
+
+```lua
+-- ServerScriptService/Leaderboard
+local Players = game:GetService("Players")
+local store = game:GetService("DataStoreService"):GetDataStore("Coins")
+
+Players.PlayerAdded:Connect(function(player)
+	local stats = Instance.new("Folder")
+	stats.Name = "leaderstats"
+	stats.Parent = player
+
+	local coins = Instance.new("IntValue")
+	coins.Name = "Coins"
+	coins.Value = store:GetAsync(player.UserId) or 0
+	coins.Parent = stats
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	store:SetAsync(player.UserId, player.leaderstats.Coins.Value)
+end)
+
+-- A kill brick
+workspace.Lava.Touched:Connect(function(hit)
+	local humanoid = hit.Parent:FindFirstChild("Humanoid")
+	if humanoid then humanoid.Health = 0 end
+end)
+
+-- A moving platform
+local TweenService = game:GetService("TweenService")
+local info = TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+TweenService:Create(workspace.Platform, info, {Position = Vector3.new(0, 10, -40)}):Play()
+```
+
+<details>
+<summary><b>Full API reference</b></summary>
+
+**Globals:** `game`, `workspace`, `script`, `print`, `warn`, `error`, `wait(t)`, `spawn(fn)`, `delay(t, fn)`, `tick()`, `time()`, `typeof(v)`, `require(module)`, `shared`, `Instance.new(class, parent?)`, `Vector3.new/zero/one`, `CFrame.new/Angles/fromOrientation/fromAxisAngle/lookAt`, `Color3.new/fromRGB/fromHSV/fromHex`, `BrickColor.new/random/Red()…`, `UDim2.new`, `TweenInfo.new`, `Random.new`, `Enum.*`. It also adds Lua 5.1 helpers: `unpack`, `loadstring`, `table.getn`, `math.pow`, `math.clamp`, `math.round`, `math.sign` and `string.split`.
+
+**Instance:** `Name`, `Parent`, `ClassName`, `Archivable`, `FindFirstChild(name, recursive)`, `FindFirstChildOfClass`, `FindFirstChildWhichIsA`, `FindFirstAncestor…`, `WaitForChild(name, timeout)`, `GetChildren`, `GetDescendants`, `IsA`, `IsDescendantOf`, `IsAncestorOf`, `GetFullName`, `Clone`, `Destroy`, `ClearAllChildren`, `GetPropertyChangedSignal`. Events: `Changed`, `ChildAdded`, `ChildRemoved`, `DescendantAdded`, `DescendantRemoving` and `AncestryChanged`. You can also reach children as `parent.ChildName` or `parent["Child Name"]`.
+
+**Classes:** `Part` (`Shape` Block/Ball/Cylinder), `WedgePart`, `CornerWedgePart`, `TrussPart`, `SpawnLocation` (`Enabled`, `Duration` = forcefield time), `Seat`, `Model` (`PrimaryPart`, `MoveTo`, `GetBoundingBox`, `SetPrimaryPartCFrame`, `PivotTo`, `TranslateBy`), `Folder`, `Configuration`, `Script`, `ModuleScript`, `BindableEvent`, `IntValue`, `NumberValue`, `StringValue`, `BoolValue`, `ObjectValue`, `Vector3Value`, `Color3Value`, `Humanoid` (`Health`, `MaxHealth`, `WalkSpeed`, `JumpPower`, `TakeDamage`, `Died`, `HealthChanged`), `Player` (`UserId`, `Character`, `RespawnLocation`, `LoadCharacter`, `Kick`, `CharacterAdded`, `Chatted`), `PointLight`, `SpotLight`, `Fire`, `Sparkles`, `Smoke`, `Explosion` (`BlastRadius`, `BlastPressure`, `Hit`), `ClickDetector` (`MouseClick(player)`), `BillboardText`, `Hint`, `Message`, `ForceField`, `Team` and `Decal`.
+
+**BasePart:** `Position`, `Orientation`, `CFrame`, `Size`, `Color`, `BrickColor`, `Material`, `Transparency`, `Reflectance`, `Anchored`, `CanCollide`, `Locked`, `TopSurface` and `BottomSurface`. Its events are `Touched` and `TouchEnded`. Unanchored parts fall and stack with simple physics.
+
+**Services:** `Players` (`PlayerAdded`, `PlayerRemoving`, `GetPlayers`, `GetPlayerFromCharacter`, `GetPlayerByUserId`, `RespawnTime`, `CharacterAutoLoads`), `Lighting` (`ClockTime`, `TimeOfDay`, `Brightness`, `Ambient`, `OutdoorAmbient`, `FogStart`, `FogEnd`, `FogColor`, `SkyColor`, `SetMinutesAfterMidnight`), `TweenService` (`Create`; each tween has `Play/Pause/Cancel` and `Completed`, with every easing style and direction, repeats, reverses and delay), `DataStoreService` (`GetDataStore(name, scope)`, then `GetAsync`, `SetAsync`, `UpdateAsync`, `IncrementAsync` and `RemoveAsync`), `RunService` (`Heartbeat`, `Stepped`), `Debris` (`AddItem`), `HttpService` (`JSONEncode`, `JSONDecode`, `GenerateGUID`), `BadgeService` (`AwardBadge(userId, name)`) and `Chat` (`Chat(part, text)` for a bubble).
+
+**Datatypes:** `Vector3` supports `+ - * /`, `Magnitude`, `Unit`, `Dot`, `Cross` and `Lerp`. `CFrame` supports `*` with a CFrame or Vector3, `+/-` with a Vector3, `Position`, `LookVector`, `RightVector`, `UpVector`, `Inverse`, `Lerp`, `ToWorldSpace`, `ToObjectSpace` and `ToEulerAnglesXYZ`. `Color3` has `R/G/B`, `Lerp` and `ToHex`. `BrickColor` has `Name`, `Number` and `Color`.
+
+</details>
+
+## Architecture
+
+```
+robis/
+├── server/                 Node.js (Express 5 + ws)
+│   ├── index.js            HTTP server, static files, WebSocket entry
+│   ├── api.js              REST API (auth, users, friends, messages, catalog, avatar, games, studio)
+│   ├── auth.js / db.js     scrypt passwords + cookie sessions, JSON-file database (./data)
+│   ├── game/
+│   │   ├── GameServer.js   one running server: DataModel, players, characters, touches,
+│   │   │                   unanchored physics, explosions, replication @30 Hz
+│   │   ├── lua.js          fengari bridge: userdata ↔ instances, coroutine scheduler, sandbox
+│   │   ├── services.js     TweenService, DataStore, Debris, HttpService, BadgeService…
+│   │   ├── manager.js      finds or creates servers per game, Studio test servers
+│   │   └── chatfilter.js   2019-style "####" filter
+│   └── seed/               seed accounts, catalog, 5 games, Studio templates
+├── shared/                 runs on both server and browser (ES modules)
+│   ├── engine/types.js     Vector3, CFrame, Color3, BrickColor, Enum, TweenInfo
+│   ├── engine/instances.js Instance tree, class schemas, signals, services
+│   ├── engine/serialize.js place files and the replication format
+│   ├── engine/physics.js   OBB/sphere collision, SAT, spatial grid, character controller
+│   └── avatar.js           catalog definitions and the avatar model
+├── public/                 static front-end (no build step, import maps)
+│   ├── js/site/            website pages
+│   ├── js/render/          Three.js: parts, materials, sky, avatars, thumbnails
+│   ├── js/game/            game client: net mirror, camera, input, HUD, characters, sounds
+│   └── js/studio/          Robis Studio: viewport, explorer, properties, editor, toolbox
+└── test/                   node:test suites (engine, Lua runtime, server + WebSocket)
+```
+
+**How a game session works**
+
+1. The browser opens `/play?placeId=N`, connects to `/ws` (authenticated by the session cookie) and sends `join`.
+2. `GameManager` puts the player in a non-full server or starts a new one. The server loads the place, starts its Scripts, creates a `Player`, fires `PlayerAdded` and spawns the character at a `SpawnLocation`.
+3. The server replicates `Workspace`, `Players`, `Lighting`, `ReplicatedStorage`, `StarterGui` and `Teams` as a snapshot. After that it sends batched `add`, `rem` and `set` operations at 30 Hz. `ServerScriptService`, `ServerStorage` and script sources never leave the server.
+4. Each client simulates its own character (as with Roblox network ownership) and streams its position at 20 Hz. The server poses the character model, detects `Touched` with an OBB separating-axis test, and runs scripts, tweens and physics.
+
+## REST API
+
+All endpoints live under `/api` and use JSON. Authentication goes through the `robis_session` HttpOnly cookie.
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /auth/signup`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` |
+| Users | `GET /users?q=`, `GET /users/:id`, `PATCH /users/me`, `GET /users/:id/{friends,games,favorites,inventory}` |
+| Friends | `GET /friends/requests`, `POST /friends/:id/{request,accept,decline}`, `DELETE /friends/:id` |
+| Messages | `GET /messages?box=inbox\|sent`, `POST /messages`, `POST /messages/:id/read` |
+| Avatar | `GET /avatar`, `PUT /avatar` |
+| Catalog | `GET /catalog?type=&q=&sort=`, `GET /catalog/:id`, `POST /catalog/:id/buy` |
+| Economy | `POST /economy/stipend`, `GET /economy/transactions` |
+| Games | `GET /games?sort=&q=&genre=`, `GET /games/recent`, `GET/PATCH/DELETE /games/:id`, `POST /games`, `GET/PUT /games/:id/place`, `GET/PUT /games/:id/thumbnail`, `GET /games/:id/preview`, `GET /games/:id/servers`, `POST /games/:id/{vote,favorite}` |
+| Studio | `GET /templates`, `GET /templates/:key` |
+| Misc | `GET /stats` |
+
+## Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `3000` | HTTP port |
+| `ROBIS_DATA` | `./data` | Folder for `db.json`, place files and thumbnails |
+| `ROBIS_LOG_SCRIPTS` | unset | Set it to `1` to also print game output in the server console |
+
+## Tests
+
+```bash
+npm test
+```
+
+There are 22 tests. They cover the math types, the instance tree, serialization, collision and the character controller. The Lua runtime tests cover yields, events, errors, timeouts, the sandbox, TweenService, DataStore and modules. The integration tests cover sign-up and login, purchases, avatar rules, publishing a place, joining over WebSocket, replication, the chat filter, private games and Studio test sessions.
+
+## Limitations and roadmap
+
+- Only server `Script`s run. `LocalScript`s and GUI objects (`ScreenGui`) are stored but don't execute on the client yet.
+- The physics is intentionally simple. Unanchored parts fall and stack, but there is no rotation, joints or welds.
+- No real Terrain, meshes, audio assets or image uploads. Everything is procedural.
+- Ideas: LocalScripts running in the browser, Tools with `Activated`, ScreenGui, teams, Team Create in Studio and trading.
+
+## License
+
+[MIT](LICENSE). Made with nostalgia for the Tix, the oofs and the bacon hair.

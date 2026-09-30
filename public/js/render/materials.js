@@ -275,8 +275,8 @@ export function spawnTexture() {
 }
 
 // Returns a (cached) material for a part face.
-export function getMaterial({ material = 'Plastic', color = '#a3a2a5', transparency = 0, reflectance = 0, surface = 'Smooth', special = null }) {
-  const key = [material, color, transparency, reflectance, surface, special].join('|');
+export function getMaterial({ material = 'Plastic', color = '#a3a2a5', transparency = 0, reflectance = 0, surface = 'Smooth', special = null, faceSize = null }) {
+  const key = [material, color, transparency, reflectance, surface, special, faceSize && faceSize.join('x')].join('|');
   let m = matCache.get(key);
   if (m) return m;
   const col = new THREE.Color(color);
@@ -289,7 +289,13 @@ export function getMaterial({ material = 'Plastic', color = '#a3a2a5', transpare
     opacity: 1 - transparency,
     depthWrite: transparency < 0.5,
   };
-  if (special === 'spawn') opts.map = spawnTexture();
+  if (special === 'spawn') {
+    // One logo stretched over the whole top face (UVs are in studs).
+    const t = spawnTexture().clone();
+    t.needsUpdate = true;
+    if (faceSize) t.repeat.set(1 / faceSize[0], 1 / faceSize[1]);
+    opts.map = t;
+  }
   else if (special === 'truss') { opts.map = trussTexture(); opts.alphaTest = 0.5; opts.side = THREE.DoubleSide; }
   else if (surface && surface !== 'Smooth' && (material === 'Plastic' || material === 'SmoothPlastic')) opts.map = surfaceTexture(surface);
   else opts.map = materialTexture(material);

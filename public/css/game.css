@@ -29,7 +29,7 @@
 .chat input::placeholder { color: #c8c8c8; }
 
 /* leaderboard */
-.leaderboard { position: absolute; top: 4px; right: 4px; min-width: 180px; background: rgba(31, 31, 31, .6); border-radius: 4px; font-size: 16px; overflow: hidden; }
+.leaderboard { position: absolute; top: 4px; right: 4px; z-index: 3; min-width: 180px; background: rgba(31, 31, 31, .6); border-radius: 4px; font-size: 16px; overflow: hidden; }
 .leaderboard table { border-collapse: collapse; width: 100%; }
 .leaderboard th { font-size: 13px; font-weight: 600; text-align: right; padding: 5px 10px; background: rgba(0, 0, 0, .25); }
 .leaderboard th:first-child { text-align: left; }

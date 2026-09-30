@@ -232,7 +232,11 @@ function limbMaterials(kind, skin, look) {
       }
     } else if (kind === 'leg') {
       if (look.pants) {
-        drawPattern(ctx, S, S, look.pants, face);
+        drawPattern(ctx, S, S, look.pants, 'leg-' + face);
+        if (look.pants.pattern === 'suit' && face !== 'top' && face !== 'bottom') {
+          ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(S / 2, 0); ctx.lineTo(S / 2, S); ctx.stroke();
+        }
         if (face === 'bottom') { ctx.fillStyle = shade(look.pants.color, 0.5); ctx.fillRect(0, 0, S, S); }
       }
     }
