@@ -28,7 +28,9 @@ export class GameClient {
     this.root.append(this.canvas);
     container.append(this.root);
 
-    this.settings = { quality: 'High', sensitivity: 1, volume: 0.6, shiftLockEnabled: true, showFps: false };
+    this.isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+    // Phones get lighter graphics by default (sharper settings are one tap away in the menu).
+    this.settings = { quality: this.isTouch ? 'Medium' : 'High', sensitivity: 1, volume: 0.6, shiftLockEnabled: true, showFps: false };
     try { Object.assign(this.settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch { /* ignore */ }
     sound.setVolume(this.settings.volume);
 
@@ -136,7 +138,7 @@ export class GameClient {
 
   setQuality(q) {
     this.settings.quality = q;
-    const pr = q === 'Low' ? 0.75 : q === 'Medium' ? 1 : Math.min(devicePixelRatio, 2);
+    const pr = q === 'Low' ? 0.75 : q === 'Medium' ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 2);
     this.renderer.setPixelRatio(pr);
     this.renderer.shadowMap.enabled = q !== 'Low';
     this.env.sun.castShadow = q !== 'Low';
@@ -372,6 +374,21 @@ export class GameClient {
     this.hud.lockBtn.classList.toggle('on', this.cam.shiftLock);
     if (this.cam.shiftLock) this.canvas.requestPointerLock?.();
     else if (document.pointerLockElement && !this.cam.firstPerson) document.exitPointerLock();
+  }
+
+  async toggleFullscreen() {
+    const d = document;
+    const el = this.opts.embedded ? this.root : d.documentElement;
+    try {
+      if (d.fullscreenElement || d.webkitFullscreenElement) {
+        await (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+      } else {
+        await (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' });
+        // Games play best in landscape; not every browser allows locking.
+        if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+      }
+    } catch { /* not supported (e.g. iPhone Safari) */ }
+    setTimeout(() => this.resize(), 300);
   }
 
   resetCharacter() { this.send({ t: 'reset' }); }

@@ -5,8 +5,8 @@ import { el, gameCard, avatarCard, headshotImg, toast, spinner } from '../ui.js'
 const me = await initPage({ active: 'home' });
 const app = document.getElementById('app');
 
-const greeting = el('div', { class: 'section row', style: { gap: '20px' } },
-  el('div', { style: { width: '128px', height: '128px', borderRadius: '50%', overflow: 'hidden', background: '#d4d4d4', flex: 'none' } }, headshotImg(me, 256)),
+const greeting = el('div', { class: 'section row greet', style: { gap: '20px' } },
+  el('div', { class: 'greet-head', style: { width: '128px', height: '128px', borderRadius: '50%', overflow: 'hidden', background: '#d4d4d4', flex: 'none' } }, headshotImg(me, 256)),
   el('div', {},
     el('h1', { style: { margin: 0 }, text: `Hello, ${me.username}!` }),
     me.membership !== 'None' ? el('div', { class: 'pill', style: { background: '#393b3d', color: '#fff' }, text: 'OUTRAGEOUS BUILDERS CLUB' }) : null));

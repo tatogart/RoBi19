@@ -19,7 +19,11 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     return new Promise(() => {});
   }
   document.body.prepend(buildHeader(me, active));
-  if (nav && me) document.body.prepend(buildNav(me, active));
+  if (nav && me) {
+    document.body.prepend(buildNav(me, active));
+    document.body.append(buildTabBar(active));
+    document.body.classList.add('has-tabbar');
+  }
   const content = document.querySelector('.rbx-content');
   if (content) {
     if (!nav || !me) content.classList.add('no-nav');
@@ -71,6 +75,17 @@ function buildHeader(me, active) {
   return header;
 }
 
+// Bottom tab bar for phones (hidden on larger screens by CSS).
+function buildTabBar(active) {
+  const tabs = [['home', 'Home', '/home'], ['games', 'Games', '/games'], ['catalog', 'Catalog', '/catalog'], ['avatar', 'Avatar', '/avatar']];
+  const bar = el('nav', { class: 'tabbar', 'aria-label': 'Main' },
+    tabs.map(([ic, label, href]) => el('a', { href, class: active === ic ? 'active' : '' }, icon(ic), el('span', { text: label }))));
+  const more = el('button', { type: 'button', 'aria-label': 'More' }, el('span', { class: 'icon', html: '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg>' }), el('span', { text: 'More' }));
+  more.addEventListener('click', (e) => { e.stopPropagation(); document.body.classList.toggle('nav-open'); });
+  bar.append(more);
+  return bar;
+}
+
 function buildNav(me, active) {
   const nav = el('aside', { class: 'rbx-leftnav' });
   nav.append(el('a', { class: 'user', href: '/profile', style: { padding: '6px 16px 14px' } },
@@ -80,6 +95,11 @@ function buildNav(me, active) {
     if (ic === 'messages') a.append(el('span', { class: 'count hidden', id: 'nav-msg' }));
     if (ic === 'friends') a.append(el('span', { class: 'count hidden', id: 'nav-friends' }));
     nav.append(a);
+  }
+  // Links that live in the top bar on desktop.
+  nav.append(el('div', { class: 'section-label mobile-only', text: 'Explore' }));
+  for (const [ic, label, href, key] of [['games', 'Games', '/games', 'games'], ['catalog', 'Catalog', '/catalog', 'catalog'], ['create', 'Create', '/develop', 'create'], ['robits', 'Robits', '/robits', 'robits']]) {
+    nav.append(el('a', { href, class: 'mobile-only' + (active === key ? ' active' : '') }, icon(ic), el('span', { text: label })));
   }
   nav.append(el('a', { class: 'upgrade', href: '/robits', text: me.membership === 'None' ? 'Get Builders Club' : 'Builders Club' }));
   nav.append(el('div', { class: 'section-label', text: 'Events' }));

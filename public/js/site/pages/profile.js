@@ -125,6 +125,6 @@ style.textContent = `
 .badges { display: flex; flex-wrap: wrap; gap: 12px; }
 .badge-card { width: 130px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; color: var(--text); padding: 10px; background: var(--gray-bg); border-radius: 4px; }
 .badge-card svg { width: 48px; height: 48px; color: #f6b702; }
-@media (max-width: 760px) { .profile-header, .wearing { flex-direction: column; } .wearing-img { width: 100%; } }
+@media (max-width: 760px) { .profile-header, .wearing { flex-direction: column; align-items: stretch; } .profile-header { text-align: center; } .profile-headshot { margin: 0 auto; } .profile-main .row, .profile-counts { justify-content: center; flex-wrap: wrap; } .wearing-img { width: 100%; } }
 `;
 document.head.append(style);

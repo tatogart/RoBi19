@@ -6,6 +6,8 @@ import { setVolume, getVolume, click } from './sound.js';
 const ICON = {
   menu: '<svg viewBox="0 0 24 24" fill="currentColor"><g transform="translate(12 12) rotate(15)"><rect x="-8" y="-8" width="16" height="16" rx="1.5"/><rect x="-2.5" y="-2.5" width="5" height="5" fill="#333"/></g></svg>',
   chat: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v11H9l-5 4z"/></svg>',
+  fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+  jump: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 14l7-7 7 7"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
 };
 
@@ -30,11 +32,21 @@ export class HUD {
     this.topbar = h('div', 'topbar');
     this.menuBtn = h('button', '', ICON.menu); this.menuBtn.title = 'Menu (Esc)';
     this.chatBtn = h('button', 'on', ICON.chat); this.chatBtn.title = 'Chat';
-    this.lockBtn = h('button', '', ICON.lock); this.lockBtn.title = 'Shift Lock (Shift)';
-    this.topbar.append(this.menuBtn, this.chatBtn, this.lockBtn);
+    this.lockBtn = h('button', 'lock-btn', ICON.lock); this.lockBtn.title = 'Shift Lock (Shift)';
+    this.fullBtn = h('button', 'fs-btn', ICON.fullscreen); this.fullBtn.title = 'Fullscreen';
+    this.topbar.append(this.menuBtn, this.chatBtn, this.lockBtn, this.fullBtn);
     this.el.append(this.topbar);
+    this.touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+    root.classList.toggle('touch', this.touch);
     this.menuBtn.onclick = () => this.toggleMenu();
-    this.chatBtn.onclick = () => { this.chat.classList.toggle('hidden'); this.chatBtn.classList.toggle('on'); };
+    this.chatBtn.onclick = () => {
+      const open = this.chat.classList.toggle('hidden') === false;
+      this.chatBtn.classList.toggle('on', open);
+      // On phones opening the chat goes straight to the keyboard.
+      if (open && this.touch) this.focusChat();
+    };
+    this.fullBtn.onclick = () => client.toggleFullscreen();
+    if (!document.fullscreenEnabled && !document.webkitFullscreenEnabled) this.fullBtn.classList.add('hidden');
     this.lockBtn.onclick = () => client.toggleShiftLock();
 
     // chat
@@ -43,7 +55,9 @@ export class HUD {
     const bar = h('form', 'bar');
     this.chatInput = h('input');
     this.chatInput.maxLength = 200;
-    this.chatInput.placeholder = 'To chat click here or press "/" key';
+    this.chatInput.placeholder = (matchMedia('(pointer: coarse)').matches ? 'Tap here to chat' : 'To chat click here or press "/" key');
+    this.chatInput.enterKeyHint = 'send';
+    this.chatInput.autocomplete = 'off';
     bar.append(this.chatInput);
     this.chat.append(this.chatLog, bar);
     this.el.append(this.chat);
@@ -61,6 +75,9 @@ export class HUD {
     // leaderboard + health
     this.board = h('div', 'leaderboard');
     this.el.append(this.board);
+    // Small screens: the player list starts collapsed and expands on tap.
+    if (this.touch && Math.min(innerWidth, innerHeight) < 600) this.board.classList.add('collapsed');
+    this.board.addEventListener('click', () => { if (this.touch) { this.board.classList.toggle('collapsed'); this.health.style.top = this.board.offsetHeight + 10 + 'px'; } });
     this.health = h('div', 'healthbar', '<div></div>');
     this.el.append(this.health);
 
@@ -74,12 +91,20 @@ export class HUD {
 
     // mobile
     this.stick = h('div', 'touch-stick', '<div class="knob"></div>');
-    this.jump = h('button', 'jump-btn', 'JUMP');
+    this.jump = h('button', 'jump-btn', ICON.jump);
+    this.jump.setAttribute('aria-label', 'Jump');
     this.el.append(this.stick, this.jump);
     client.input.stickEl = this.stick;
     client.input.knobEl = this.stick.firstChild;
-    this.jump.addEventListener('touchstart', (e) => { client.input.touchJump = true; e.preventDefault(); e.stopPropagation(); });
-    this.jump.addEventListener('touchend', (e) => { client.input.touchJump = false; e.preventDefault(); });
+    const press = (on) => (e) => { client.input.touchJump = on; this.jump.classList.toggle('down', on); e.preventDefault(); e.stopPropagation(); };
+    this.jump.addEventListener('touchstart', press(true), { passive: false });
+    this.jump.addEventListener('touchend', press(false));
+    this.jump.addEventListener('touchcancel', press(false));
+
+    // Portrait hint for phones (the game is playable either way).
+    this.rotateHint = h('div', 'rotate-hint', '<span>📱↻</span> Rotate your device for a better view <button aria-label="Dismiss">×</button>');
+    this.rotateHint.querySelector('button').onclick = () => { this.rotateHint.remove(); this.rotateDismissed = true; };
+    this.el.append(this.rotateHint);
 
     this._buildMenu();
     this._buildConsole();

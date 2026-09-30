@@ -43,6 +43,6 @@ style.textContent = `
 .cat-btn { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 7px 16px; cursor: pointer; font-weight: 600; color: var(--text); }
 .cat-btn:hover { background: var(--gray-bg); }
 .cat-btn.active { color: var(--blue); background: var(--gray-bg); }
-@media (max-width: 760px) { .catalog-wrap { flex-direction: column; } .cat-side { width: 100%; display: flex; flex-wrap: wrap; } .cat-btn { width: auto; } }
+@media (max-width: 760px) { .catalog-wrap { flex-direction: column; align-items: stretch; } .cat-side { width: 100%; display: flex; flex-wrap: nowrap; overflow-x: auto; padding: 4px; } .cat-side h3 { display: none; } .cat-btn { width: auto; white-space: nowrap; border-radius: 14px; } .catalog-wrap form { flex-wrap: wrap; } .catalog-wrap form .input:first-child { flex: 1 1 100%; } }
 `;
 document.head.append(style);

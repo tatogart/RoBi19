@@ -159,3 +159,20 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .insert-list .ic svg { width: 100%; height: 100%; }
 .insert-cat { font-weight: 700; color: var(--s-muted); padding: 6px 6px 2px; break-after: avoid; }
 .toast-s { position: fixed; bottom: 36px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 18px; border-radius: 3px; z-index: 3000; }
+
+/* ------------------------------------------------------------ phones */
+.phone-gate { position: fixed; inset: 0; z-index: 5000; background: #f2f4f5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; font-size: 16px; }
+.phone-gate img { width: 72px; transform: rotate(-10deg); }
+.phone-gate h2 { margin: 8px 0 0; font-size: 22px; }
+.phone-gate p { color: var(--s-muted); max-width: 340px; margin: 0 0 8px; }
+.phone-gate .sbtn { width: 100%; max-width: 280px; padding: 12px; font-size: 16px; text-decoration: none; text-align: center; }
+@media (max-width: 900px) {
+  .panel-left { display: none; }
+  .panel-right { width: 220px; }
+  .ribbon { height: 84px; }
+  .bottom { height: 110px; }
+}
+@media (max-width: 600px) {
+  .panel-right { position: absolute; right: 0; top: 146px; bottom: 22px; z-index: 20; width: 70vw; box-shadow: -4px 0 12px rgba(0, 0, 0, .2); }
+  .main { position: relative; }
+}

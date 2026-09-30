@@ -66,16 +66,28 @@ export class Input {
   _bindTouch() {
     const el = this.el;
     this.touches = new Map();
+    const R = 55; // thumbstick radius in px
+    const cameraTouches = () => [...this.touches.values()].filter((t) => !t.stick);
+    const resetStick = () => {
+      this.touchMove = { x: 0, y: 0 };
+      if (this.stickEl) this.stickEl.classList.remove('active');
+      if (this.knobEl) this.knobEl.style.transform = '';
+    };
     el.addEventListener('touchstart', (e) => {
+      this.isTouch = true;
       for (const t of e.changedTouches) {
-        const stick = t.clientX < innerWidth * 0.4 && t.clientY > innerHeight * 0.45;
-        this.touches.set(t.identifier, { x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY, stick });
+        // Dynamic thumbstick: any touch in the lower-left area of the screen.
+        const hasStick = [...this.touches.values()].some((x) => x.stick);
+        const stick = !hasStick && t.clientX < innerWidth * 0.45 && t.clientY > innerHeight * 0.35;
+        this.touches.set(t.identifier, { x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY, stick, t0: performance.now() });
         if (stick && this.stickEl) {
-          this.stickEl.style.display = 'block';
-          this.stickEl.style.left = t.clientX - 60 + 'px';
-          this.stickEl.style.top = t.clientY - 60 + 'px';
+          this.stickEl.classList.add('active');
+          this.stickEl.style.left = t.clientX - R - 5 + 'px';
+          this.stickEl.style.top = t.clientY - R - 5 + 'px';
         }
       }
+      const cams = cameraTouches();
+      this.pinch = cams.length >= 2 ? Math.hypot(cams[0].x - cams[1].x, cams[0].y - cams[1].y) : null;
       e.preventDefault();
     }, { passive: false });
     el.addEventListener('touchmove', (e) => {
@@ -85,28 +97,40 @@ export class Input {
         if (s.stick) {
           let dx = t.clientX - s.x0, dy = t.clientY - s.y0;
           const m = Math.hypot(dx, dy);
-          if (m > 50) { dx *= 50 / m; dy *= 50 / m; }
-          this.touchMove = { x: dx / 50, y: dy / 50 };
+          if (m > R) { dx *= R / m; dy *= R / m; }
+          // Small dead zone, then full speed at 70% of the radius (like the 2019 dynamic thumbstick).
+          const power = m < 6 ? 0 : Math.min(1, m / (R * 0.7));
+          const len = Math.max(Math.hypot(dx, dy), 1e-6);
+          this.touchMove = { x: (dx / len) * power, y: (dy / len) * power };
           if (this.knobEl) this.knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
-        } else {
-          this.onRotate((t.clientX - s.x) * 1.4, (t.clientY - s.y) * 1.4);
         }
+        s.px = s.x; s.py = s.y;
         s.x = t.clientX; s.y = t.clientY;
+      }
+      const cams = cameraTouches();
+      if (cams.length >= 2) {
+        const d = Math.hypot(cams[0].x - cams[1].x, cams[0].y - cams[1].y);
+        if (this.pinch) {
+          const ratio = d / this.pinch;
+          if (Math.abs(ratio - 1) > 0.04) { this.onZoom(ratio > 1 ? -1 : 1); this.pinch = d; }
+        } else this.pinch = d;
+      } else if (cams.length === 1) {
+        const c = cams[0];
+        if (c.px !== undefined) this.onRotate((c.x - c.px) * 1.6, (c.y - c.py) * 1.6);
       }
       e.preventDefault();
     }, { passive: false });
     const end = (e) => {
       for (const t of e.changedTouches) {
         const s = this.touches.get(t.identifier);
-        if (s && s.stick) {
-          this.touchMove = { x: 0, y: 0 };
-          if (this.stickEl) this.stickEl.style.display = 'none';
-          if (this.knobEl) this.knobEl.style.transform = '';
-        } else if (s && Math.hypot(t.clientX - s.x0, t.clientY - s.y0) < 8) {
+        if (s && s.stick) resetStick();
+        else if (s && Math.hypot(t.clientX - s.x0, t.clientY - s.y0) < 10 && performance.now() - s.t0 < 350) {
           this.onClick({ clientX: t.clientX, clientY: t.clientY });
         }
         this.touches.delete(t.identifier);
       }
+      if (cameraTouches().length < 2) this.pinch = null;
+      if (!this.touches.size) resetStick();
     };
     el.addEventListener('touchend', end);
     el.addEventListener('touchcancel', end);

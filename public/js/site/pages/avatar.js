@@ -145,6 +145,6 @@ style.textContent = `
 .palette { display: grid; grid-template-columns: repeat(6, 40px); gap: 8px; }
 .swatch { width: 40px; height: 40px; border-radius: 50%; border: 2px solid rgba(0,0,0,.15); cursor: pointer; }
 .swatch:hover { transform: scale(1.1); }
-@media (max-width: 860px) { .avatar-layout { flex-direction: column; } .avatar-preview { width: 100%; } .avatar-canvas { height: 320px; } }
+@media (max-width: 860px) { .avatar-layout { flex-direction: column; align-items: stretch; } .palette { grid-template-columns: repeat(6, 36px); } .swatch { width: 36px; height: 36px; } .avatar-preview { width: 100%; } .avatar-canvas { height: 320px; } }
 `;
 document.head.append(style);

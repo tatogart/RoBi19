@@ -111,10 +111,49 @@
 .dev-console form input { flex: 1; background: #111; border: 0; color: #fff; padding: 8px 12px; font-family: Consolas, Menlo, monospace; outline: none; }
 
 /* mobile controls */
-.touch-stick { position: absolute; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, .15); border: 2px solid rgba(255, 255, 255, .4); display: none; pointer-events: none; }
-.touch-stick .knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, .5); }
-.jump-btn { position: absolute; right: 30px; bottom: 40px; width: 80px; height: 80px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .5); background: rgba(255, 255, 255, .15); color: #fff; font-weight: 700; display: none; }
-@media (hover: none) and (pointer: coarse) { .jump-btn { display: block; } .chat { width: 280px; font-size: 15px; } }
+.game-root { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.touch-stick { position: absolute; left: 40px; bottom: 50px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, .12); border: 2px solid rgba(255, 255, 255, .35); display: none; pointer-events: none; opacity: .55; transition: opacity .15s; }
+.touch-stick.active { opacity: 1; bottom: auto; }
+.touch-stick .knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255, 255, 255, .55); box-shadow: 0 0 6px rgba(0, 0, 0, .3); }
+.jump-btn { position: absolute; right: calc(28px + env(safe-area-inset-right)); bottom: calc(36px + env(safe-area-inset-bottom)); width: 86px; height: 86px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .55); background: rgba(31, 31, 31, .35); color: #fff; display: none; padding: 20px; touch-action: none; }
+.jump-btn svg { width: 100%; height: 100%; }
+.jump-btn.down { background: rgba(255, 255, 255, .35); transform: scale(.94); }
+.fs-btn { display: none !important; }
+.rotate-hint { position: absolute; left: 50%; top: 44px; transform: translateX(-50%); background: rgba(31, 31, 31, .75); border-radius: 16px; padding: 6px 12px; font-size: 14px; display: none; align-items: center; gap: 8px; white-space: nowrap; z-index: 4; }
+.rotate-hint button { background: none; border: 0; color: #fff; font-size: 18px; padding: 0 2px; }
+.game-root.touch .touch-stick, .game-root.touch .jump-btn { display: block; }
+.game-root.touch .fs-btn { display: flex !important; }
+.game-root.touch .lock-btn { display: none; }
+.game-root.touch .topbar { top: env(safe-area-inset-top); left: env(safe-area-inset-left); height: 44px; gap: 6px; }
+.game-root.touch .topbar button { width: 40px; height: 36px; }
+.game-root.touch .topbar svg { width: 22px; height: 22px; }
+.game-root.touch .chat { top: calc(48px + env(safe-area-inset-top)); left: calc(4px + env(safe-area-inset-left)); width: min(320px, 55vw); font-size: 14px; }
+.game-root.touch .chat .log { max-height: 120px; }
+.game-root.touch .chat .bar { opacity: 1; }
+.game-root.touch .chat input { font-size: 16px; }
+.game-root.touch .leaderboard { font-size: 14px; min-width: 130px; top: calc(4px + env(safe-area-inset-top)); right: calc(4px + env(safe-area-inset-right)); }
+.leaderboard.collapsed tr:not(:first-child) { display: none; }
+.leaderboard.collapsed th:first-child::after { content: ' ▾'; }
+.game-root.touch .hint { top: calc(48px + env(safe-area-inset-top)); font-size: 15px; }
+.game-root.touch .message-full { font-size: 22px; }
+.game-root.touch .name-tag .nt-name { font-size: 13px; }
+.game-root.touch .bubble { font-size: 13px; max-width: 180px; }
+.game-root.touch .healthbar { right: calc(10px + env(safe-area-inset-right)); width: 130px; }
+@media (orientation: portrait) { .game-root.touch .rotate-hint { display: flex; } .game-root.touch .chat { width: 62vw; } }
+@media (max-width: 760px), (max-height: 500px) {
+  .esc-panel { width: 100%; max-width: 100%; height: 100%; max-height: 100%; border-radius: 0; }
+  .esc-tabs button { padding: 10px; font-size: 15px; }
+  .esc-body { padding: 10px 14px; }
+  .esc-actions { flex-wrap: wrap; gap: 8px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); }
+  .esc-actions button { flex: 1 1 30%; padding: 12px 6px; font-size: 15px; }
+  .esc-actions kbd { display: none; }
+  .esc-setting input[type=range] { width: 140px; }
+  .esc-confirm { padding-top: 20px; }
+  .esc-confirm h2 { font-size: 20px; }
+  .dev-console { width: 100%; height: 70%; }
+  .loading-screen .ls-name { font-size: 28px; }
+}
+.game-root.touch .fps { bottom: auto; top: 4px; left: 50%; }
 
 /* crosshair for first person / shift lock */
 .crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; pointer-events: none; display: none; }
@@ -122,3 +161,4 @@
 .crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
 .crosshair::after { top: 10px; left: 0; width: 22px; height: 2px; }
 .fps { position: absolute; bottom: 4px; left: 6px; font-size: 12px; color: rgba(255, 255, 255, .6); pointer-events: none; }
+.game-root .hidden, .game-root.touch .fs-btn.hidden { display: none !important; }

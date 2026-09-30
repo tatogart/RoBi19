@@ -128,6 +128,9 @@ docker run -p 3000:3000 -v robis-data:/data robis
 
 ## Controls
 
+On phones and tablets the game shows the 2019-style **dynamic thumbstick**: touch anywhere in the lower-left area to move, drag elsewhere to turn the camera, pinch to zoom, and use the round **jump** button. The top bar also gets a **fullscreen** button, which locks landscape where the browser allows it. You can also add Robis to your home screen as an app (PWA).
+
+
 | Action | Keys |
 |---|---|
 | Move | `W A S D` / arrow keys (touch: left thumbstick) |

@@ -765,10 +765,26 @@ class Studio {
     if (k === 'f' && document.activeElement === this.viewport.canvas) { this.viewport.focusSelection(); }
   }
 
+  // Studio needs a mouse, keyboard and a big screen; say so on phones.
+  phoneGate() {
+    const small = Math.min(innerWidth, innerHeight) < 600 && matchMedia('(pointer: coarse)').matches;
+    if (!small || sessionStorage.getItem('robis.studioOnPhone')) return Promise.resolve();
+    return new Promise((resolve) => {
+      const gate = h('div', { class: 'phone-gate' },
+        h('img', { src: '/img/icon.svg', alt: '' }),
+        h('h2', { text: 'Robis Studio works best on a computer' }),
+        h('p', { text: 'Building needs a mouse, a keyboard and a big screen. You can still play every game on your phone!' }),
+        h('a', { class: 'sbtn primary', href: '/games', text: 'Play games' }),
+        h('button', { class: 'sbtn', text: 'Open Studio anyway', onclick: () => { try { sessionStorage.setItem('robis.studioOnPhone', '1'); } catch { /* ignore */ } gate.remove(); resolve(); } }));
+      document.body.append(gate);
+    });
+  }
+
   // ------------------------------------------------------------ boot
   async init() {
     this.me = await getMe();
     if (!this.me) { location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search); return; }
+    await this.phoneGate();
     $('studio-user').append(h('span', { text: this.me.username }), h('a', { href: '/develop', text: 'Create page' }));
     this.viewport = new Viewport(this, $('viewport'));
     this.explorer = new Explorer(this, $('explorer'), $('explorer-filter'));
