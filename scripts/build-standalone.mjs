@@ -107,6 +107,9 @@ const sw = fs.readFileSync(r('standalone/sw.js'), 'utf8')
   .replace('__FILES__', JSON.stringify(list));
 fs.writeFileSync(path.join(OUT, 'sw.js'), sw);
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
+// Short install command for a VPS console where pasting doesn't work:
+//   curl -L tatogart.github.io/RoBi19/i.sh | bash
+fs.copyFileSync(r('scripts/install-server.sh'), path.join(OUT, 'i.sh'));
 
 const size = walk(OUT).reduce((a, f) => a + fs.statSync(f).size, 0);
 console.log(`Standalone Robis built in dist/ (${list.length} files, ${(size / 1024 / 1024).toFixed(1)} MB, base "${BASE || '/'}")`);
