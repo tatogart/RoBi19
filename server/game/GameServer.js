@@ -232,7 +232,10 @@ export class GameServer {
     return session;
   }
 
-  playerInfo(s) { return { userId: s.user.id, name: s.user.username, avatar: s.avatar, playerId: s.player && s.player.id }; }
+  playerInfo(s) {
+    const flags = Object.keys(s.user.flags || {}).filter((f) => s.user.flags[f]);
+    return { userId: s.user.id, name: s.user.username, avatar: s.avatar, playerId: s.player && s.player.id, flags };
+  }
 
   leave(session, reason = 'left') {
     if (!this.sessions.has(session.user.id) || this.sessions.get(session.user.id) !== session) return;

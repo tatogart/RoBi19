@@ -1,6 +1,6 @@
 import { initPage } from '../layout.js';
 import { api } from '../api.js';
-import { el, qs, fmtFull, fmtDate, headshotImg, avatarCard, gameCard, itemCard, presenceText, toast, modal, spinner, icon, launchGame, MEMBERSHIP } from '../ui.js';
+import { el, qs, fmtFull, fmtDate, headshotImg, avatarCard, gameCard, itemCard, presenceText, toast, modal, spinner, icon, launchGame, MEMBERSHIP, nameBadges } from '../ui.js';
 import { avatarFullBody } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'profile', requireAuth: false });
@@ -41,10 +41,9 @@ const header = el('div', { class: 'panel profile-header' },
   el('div', { class: 'profile-headshot' }, headshotImg(user, 300),
     user.presence.status !== 'offline' ? el('span', { class: 'presence-dot ' + user.presence.status, style: { width: '26px', height: '26px', right: '10px', bottom: '10px' } }) : null),
   el('div', { class: 'profile-main' },
-    el('div', { class: 'row' }, el('h1', { class: 'no-i18n', style: { margin: 0 }, text: user.username }),
+    el('div', { class: 'row' }, el('h1', { class: 'no-i18n', style: { margin: 0 }, text: user.username }), nameBadges(user) ? el('span', { class: 'name-badges big' }, ...nameBadges(user).childNodes) : null,
       MEMBERSHIP[user.membership] ? el('span', { class: 'pill', title: MEMBERSHIP[user.membership].name, style: { background: MEMBERSHIP[user.membership].color, color: '#fff' }, text: MEMBERSHIP[user.membership].short }) : null,
-      user.isAdmin ? el('span', { class: 'pill', style: { background: '#00a2ff', color: '#fff' }, text: 'Admin' }) : null,
-      user.isSystem ? el('span', { class: 'pill', style: { background: '#00a2ff', color: '#fff' }, text: 'Official' }) : null),
+      null),
     statusLine,
     el('div', { class: 'muted small', text: presenceText(user.presence) }),
     el('div', { class: 'profile-counts' },

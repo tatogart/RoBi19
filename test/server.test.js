@@ -394,3 +394,19 @@ test('item creators make custom catalog items (BETA)', async () => {
   assert.equal((await call('DELETE', `/catalog/${made.id}`, null, maker)).status, 200);
   assert.equal((await call('GET', `/catalog/${made.id}`)).status, 404);
 });
+
+test('name badges are only given by admins', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const star = (await call('POST', '/auth/signup', { username: 'StarKid', password: 'secret123' })).cookie;
+  const starId = (await call('GET', '/auth/me', null, star)).data.user.id;
+  assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, []); // nobody gets badges by default
+  // the official Robis account made the seeded games and has the check + Robis icon
+  const game = (await call('GET', '/games?sort=popular')).data.games[0];
+  assert.deepEqual(game.creator.flags, ['verified', 'staff']);
+  assert.equal((await call('POST', `/admin/users/${starId}/flags`, { staff: true }, star)).status, 403);
+  const r = await call('POST', `/admin/users/${starId}/flags`, { verified: true, bogus: true }, admin);
+  assert.equal(r.status, 200);
+  assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, ['verified']);
+  await call('POST', `/admin/users/${starId}/flags`, {}, admin);
+  assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, []);
+});

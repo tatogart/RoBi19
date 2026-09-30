@@ -174,7 +174,7 @@ export class GameClient {
         return;
       }
       case 'chat': {
-        this.hud.addChat(m.name, m.text);
+        this.hud.addChat(m.name, m.text, { flags: this.playerInfos.get(m.userId)?.flags });
         const v = this.views.get(m.userId);
         if (v) v.bubble(m.text);
         return;

@@ -1,4 +1,5 @@
 // In-game HUD: chat, leaderboard, health, hints, escape menu, dialogs, console.
+import { badgesHtml } from '../badges.js';
 import { nameColor } from './characters.js';
 import { avatarHeadshot } from '../render/thumbs.js';
 import { setVolume, getVolume, click } from './sound.js';
@@ -150,7 +151,7 @@ export class HUD {
   addChat(name, text, opts = {}) {
     const line = h('div', 'line' + (opts.system ? ' system' : ''));
     if (opts.system) line.textContent = text;
-    else line.innerHTML = `<span class="who" style="color:${nameColor(name)}">[${esc(name)}]:</span> ${esc(text)}`;
+    else line.innerHTML = `<span class="who" style="color:${nameColor(name)}">[${esc(name)}]${badgesHtml(opts.flags)}:</span> ${esc(text)}`;
     this.chatLog.append(line);
     while (this.chatLog.children.length > 100) this.chatLog.firstChild.remove();
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
@@ -176,7 +177,8 @@ export class HUD {
         stats[v.Name] = v._p.Value;
       }
       const team = p._p.Team;
-      return { name: p.Name, me: p._p.UserId === myUserId, stats, team: team ? team.Name : '', color: team ? team._p.TeamColor.toHex() : '' };
+      const info = this.client.playerInfos.get(p._p.UserId);
+      return { name: p.Name, me: p._p.UserId === myUserId, stats, team: team ? team.Name : '', color: team ? team._p.TeamColor.toHex() : '', flags: info ? info.flags : [] };
     });
     cols = cols.slice(0, 4);
     if (cols.length) rows.sort((a, b) => (+b.stats[cols[0]] || 0) - (+a.stats[cols[0]] || 0));
@@ -184,7 +186,7 @@ export class HUD {
     const key = JSON.stringify([rows, cols]);
     if (key === this._boardKey) return;
     this._boardKey = key;
-    const row = (r) => `<tr class="${r.me ? 'me' : ''}"><td>${esc(r.name)}</td>${cols.map((c) => `<td>${esc(fmt(r.stats[c]))}</td>`).join('')}</tr>`;
+    const row = (r) => `<tr class="${r.me ? 'me' : ''}"><td>${esc(r.name)}${badgesHtml(r.flags)}</td>${cols.map((c) => `<td>${esc(fmt(r.stats[c]))}</td>`).join('')}</tr>`;
     // Group by team (with the team's colour and summed first stat), like 2019.
     const teams = [...new Set(rows.map((r) => r.team))];
     const body = teams.length > 1 || teams[0] ? teams.map((t) => {
@@ -289,7 +291,7 @@ export class HUD {
       const row = h('div', 'esc-player');
       const img = h('img');
       avatarHeadshot(info.avatar, 88).then((u) => { img.src = u; });
-      const name = h('div', '', `<b>${esc(info.name)}</b>${info.userId === this.client.userId ? ' <span style="color:#aaa">(you)</span>' : ''}`);
+      const name = h('div', '', `<b>${esc(info.name)}</b>${badgesHtml(info.flags)}${info.userId === this.client.userId ? ' <span style="color:#aaa">(you)</span>' : ''}`);
       name.style.flex = '1';
       const prof = h('a', '', 'Profile');
       prof.href = `/profile?id=${info.userId}`;

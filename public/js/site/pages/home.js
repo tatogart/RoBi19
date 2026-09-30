@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, gameCard, avatarCard, headshotImg, toast, spinner, MEMBERSHIP, joinFriendDialog } from '../ui.js';
+import { el, gameCard, avatarCard, headshotImg, toast, spinner, MEMBERSHIP, joinFriendDialog, nameBadges } from '../ui.js';
 
 const me = await initPage({ active: 'home' });
 const app = document.getElementById('app');
@@ -8,7 +8,7 @@ const app = document.getElementById('app');
 const greeting = el('div', { class: 'section row greet', style: { gap: '20px' } },
   el('div', { class: 'greet-head', style: { width: '128px', height: '128px', borderRadius: '50%', overflow: 'hidden', background: '#d4d4d4', flex: 'none' } }, headshotImg(me, 256)),
   el('div', {},
-    el('h1', { style: { margin: 0 }, text: `Hello, ${me.username}!` }),
+    el('div', { class: 'row', style: { gap: '8px' } }, el('h1', { style: { margin: 0 }, text: `Hello, ${me.username}!` }), nameBadges(me) ? el('span', { class: 'name-badges big' }, ...nameBadges(me).childNodes) : null),
     MEMBERSHIP[me.membership] ? el('div', { class: 'pill', style: { background: MEMBERSHIP[me.membership].color, color: '#fff' }, text: MEMBERSHIP[me.membership].name.toUpperCase() }) : null,
     me.isAdmin ? el('a', { class: 'pill', href: '/admin', style: { background: '#00a2ff', color: '#fff', marginLeft: '6px' }, text: 'ADMIN PANEL' }) : null,
     window.ROBIS_STANDALONE ? el('div', { style: { marginTop: '10px' } }, el('button', { class: 'btn btn-green', text: 'Join a friend', onclick: joinFriendDialog })) : null));

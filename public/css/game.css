@@ -185,3 +185,7 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .esc-empty { opacity: .7; padding: 10px 0; }
 .esc-player button.primary { background: #00a2ff; color: #fff; border: 0; border-radius: 4px; padding: 6px 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
 .esc-player button:disabled { opacity: .7; }
+
+.name-badge { display: inline-flex; width: 14px; height: 14px; margin-left: 3px; vertical-align: -2px; }
+.name-badge svg, .name-badge img { width: 100%; height: 100%; }
+.name-badge.staff img { transform: rotate(-12deg); }

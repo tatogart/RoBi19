@@ -351,3 +351,14 @@ html[data-theme="dark"] .game-card .title, html[data-theme="dark"] .item-card .n
 .cp-info { flex: 1; min-width: 0; font-size: 14px; }
 .cp-info a { color: var(--text); font-weight: 600; }
 .cp-empty { padding: 14px; text-align: center; }
+
+/* ------------------------------------------------------------ name badges */
+.name-badges { display: inline-flex; gap: 3px; align-items: center; vertical-align: middle; margin-left: 4px; }
+.name-badge { display: inline-flex; width: 16px; height: 16px; }
+.name-badge svg, .name-badge img { width: 100%; height: 100%; }
+.name-badge.staff img { transform: rotate(-12deg); }
+.name-badges.big { margin-left: 8px; }
+.name-badges.big .name-badge { width: 26px; height: 26px; }
+.user-link { display: inline-flex; align-items: center; }
+.avatar-card .name { display: flex; justify-content: center; align-items: center; }
+.game-card .by { display: flex; align-items: center; }

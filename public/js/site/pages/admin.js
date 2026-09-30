@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner } from '../ui.js';
+import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner, nameBadges } from '../ui.js';
 
 const me = await initPage({ active: 'admin' });
 const app = document.getElementById('app');
@@ -55,7 +55,7 @@ function row(u) {
   return el('div', { class: 'admin-row' + (u.banned ? ' banned' : '') },
     el('a', { class: 'admin-head', href: `/profile?id=${u.id}` }, headshotImg(u, 96)),
     el('div', { class: 'admin-info' },
-      el('div', {}, el('a', { href: `/profile?id=${u.id}` }, el('b', { text: u.username })),
+      el('div', {}, el('a', { href: `/profile?id=${u.id}` }, el('b', { class: 'no-i18n', text: u.username })), nameBadges(u),
         u.isAdmin ? el('span', { class: 'pill admin-pill', text: 'Admin' }) : null,
         ...(u.perms || []).map((p) => el('span', { class: 'pill perm-pill', text: { moderator: 'Moderator', economy: 'Economy', items: 'Item Creator', games: 'Curator' }[p] || p })),
         u.banned ? el('span', { class: 'pill ban-pill', text: (u.deviceBan ? 'Device ban' : 'Banned') + (u.banUntil ? ' until ' + new Date(u.banUntil).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') }) : null),
@@ -66,7 +66,26 @@ function row(u) {
       perm('economy') ? tier : null,
       self || !me.isAdmin ? null : el('button', { class: 'btn btn-small', text: u.isAdmin ? 'Remove admin' : 'Make admin', onclick: () => act(`/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin }, u.isAdmin ? 'Admin removed' : `${u.username} is now an admin`) }),
       self || !me.isAdmin || u.isAdmin ? null : el('button', { class: 'btn btn-small', text: 'Permissions', onclick: () => permsDialog(u) }),
+      me.isAdmin ? el('button', { class: 'btn btn-small', text: 'Badges', onclick: () => flagsDialog(u) }) : null,
       self || !perm('moderator') ? null : el('button', { class: 'btn btn-small btn-red', text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) })));
+}
+
+// Admins decide who gets the check, the Robis icon and the star (see FLAGS in server/api.js).
+function flagsDialog(u) {
+  const boxes = data.flags.map((f) => {
+    const cb = el('input', { type: 'checkbox', checked: (u.flags || []).includes(f.id) });
+    cb.dataset.flag = f.id;
+    return el('label', { class: 'perm-row' }, cb, nameBadges({ flags: [f.id] }), el('span', { text: f.label }));
+  });
+  modal({
+    title: `Badges for ${u.username}`,
+    body: el('div', {}, el('p', { class: 'small muted', text: 'Badges are shown next to the name everywhere: profile, games, chat and the player list.' }), boxes),
+    buttons: [{ text: 'Save', cls: 'btn-primary', onClick: () => {
+      const body = {};
+      for (const b of boxes) { const cb = b.firstChild; body[cb.dataset.flag] = cb.checked; }
+      return act(`/admin/users/${u.id}/flags`, body, 'Badges saved');
+    } }, { text: 'Cancel' }],
+  });
 }
 
 // Admins give other players rights (see PERMISSIONS in server/api.js).

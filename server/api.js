@@ -28,6 +28,13 @@ export const PERMISSIONS = {
   items: 'Item Creator (BETA): make catalog items',
   games: 'Game Curator: feature games on the front page',
 };
+// Name badges shown next to a username. Only admins hand them out (Admin Panel).
+export const FLAGS = {
+  verified: 'Verified (blue check)',
+  staff: 'Robis icon (official / staff)',
+  star: 'Star Creator',
+};
+export const userFlags = (u) => Object.keys(FLAGS).filter((f) => u && u.flags && u.flags[f]);
 export const can = (u, perm) => !!u && (u.isAdmin || (u.perms || []).includes(perm));
 
 // opts.firstUserIsAdmin: the first account on a fresh server becomes admin (shared server).
@@ -65,6 +72,9 @@ export function createApi(db, manager, opts = {}) {
   if (opts.requireAdminCode) for (const u of Object.values(D.users)) if (u.isAdmin && !u.adminByCode) revokeAdmin(u);
   // Also for admins created before perks existed.
   for (const u of Object.values(D.users)) grantAdminPerks(u);
+  // The official Robis account wears the Robis icon and the check (once; admins can change it).
+  for (const u of Object.values(D.users)) if (u.system && u.username === 'Robis' && !u.flags) u.flags = { staff: true, verified: true };
+
   // New showcase places reach existing worlds too.
   addSeedGames(db);
 
@@ -170,7 +180,7 @@ export function createApi(db, manager, opts = {}) {
     if (!u) return null;
     const out = {
       id: u.id, username: u.username, created: u.created, status: u.status || '',
-      membership: u.membership || 'None', isAdmin: !!u.isAdmin, isSystem: !!u.system, presence: presence(u),
+      membership: u.membership || 'None', isAdmin: !!u.isAdmin, isSystem: !!u.system, presence: presence(u), flags: userFlags(u),
       avatar: resolvedAvatar(u),
     };
     if (full) {
@@ -203,7 +213,7 @@ export function createApi(db, manager, opts = {}) {
     const total = g.upVotes + g.downVotes;
     return {
       id: g.id, name: g.name, description: g.description, genre: g.genre,
-      creator: creator ? { id: creator.id, username: creator.username } : null,
+      creator: creator ? { id: creator.id, username: creator.username, flags: userFlags(creator) } : null,
       created: g.created, updated: g.updated, visits: g.visits, maxPlayers: g.maxPlayers,
       isPublic: g.isPublic, playing, upVotes: g.upVotes, downVotes: g.downVotes,
       rating: total ? Math.round((g.upVotes / total) * 100) : null, favorites: g.favorites, featured: !!g.featured,
@@ -218,7 +228,7 @@ export function createApi(db, manager, opts = {}) {
     const creator = D.users[it.creatorId];
     return {
       id: it.id, name: it.name, type: it.type, price: it.price, data: it.data, description: it.description,
-      creator: creator ? { id: creator.id, username: creator.username } : null,
+      creator: creator ? { id: creator.id, username: creator.username, flags: userFlags(creator) } : null,
       created: it.created, sales: it.sales, limited: it.limited, remaining: it.remaining, custom: !!it.custom,
       owned: user ? (D.inventory[user.id] || []).includes(it.id) : false,
     };
@@ -890,6 +900,7 @@ export function createApi(db, manager, opts = {}) {
       users: users.sort((a, b) => b.lastOnline - a.lastOnline).map(adminUser),
       memberships: Object.entries(MEMBERSHIPS).map(([id, m]) => ({ id, name: m.name })),
       permissions: Object.entries(PERMISSIONS).map(([id, label]) => ({ id, label })),
+      flags: Object.entries(FLAGS).map(([id, label]) => ({ id, label })),
     });
   });
 
@@ -925,6 +936,16 @@ export function createApi(db, manager, opts = {}) {
     const u = target(req, res); if (!u) return;
     if (u.id === req.user.id) return bad(res, 'You can\'t change your own admin rights.');
     if (req.body?.isAdmin) { u.isAdmin = true; u.adminByCode = true; grantAdminPerks(u); } else { u.adminByCode = false; revokeAdmin(u); }
+    db.save();
+    res.json({ user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/flags', requireAdmin, (req, res) => {
+    const u = D.users[toInt(req.params.id)];
+    if (!u) return bad(res, 'User not found', 404);
+    u.flags = {};
+    for (const f of Object.keys(FLAGS)) if (req.body?.[f]) u.flags[f] = true;
+    log(u.id, 0, `Badges set by ${req.user.username}: ${userFlags(u).join(', ') || 'none'}`);
     db.save();
     res.json({ user: adminUser(u) });
   });

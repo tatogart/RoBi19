@@ -55,6 +55,7 @@
 - **Game invites**: Esc menu → Players → *Invite Friends*; the friend gets a popup with **Join** on any page or in their game.
 - **Create Item (BETA)**: draw a T-shirt or face in the pixel editor (or upload a picture), or make shirts, pants, hats and hair from patterns, models and colours. Items go on sale in the Catalog; the creator gets 70%. Needs the *Item Creator* right.
 - **Rights from the Admin Panel**: admins give players *Moderator* (ban, kick, mute), *Economy* (Robits, items, Builders Club), *Item Creator (BETA)* and *Game Curator* (choose Featured games).
+- **Name badges** like on Roblox: a blue **verified check**, the **Robis icon** (official / staff) and a **Star Creator** star, shown next to the name on profiles, game and item pages, in chat and on the in-game player list. Nobody gets them automatically (only the official *Robis* account has the check and icon) — admins hand them out in **Admin Panel → Badges**.
 
 ### 🎮 Game client
 - Multiplayer over WebSocket with a server-authoritative world and client-side character movement.

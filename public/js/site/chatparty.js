@@ -1,7 +1,7 @@
 // The "Chat & Party" bar from 2016–2019: bottom-right, shows which friends
 // are online and lets you jump into their game or message them.
 import { api } from './api.js';
-import { el, headshotImg, presenceText, launchGame } from './ui.js';
+import { el, headshotImg, presenceText, launchGame, userLink } from './ui.js';
 
 export function startChatParty(me) {
   if (matchMedia('(max-width: 900px)').matches) return; // phones use the tab bar instead
@@ -21,7 +21,7 @@ export function startChatParty(me) {
       count.textContent = friends.filter((f) => f.presence.status !== 'offline').length;
       list.replaceChildren(...(friends.length ? friends.map((f) => el('div', { class: 'cp-row' },
         el('a', { class: 'cp-head-img', href: `/profile?id=${f.id}` }, headshotImg(f, 64), el('span', { class: 'presence-dot ' + f.presence.status })),
-        el('div', { class: 'cp-info' }, el('a', { class: 'no-i18n', href: `/profile?id=${f.id}`, text: f.username }), el('div', { class: 'small muted', text: presenceText(f.presence) })),
+        el('div', { class: 'cp-info' }, userLink(f), el('div', { class: 'small muted', text: presenceText(f.presence) })),
         f.presence.status === 'ingame' && f.presence.gameId
           ? el('button', { class: 'btn btn-small btn-green', text: 'Join', onclick: () => launchGame(f.presence.gameId) })
           : el('a', { class: 'btn btn-small', href: `/messages?to=${encodeURIComponent(f.username)}`, text: 'Message' })))

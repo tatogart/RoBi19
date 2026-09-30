@@ -1,6 +1,6 @@
 import { initPage } from '../layout.js';
 import { api } from '../api.js';
-import { el, icon, iconSvg, fmtNum, fmtFull, fmtDate, qs, toast, launchGame, headshotImg, gameCard, spinner, joinFriendDialog } from '../ui.js';
+import { el, icon, iconSvg, fmtNum, fmtFull, fmtDate, qs, toast, launchGame, headshotImg, gameCard, spinner, joinFriendDialog, userLink } from '../ui.js';
 import { gameThumbnail } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'games', requireAuth: false });
@@ -39,7 +39,7 @@ renderVotes();
 const playBtn = el('button', { class: 'btn btn-green play-btn', onclick: () => { if (!needLogin()) launchGame(id); } }, el('span', { html: iconSvg('play'), style: { width: '34px', height: '34px', display: 'inline-flex' } }));
 const details = el('div', { class: 'game-details' },
   el('h1', { text: game.name }),
-  el('div', { class: 'muted' }, 'By ', game.creator ? el('a', { href: `/profile?id=${game.creator.id}`, text: game.creator.username }) : 'Unknown'),
+  el('div', { class: 'muted' }, 'By ', game.creator ? userLink(game.creator) : 'Unknown'),
   !game.isPublic ? el('div', { class: 'pill', style: { marginTop: '8px', background: '#ffe3e3' }, text: 'Private — only you can play this' }) : null,
   el('div', { class: 'spacer' }),
   playBtn,

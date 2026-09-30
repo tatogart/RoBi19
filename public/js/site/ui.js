@@ -1,5 +1,6 @@
 // Shared UI helpers: DOM builder, icons, cards, modals, formatting.
 import { LANG } from '../i18n.js';
+import { BADGE_SVG, BADGE_TITLE } from '../badges.js';
 import { avatarHeadshot, gameThumbnail, itemThumbnail } from '../render/thumbs.js';
 
 export function el(tag, attrs = {}, ...children) {
@@ -87,6 +88,18 @@ export function presenceText(p) {
   return p.lastOnline ? 'Last online ' + timeAgo(p.lastOnline) : 'Offline';
 }
 
+// ------------------------------------------------------------ name badges
+// Verified check, Robis icon and Star Creator next to names. Only admins give them out.
+export function nameBadges(user) {
+  const flags = (user && user.flags) || [];
+  if (!flags.length) return null;
+  return el('span', { class: 'name-badges' }, flags.filter((f) => BADGE_SVG[f]).map((f) => el('span', { class: 'name-badge ' + f, title: BADGE_TITLE[f], html: BADGE_SVG[f] })));
+}
+// "Name ✓" as a link to the profile.
+export function userLink(user) {
+  return el('span', { class: 'user-link' }, el('a', { class: 'no-i18n', href: `/profile?id=${user.id}`, text: user.username }), nameBadges(user));
+}
+
 // ------------------------------------------------------------ cards
 export function gameCard(g) {
   const thumb = el('div', { class: 'thumb' });
@@ -100,7 +113,7 @@ export function gameCard(g) {
         el('span', { html: iconSvg('thumbup') + ' ' + (g.rating === null ? '--' : g.rating + '%') }),
         el('span', { html: iconSvg('people') + ' ' + fmtNum(g.playing) }),
       ),
-      g.creator ? el('div', { class: 'by', text: 'By ' + g.creator.username }) : null,
+      g.creator ? el('div', { class: 'by' }, el('span', { text: 'By ' + g.creator.username }), nameBadges(g.creator)) : null,
     ));
 }
 
@@ -116,7 +129,7 @@ export function avatarCard(user) {
   if (st && st !== 'offline') hs.append(el('span', { class: 'presence-dot ' + st }));
   return el('a', { class: 'avatar-card', href: `/profile?id=${user.id}` },
     hs,
-    el('div', { class: 'name', text: user.username }),
+    el('div', { class: 'name' }, el('span', { class: 'no-i18n', text: user.username }), nameBadges(user)),
     el('div', { class: 'presence', text: presenceText(user.presence) }));
 }
 

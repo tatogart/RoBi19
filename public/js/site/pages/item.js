@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, icon, fmtFull, fmtDate, qs, modal, toast } from '../ui.js';
+import { el, icon, fmtFull, fmtDate, qs, modal, toast, userLink } from '../ui.js';
 import { itemThumbnail } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'catalog', requireAuth: false });
@@ -43,7 +43,7 @@ renderBuy();
 app.append(el('div', { class: 'panel item-page' }, thumb,
   el('div', { class: 'item-info' },
     el('h1', { text: item.name }),
-    el('div', { class: 'muted' }, 'By ', item.creator ? el('a', { href: `/profile?id=${item.creator.id}`, text: item.creator.username }) : 'Robis'),
+    el('div', { class: 'muted' }, 'By ', item.creator ? userLink(item.creator) : 'Robis'),
     item.limited ? el('span', { class: 'pill', style: { background: '#02b757', color: '#fff', marginTop: '8px' }, text: 'LIMITED' }) : null,
     item.custom ? el('span', { class: 'pill', style: { background: '#6b327c', color: '#fff', marginTop: '8px' }, text: 'BETA · made by a player' }) : null,
     item.custom && me && (item.creator?.id === me.id || me.isAdmin || (me.perms || []).includes('moderator'))
