@@ -730,6 +730,8 @@ export const Humanoid = defineClass('Humanoid', Instance, {
     DisplayName: { type: 'string', default: '', cat: 'Data' },
     Sit: { type: 'bool', default: false, cat: 'Control' },
     Jump: { type: 'bool', default: false, cat: 'Control' },
+    // Robis extra: the player flies (Space up, Q down; on phones the Jump and ▼ buttons).
+    Flying: { type: 'bool', default: false, cat: 'Control' },
   },
   events: ['Died', 'HealthChanged', 'Touched', 'Running', 'Jumping', 'FreeFalling', 'StateChanged'],
 });

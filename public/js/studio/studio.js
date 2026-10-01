@@ -868,11 +868,18 @@ class Studio {
     $('output-clear').onclick = () => $('output').replaceChildren();
     $('toolbox-filter').addEventListener('input', () => this.renderToolbox());
     $('toolbox-filter').addEventListener('keydown', (e) => e.stopPropagation());
+    // Multi-line: pasted scripts keep their line breaks; Enter runs, Shift+Enter adds a line.
+    const growCmd = () => { const t = $('command-input'); t.style.height = '24px'; t.style.height = Math.min(160, t.scrollHeight) + 'px'; };
+    $('command-input').addEventListener('input', growCmd);
+    $('command-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('command-bar').requestSubmit(); }
+    });
     $('command-bar').addEventListener('submit', (e) => {
       e.preventDefault();
       const src = $('command-input').value.trim();
       if (!src) return;
       $('command-input').value = '';
+      growCmd();
       this.log('info', '> ' + src);
       if (this.playing && this.client) this.client.send({ t: 'exec', src });
       else this.log('warn', 'The command bar runs Lua on the test server. Press Play (F5) first.');

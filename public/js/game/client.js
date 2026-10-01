@@ -565,12 +565,24 @@ export class GameClient {
       v.ry += d * Math.min(1, dt * 14);
     }
     const wasGrounded = s.grounded;
-    stepCharacter(s, { mx, mz, jump: this.input.wantsJump() }, dt, { query: (a, b, c, d) => this.world.query(a, b, c, d), gravity: this.game.GetService('Workspace')._p.Gravity }, humP);
+    this.hud.setFlying?.(!!humP.Flying);
+    if (humP.Flying) {
+      // Free flight: no gravity, Space/Jump goes up, Q/▼ goes down.
+      const k = this.input.keys;
+      const up = this.input.wantsJump() ? 1 : 0;
+      const down = (k.has('KeyQ') || this.input.touchDown) ? 1 : 0;
+      const speed = Math.max(16, humP.WalkSpeed) * 2;
+      s.vy = (up - down) * speed * 0.8;
+      s.jumped = true; // no snapping to the ground while hovering
+      stepCharacter(s, { mx, mz, jump: false }, dt, { query: (a, b, c, d) => this.world.query(a, b, c, d), gravity: 0 }, { ...humP, WalkSpeed: speed, JumpPower: 0 });
+    } else {
+      stepCharacter(s, { mx, mz, jump: this.input.wantsJump() }, dt, { query: (a, b, c, d) => this.world.query(a, b, c, d), gravity: this.game.GetService('Workspace')._p.Gravity }, humP);
+    }
     if (s.jumped && wasGrounded) sound.jump();
     s.groundCF = s.groundPart ? s.groundPart._p.CFrame : null;
 
     const hspeed = Math.hypot(s.vx, s.vz);
-    const anim = s.grounded ? (hspeed > 0.5 ? 'walk' : 'idle') : (s.vy > 0 ? 'jump' : 'fall');
+    const anim = humP.Flying && !s.grounded ? 'fall' : s.grounded ? (hspeed > 0.5 ? 'walk' : 'idle') : (s.vy > 0 ? 'jump' : 'fall');
     v.pos.set(s.x, s.y, s.z);
     v.anim = anim;
     v.speed = hspeed;

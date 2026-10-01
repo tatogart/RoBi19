@@ -114,7 +114,13 @@ export class HUD {
     this.useBtn.addEventListener('touchstart', useDown, { passive: false });
     this.useBtn.addEventListener('touchend', useUp);
     this.useBtn.addEventListener('touchcancel', useUp);
-    this.el.append(this.stick, this.jump, this.useBtn);
+    // Fly down (only while flying).
+    this.downBtn = h('button', 'fly-down-btn hidden', '▼');
+    const down = (on) => (e) => { client.input.touchDown = on; this.downBtn.classList.toggle('down', on); e.preventDefault(); e.stopPropagation(); };
+    this.downBtn.addEventListener('touchstart', down(true), { passive: false });
+    this.downBtn.addEventListener('touchend', down(false));
+    this.downBtn.addEventListener('touchcancel', down(false));
+    this.el.append(this.stick, this.jump, this.useBtn, this.downBtn);
     client.input.stickEl = this.stick;
     client.input.knobEl = this.stick.firstChild;
     const press = (on) => (e) => { client.input.touchJump = on; if (on) client.input.jumpTap = true; this.jump.classList.toggle('down', on); e.preventDefault(); e.stopPropagation(); };
@@ -434,9 +440,17 @@ export class HUD {
   _buildConsole() {
     this.console = h('div', 'dev-console', '<div class="dc-head">Developer Console<button title="Close">×</button></div><div class="dc-log"></div>');
     const form = h('form');
-    this.consoleInput = h('input');
-    this.consoleInput.placeholder = 'Server Lua or :commands (owners and admins)';
-    form.append(this.consoleInput);
+    // A textarea, so pasted multi-line scripts keep their line breaks
+    // (Enter runs, Shift+Enter adds a new line).
+    this.consoleInput = h('textarea');
+    this.consoleInput.rows = 1;
+    this.consoleInput.spellcheck = false;
+    this.consoleInput.placeholder = 'Server Lua or :commands (owners and admins). Shift+Enter: new line';
+    const run = h('button', '', 'Run');
+    run.type = 'submit';
+    form.append(this.consoleInput, run);
+    const grow = () => { const t = this.consoleInput; t.style.height = '34px'; t.style.height = Math.min(180, t.scrollHeight) + 'px'; };
+    this.consoleInput.addEventListener('input', grow);
     this.console.append(form);
     this.el.append(this.console);
     this.console.querySelector('button').onclick = () => this.toggleConsole(false);
@@ -445,17 +459,30 @@ export class HUD {
       const src = this.consoleInput.value.trim();
       if (!src) return;
       this.consoleInput.value = '';
+      grow();
       // ":kill all" etc. are chat commands; everything else is server Lua.
       if (src[0] === ':') this.client.send({ t: 'chat', text: src });
       else this.client.send({ t: 'exec', src });
     };
-    this.consoleInput.addEventListener('keydown', (e) => e.stopPropagation());
+    this.consoleInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+      if (e.code === 'F9' || e.key === 'Escape') { e.preventDefault(); this.toggleConsole(false); }
+    });
     this.consoleInput.addEventListener('focus', () => { this.client.input.enabled = false; });
     this.consoleInput.addEventListener('blur', () => { this.client.input.enabled = true; });
+  }
+  setFlying(on) {
+    if (on === this.flying || !this.downBtn) return;
+    this.flying = on;
+    this.downBtn.classList.toggle('hidden', !on);
   }
   toggleConsole(force) {
     const open = force === undefined ? !this.console.classList.contains('open') : force;
     this.console.classList.toggle('open', open);
+    // Closing gives the keyboard back to the game; opening puts the cursor in the box.
+    if (open) setTimeout(() => this.consoleInput.focus(), 0);
+    else this.consoleInput.blur();
   }
   log(entry) {
     const log = this.console.querySelector('.dc-log');

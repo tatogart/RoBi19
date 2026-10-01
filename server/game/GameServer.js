@@ -298,7 +298,7 @@ export class GameServer {
     const isAdmin = !!session.user.isAdmin;
     const isMod = isAdmin || !!(hooks0 && hooks0.can && hooks0.can(session.user, 'moderator'));
     const isOwner = isAdmin || session.user.id === this.creatorId;
-    const FUN = ['kill', 'respawn', 'heal', 'god', 'ungod', 'speed', 'jump', 'tp', 'bring', 'to', 'freeze', 'thaw', 'explode',
+    const FUN = ['kill', 'respawn', 'heal', 'god', 'ungod', 'fly', 'unfly', 'speed', 'jump', 'tp', 'bring', 'to', 'freeze', 'thaw', 'explode',
       'fire', 'sparkles', 'ff', 'unff', 'invisible', 'visible', 'clean', 'announce', 'hint', 'time'];
     const MODERATE = ['mute', 'unmute', 'kick'];
     const MOD = ['ban', 'hardban', 'unban'];
@@ -309,7 +309,7 @@ export class GameServer {
       || (MODERATE.includes(c) && (isMod || isOwner)) || (MOD.includes(c) && isMod);
     if (!allowed) return false;
     if (c === 'cmds') {
-      say(':kill :respawn :heal :god :ungod :speed n :jump n :freeze :thaw :explode :fire :sparkles :ff :unff :invisible :visible :clean :tp a b :bring :to :mute :unmute :kick · :announce text · :hint text · :time 0-24 · :players'
+      say(':kill :respawn :heal :god :ungod :fly :unfly :speed n :jump n :freeze :thaw :explode :fire :sparkles :ff :unff :invisible :visible :clean :tp a b :bring :to :mute :unmute :kick · :announce text · :hint text · :time 0-24 · :players'
         + (isMod ? ' · :ban name [1h|1d|7d|30d] reason · :hardban (also device) · :unban name' : '')
         + '  —  targets: name, me, all, others');
       return true;
@@ -367,6 +367,8 @@ export class GameServer {
         case 'heal': if (h) h.Health = h.MaxHealth; break;
         case 'god': if (h) { h._god = true; h.Health = h.MaxHealth; } break;
         case 'ungod': if (h) h._god = false; break;
+        case 'fly': if (h) { h.Flying = true; this.send(s, { t: 'sys', text: 'You can fly! Space / Jump: up, Q / ▼: down.' }); } break;
+        case 'unfly': if (h) h.Flying = false; break;
         case 'speed': if (h) h.WalkSpeed = num(parts[1], 0, 200, 50); break;
         case 'jump': if (h) h.JumpPower = num(parts[1], 0, 300, 120); break;
         case 'freeze': if (h) { h.WalkSpeed = 0; h.JumpPower = 0; } break;

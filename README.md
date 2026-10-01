@@ -150,6 +150,7 @@ There are no ready-made accounts with passwords: every player signs up on the la
   |---|---|
   | `:kill` `:respawn` `:heal` | Kill, respawn or heal |
   | `:god` / `:ungod`, `:ff` / `:unff` | Can't be hurt / force field |
+  | `:fly` / `:unfly` | Fly (Space up, Q down; on phones Jump and ▼) |
   | `:speed name 50`, `:jump name 120` | Walk speed and jump power |
   | `:freeze` / `:thaw` | Stop and release |
   | `:explode` `:fire` `:sparkles` `:clean` | Effects (and remove them) |

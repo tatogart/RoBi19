@@ -126,7 +126,7 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .output .l-info { color: #0f5fcf; }
 .output .t { color: #999; margin-right: 6px; }
 .command-bar { display: flex; border-top: 1px solid var(--s-border); flex: none; }
-.command-bar input { flex: 1; border: 0; padding: 4px 8px; font-family: Consolas, monospace; font-size: 12px; outline: none; }
+.command-bar textarea { flex: 1; border: 0; padding: 4px 8px; font-family: Consolas, monospace; font-size: 12px; line-height: 16px; outline: none; resize: none; height: 24px; max-height: 160px; box-sizing: border-box; background: inherit; color: inherit; }
 
 /* ------------------------------------------------------------ toolbox */
 .toolbox-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 6px; align-content: start; }

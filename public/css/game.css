@@ -109,7 +109,8 @@
 .dev-console .dc-log .error { color: #ff5c5c; }
 .dev-console .dc-log .info { color: #7fb8ff; }
 .dev-console form { display: flex; border-top: 1px solid #444; }
-.dev-console form input { flex: 1; background: #111; border: 0; color: #fff; padding: 8px 12px; font-family: Consolas, Menlo, monospace; outline: none; }
+.dev-console form textarea { flex: 1; background: #111; border: 0; color: #fff; padding: 8px 12px; font-family: Consolas, Menlo, monospace; font-size: 13px; outline: none; resize: none; height: 34px; max-height: 180px; line-height: 18px; box-sizing: border-box; }
+.dev-console form button { background: #2a2a2a; color: #fff; border: 0; border-left: 1px solid #444; padding: 0 14px; cursor: pointer; font-weight: 600; }
 
 /* mobile controls */
 .game-root { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -209,4 +210,7 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .use-btn { display: none; position: absolute; right: calc(36px + env(safe-area-inset-right)); bottom: calc(140px + env(safe-area-inset-bottom)); width: 70px; height: 70px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(196,40,28,.45); color: #fff; font-size: 30px; touch-action: none; }
 .use-btn.down { background: rgba(255,255,255,.4); transform: scale(.94); }
 .game-root.touch .use-btn:not(.hidden) { display: block; }
+.fly-down-btn { display: none; position: absolute; right: calc(124px + env(safe-area-inset-right)); bottom: calc(120px + env(safe-area-inset-bottom)); width: 64px; height: 64px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(31,31,31,.35); color: #fff; font-size: 24px; touch-action: none; }
+.fly-down-btn.down { background: rgba(255,255,255,.4); transform: scale(.94); }
+.game-root.touch .fly-down-btn:not(.hidden) { display: block; }
 @media (orientation: landscape) and (max-height: 500px) { .use-btn { right: calc(130px + env(safe-area-inset-right)); bottom: calc(28px + env(safe-area-inset-bottom)); } }
