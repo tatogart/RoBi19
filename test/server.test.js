@@ -554,3 +554,66 @@ test('deleting an account does not ban the device', async () => {
   assert.equal((await call('POST', '/account/delete', { password: 'secret123' }, friend)).status, 200);
   assert.equal((await call('GET', `/users/${friendId}`)).status, 404);
 });
+
+test('players resell Limited copies', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const s = (await call('POST', '/auth/signup', { username: 'Reseller', password: 'secret123' })).cookie;
+  const b = (await call('POST', '/auth/signup', { username: 'ResBuyer', password: 'secret123' })).cookie;
+  const sid = (await call('GET', '/auth/me', null, s)).data.user.id;
+  const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
+  const lim = (await call('GET', '/catalog?type=Collectibles')).data.items[0];
+  const normal = (await call('GET', '/catalog')).data.items.find((i) => !i.limited && i.price > 0);
+  await call('POST', `/admin/users/${sid}/items`, { itemId: lim.id }, admin);
+  await call('POST', `/admin/users/${sid}/items`, { itemId: normal.id }, admin);
+  await call('POST', `/admin/users/${bid}/robits`, { amount: 1000 }, admin);
+  const serial = (await call('GET', `/catalog/${lim.id}`, null, s)).data.item.serial;
+  assert.equal((await call('POST', `/catalog/${normal.id}/resell`, { price: 50 }, s)).status, 400); // not a Limited
+  assert.equal((await call('POST', `/catalog/${lim.id}/resell`, { price: 50 }, b)).status, 400); // doesn't own it
+  assert.equal((await call('POST', `/catalog/${lim.id}/resell`, { price: 0 }, s)).status, 400);
+  const listed = (await call('POST', `/catalog/${lim.id}/resell`, { price: 500 }, s)).data.resale;
+  assert.equal(listed.serial, serial);
+  const resellers = (await call('GET', `/catalog/${lim.id}/resellers`)).data.resellers;
+  assert.ok(resellers.some((r) => r.id === listed.id && r.price === 500));
+  assert.equal((await call('POST', `/resales/${listed.id}/buy`, {}, s)).status, 400); // own listing
+  const before = (await call('GET', '/auth/me', null, s)).data.user.robits;
+  const buyerBefore = (await call('GET', '/auth/me', null, b)).data.user.robits;
+  assert.equal((await call('POST', `/resales/${listed.id}/buy`, {}, b)).status, 200);
+  assert.equal((await call('GET', '/auth/me', null, b)).data.user.robits, buyerBefore - 500);
+  assert.equal((await call('GET', '/auth/me', null, s)).data.user.robits, before + 350); // 70%
+  assert.equal((await call('GET', `/catalog/${lim.id}`, null, b)).data.item.serial, serial); // same copy
+  assert.equal((await call('GET', `/catalog/${lim.id}`, null, s)).data.item.owned, false);
+  assert.equal((await call('POST', `/resales/${listed.id}/buy`, {}, admin)).status, 404); // sold
+  // a listing disappears when the copy is traded away or taken
+  const l2 = (await call('POST', `/catalog/${lim.id}/resell`, { price: 900 }, b)).data.resale;
+  await call('POST', `/admin/users/${bid}/items/remove`, { itemId: lim.id }, admin);
+  assert.ok(!(await call('GET', `/catalog/${lim.id}/resellers`)).data.resellers.some((r) => r.id === l2.id));
+});
+
+test('admin panel: password reset, rename, log and announcement', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = (await call('POST', '/auth/signup', { username: 'ForgotPw', password: 'secret123' })).cookie;
+  const pid = (await call('GET', '/auth/me', null, p)).data.user.id;
+  assert.equal((await call('POST', `/admin/users/${pid}/password`, {}, p)).status, 403);
+  const r = await call('POST', `/admin/users/${pid}/password`, {}, admin);
+  assert.equal(r.status, 200);
+  assert.ok(r.data.password.length >= 8);
+  assert.equal((await call('GET', '/auth/me', null, p)).data.user, null); // logged out everywhere
+  assert.equal((await call('POST', '/auth/login', { username: 'ForgotPw', password: 'secret123' })).status, 401);
+  assert.equal((await call('POST', '/auth/login', { username: 'ForgotPw', password: r.data.password })).status, 200);
+  assert.equal((await call('POST', `/admin/users/${pid}/password`, { password: 'newpass1' }, admin)).data.password, 'newpass1');
+  assert.equal((await call('POST', `/admin/users/${pid}/rename`, { username: 'RenamedPw' }, admin)).data.user.username, 'RenamedPw');
+  assert.equal((await call('POST', `/admin/users/${pid}/kick`, {}, admin)).status, 400); // not in a game
+  const info = (await call('GET', `/admin/users/${pid}`, null, admin)).data;
+  assert.deepEqual(info.user.previousNames, ['ForgotPw']);
+  assert.ok(info.log.some((e) => e.action === 'Password reset' && e.byName === 'Tester_1'));
+  assert.ok(info.log.some((e) => e.action === 'Renamed to RenamedPw'));
+  assert.ok(!info.log.some((e) => e.action.startsWith('Kicked'))); // failed actions aren't logged
+  assert.equal((await call('POST', '/admin/announcement', { text: 'Server restart at 9!' }, admin)).status, 200);
+  assert.equal((await call('GET', '/announcement')).data.announcement.text, 'Server restart at 9!');
+  await call('POST', '/admin/announcement', { text: '' }, admin);
+  assert.equal((await call('GET', '/announcement')).data.announcement, null);
+  const log = (await call('GET', '/admin/log', null, admin)).data.log;
+  assert.ok(log.some((e) => e.action === 'Announcement: Server restart at 9!'));
+  assert.ok((await call('GET', '/admin/games', null, admin)).data.games.length > 0);
+  assert.equal((await call('GET', '/admin/items', null, p)).status, 401);
+});

@@ -36,6 +36,7 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     content.append(buildFooter());
   }
   if (me) refreshCounts(me);
+  showAnnouncement();
   if (me) startInvites();
   if (me && nav) startChatParty(me);
   return me;
@@ -150,6 +151,24 @@ async function refreshCounts() {
     setCount('nav-trade', trades.inbound);
     setCount('hdr-notif', reqs.requests.length + msgs.unread + trades.inbound);
   } catch { /* ignore */ }
+}
+
+// The admins' site-wide announcement, under the header (players can hide it).
+async function showAnnouncement() {
+  let a;
+  try { ({ announcement: a } = await api.get('/announcement')); } catch { return; }
+  if (!a) return;
+  const key = 'robis.announcement.hidden';
+  try { if (localStorage.getItem(key) === String(a.time)) return; } catch { /* private mode */ }
+  const bar = el('div', { class: 'announcement-bar ' + a.color },
+    el('span', { class: 'announcement-icon', text: '📢' }),
+    el('span', { class: 'announcement-text no-i18n', text: a.text }),
+    el('button', { class: 'announcement-close', 'aria-label': 'Close', html: '&times;', onclick: () => {
+      bar.remove();
+      try { localStorage.setItem(key, String(a.time)); } catch { /* ignore */ }
+    } }));
+  const content = document.querySelector('.rbx-content');
+  if (content) content.prepend(bar);
 }
 
 export function setRobits(n) {

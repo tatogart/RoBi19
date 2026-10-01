@@ -137,14 +137,18 @@ export function itemCard(it, opts = {}) {
   const thumb = el('div', { class: 'thumb' });
   itemThumbnail(it).then((u) => thumb.append(el('img', { src: u, alt: it.name })));
   const card = el(opts.onClick ? 'div' : 'a', { class: 'item-card', href: opts.onClick ? null : `/item?id=${it.id}`, title: it.name, onclick: opts.onClick },
-    it.limited ? el('span', { class: 'limited-tag', text: it.stock ? 'LIMITED U' : 'LIMITED' }) : null,
-    it.custom ? el('span', { class: 'limited-tag beta-tag', text: 'BETA' }) : null,
+    it.limited || it.custom ? el('span', { class: 'card-tags' },
+      it.limited ? el('span', { class: 'limited-tag', text: it.stock ? 'LIMITED U' : 'LIMITED' }) : null,
+      it.custom ? el('span', { class: 'limited-tag beta-tag', text: 'BETA' }) : null) : null,
     it.owned && !opts.onClick && !it.serial ? el('span', { class: 'owned-tag', text: 'Owned' }) : null,
     it.serial ? el('span', { class: 'serial-tag no-i18n', title: 'Serial number', text: `#${it.serial}` }) : null,
     thumb,
     el('div', { class: 'info' },
       el('div', { class: 'name no-i18n', text: it.name }),
-      opts.hidePrice ? null : el('div', { class: 'price' + (it.price ? '' : ' free') }, it.price ? [icon('robits', 'robits-icon'), fmtNum(it.price)] : 'Free')));
+      opts.hidePrice ? null : it.limited && it.remaining === 0
+        // sold out: the cheapest copy players are selling
+        ? el('div', { class: 'price' + (it.bestPrice ? '' : ' free') }, it.bestPrice ? [icon('robits', 'robits-icon'), fmtNum(it.bestPrice)] : 'Sold out')
+        : el('div', { class: 'price' + (it.price ? '' : ' free') }, it.price ? [icon('robits', 'robits-icon'), fmtNum(it.price)] : 'Free')));
   return card;
 }
 

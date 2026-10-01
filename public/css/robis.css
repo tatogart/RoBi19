@@ -407,3 +407,11 @@ html[data-theme="dark"] .game-card .title, html[data-theme="dark"] .item-card .n
 .serial-pill { background: #393b3d; color: #ffd23f; font-weight: 700; }
 .owners-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; max-height: 320px; overflow-y: auto; }
 .owner-row { display: flex; align-items: center; gap: 8px; }
+/* admin announcement */
+.announcement-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius); margin-bottom: 14px; color: #fff; font-weight: 600; box-shadow: var(--shadow); }
+.announcement-bar.blue { background: #00a2ff; } .announcement-bar.green { background: #02b757; }
+.announcement-bar.orange { background: #f68802; } .announcement-bar.red { background: #d0021b; }
+.announcement-text { flex: 1; overflow-wrap: anywhere; }
+.announcement-close { background: none; border: 0; color: inherit; font-size: 22px; line-height: 1; cursor: pointer; opacity: .85; }
+.item-card .card-tags { position: absolute; left: 6px; top: 6px; display: flex; gap: 4px; flex-wrap: wrap; z-index: 1; }
+.item-card .card-tags .limited-tag { position: static; }

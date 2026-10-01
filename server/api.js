@@ -265,6 +265,8 @@ export function createApi(db, manager, opts = {}) {
       created: it.created, sales: it.sales, limited: !!it.limited, remaining: it.remaining ?? null, stock: it.stock ?? null, custom: !!it.custom,
       owned: user ? (D.inventory[user.id] || []).includes(it.id) : false,
       serial: user ? serialOf(it, user.id) : null, lastSerial: it.limited ? it.lastSerial || 0 : null,
+      bestPrice: it.limited ? bestPrice(it.id) : null,
+      myResale: user && it.limited ? ((r) => (r ? { id: r.id, price: r.price } : null))(D.resales.find((r) => r.itemId === it.id && r.sellerId === user.id)) : null,
     };
   };
 
@@ -842,6 +844,79 @@ export function createApi(db, manager, opts = {}) {
     res.json({ item: publicItem(it, req.user) });
   });
 
+  // ------------------------------------------------------------ Limited resale
+  // Owners put their Limited copy up for sale at their own price. The buyer
+  // gets that exact copy (with its serial number); the seller gets 70%.
+  const RESALE_CUT = 0.7;
+  if (!D.resales) D.resales = [];
+  const validResale = (r) => {
+    const it = D.items[r.itemId];
+    return !!(it && it.limited && D.users[r.sellerId] && (D.inventory[r.sellerId] || []).includes(r.itemId));
+  };
+  const resalesFor = (itemId) => {
+    const before = D.resales.length;
+    D.resales = D.resales.filter(validResale); // drop listings whose copy is gone (traded, taken, deleted)
+    if (D.resales.length !== before) db.save();
+    return D.resales.filter((r) => r.itemId === itemId).sort((a, b) => a.price - b.price || a.created - b.created);
+  };
+  const bestPrice = (itemId) => {
+    let best = null;
+    for (const r of D.resales) if (r.itemId === itemId && validResale(r) && (best === null || r.price < best)) best = r.price;
+    return best;
+  };
+  const publicResale = (r) => ({ id: r.id, price: r.price, created: r.created, serial: serialOf(D.items[r.itemId], r.sellerId), seller: publicUser(D.users[r.sellerId]) });
+
+  api.get('/catalog/:id/resellers', (req, res) => {
+    const it = D.items[toInt(req.params.id)];
+    if (!it) return bad(res, 'Item not found', 404);
+    res.json({ resellers: resalesFor(it.id).slice(0, 100).map(publicResale) });
+  });
+
+  api.post('/catalog/:id/resell', requireUser, (req, res) => {
+    const it = D.items[toInt(req.params.id)];
+    if (!it) return bad(res, 'Item not found', 404);
+    if (!it.limited) return bad(res, 'Only Limited items can be sold by players.');
+    if (!(D.inventory[req.user.id] || []).includes(it.id)) return bad(res, 'You don\'t own this item.');
+    const price = Math.trunc(+req.body?.price || 0);
+    if (price < 1 || price > 1e9) return bad(res, 'Enter a price of at least R$1.');
+    D.resales = D.resales.filter((r) => !(r.itemId === it.id && r.sellerId === req.user.id));
+    const r = { id: db.nextId('resale'), itemId: it.id, sellerId: req.user.id, price, created: Date.now() };
+    D.resales.push(r);
+    db.save();
+    res.json({ resale: publicResale(r) });
+  });
+
+  api.post('/resales/:id/cancel', requireUser, (req, res) => {
+    const r = D.resales.find((x) => x.id === toInt(req.params.id));
+    if (!r) return bad(res, 'This item is no longer for sale.', 404);
+    if (r.sellerId !== req.user.id && !can(req.user, 'economy')) return bad(res, 'You don\'t have permission to do that.', 403);
+    D.resales = D.resales.filter((x) => x !== r);
+    db.save();
+    res.json({ ok: true });
+  });
+
+  api.post('/resales/:id/buy', requireUser, (req, res) => {
+    const r = D.resales.find((x) => x.id === toInt(req.params.id));
+    if (!r || !validResale(r)) return bad(res, 'This item is no longer for sale.', 404);
+    const it = D.items[r.itemId];
+    const seller = D.users[r.sellerId];
+    const buyer = req.user;
+    if (seller.id === buyer.id) return bad(res, 'You can\'t buy your own item.');
+    if ((D.inventory[buyer.id] || []).includes(it.id)) return bad(res, 'You already own this item.');
+    if (buyer.robits < r.price) return bad(res, `You need ${r.price - buyer.robits} more Robits to purchase this item.`);
+    buyer.robits -= r.price;
+    const cut = Math.floor(r.price * RESALE_CUT);
+    seller.robits += cut;
+    moveSerial(it.id, seller.id, buyer.id);
+    takeItem(seller.id, it.id);
+    (D.inventory[buyer.id] || (D.inventory[buyer.id] = [])).push(it.id);
+    D.resales = D.resales.filter((x) => x !== r && !(x.itemId === it.id && x.sellerId === seller.id));
+    log(buyer.id, -r.price, `Purchased ${it.name} from ${seller.username}`);
+    log(seller.id, cut, `Sold ${it.name} to ${buyer.username}`);
+    db.save();
+    res.json({ ok: true, robits: buyer.robits, item: publicItem(it, buyer) });
+  });
+
   // Who owns which copy of a Limited, by serial number.
   api.get('/catalog/:id/owners', (req, res) => {
     const it = D.items[toInt(req.params.id)];
@@ -1122,14 +1197,79 @@ export function createApi(db, manager, opts = {}) {
     return u;
   };
 
+  // ---- admin log: every admin action, who did it and to whom
+  if (!D.adminLog) D.adminLog = [];
+  const ACTIONS = {
+    robits: (b) => `Robits ${+b.amount > 0 ? '+' : ''}${Math.trunc(+b.amount || 0)}`,
+    membership: (b) => `Membership: ${MEMBERSHIPS[b.tier]?.name || b.tier}`,
+    items: (b) => (b.all ? 'Gave all items' : `Gave item: ${D.items[toInt(b.itemId)]?.name || '?'}`),
+    remove: (b) => (b.all ? 'Took all items' : `Took item: ${D.items[toInt(b.itemId)]?.name || '?'}`),
+    admin: (b) => (b.isAdmin ? 'Made admin' : 'Removed admin'),
+    flags: (b) => `Badges: ${Object.keys(FLAGS).filter((f) => b[f]).join(', ') || 'none'}`,
+    perms: (b) => `Permissions: ${(Array.isArray(b.perms) ? b.perms : []).join(', ') || 'none'}`,
+    delete: () => 'Deleted account',
+    ban: (b) => (b.banned ? `Banned (${b.duration || 'forever'}${b.device ? ', device + IP' : ''})${b.reason ? ': ' + String(b.reason).slice(0, 100) : ''}` : 'Unbanned'),
+    password: () => 'Password reset',
+    rename: (b) => `Renamed to ${String(b.username || '').trim()}`,
+    kick: (b) => `Kicked from game${b.reason ? ': ' + String(b.reason).slice(0, 100) : ''}`,
+    logout: () => 'Logged out everywhere',
+    announcement: (b) => (String(b.text || '').trim() ? `Announcement: ${String(b.text).trim().slice(0, 120)}` : 'Cleared announcement'),
+    gamedelete: () => 'Deleted game',
+  };
+  api.use('/admin', (req, res, next) => {
+    if (req.method !== 'POST' || !req.user) return next();
+    const m = req.path.match(/^\/(?:users\/(\d+)|games\/(\d+))?\/?([a-z]+)?(?:\/([a-z]+))?$/);
+    if (!m) return next();
+    const key = m[4] === 'remove' ? 'remove' : m[2] ? 'gamedelete' : m[3];
+    const describe = ACTIONS[key];
+    if (!describe) return next();
+    const targetUser = m[1] ? D.users[toInt(m[1])] : null;
+    const targetGame = m[2] ? D.games[toInt(m[2])] : null;
+    const entry = {
+      time: Date.now(), by: req.user.id, byName: req.user.username, action: describe(req.body || {}),
+      targetId: targetUser ? targetUser.id : null, targetName: targetUser ? targetUser.username : targetGame ? targetGame.name : '',
+    };
+    res.on('finish', () => {
+      if (res.statusCode >= 400) return;
+      D.adminLog.push(entry);
+      if (D.adminLog.length > 3000) D.adminLog.splice(0, D.adminLog.length - 3000);
+      db.save();
+    });
+    next();
+  });
+
+  api.get('/admin/log', requireStaff, (req, res) => {
+    const uid = toInt(req.query.user);
+    const list = D.adminLog.filter((e) => !uid || e.targetId === uid || e.by === uid);
+    res.json({ log: list.slice(-300).reverse() });
+  });
+
+  // ---- site-wide announcement (a banner on every page and a message in every game)
+  api.get('/announcement', (req, res) => res.json({ announcement: D.announcement || null }));
+  api.post('/admin/announcement', requirePerm('moderator'), (req, res) => {
+    const text = String(req.body?.text || '').trim().slice(0, 300);
+    const color = ['blue', 'green', 'orange', 'red'].includes(req.body?.color) ? req.body.color : 'blue';
+    D.announcement = text ? { text, color, by: req.user.username, time: Date.now() } : null;
+    if (text) for (const srv of manager.allServers()) srv.broadcast({ t: 'sys', text: `[Announcement] ${text}` });
+    db.save();
+    res.json({ announcement: D.announcement });
+  });
+
   api.get('/admin/overview', requireStaff, (req, res) => {
     const users = Object.values(D.users).filter((u) => !u.system);
+    const day = Date.now() - 24 * 3600e3;
     res.json({
       stats: {
         users: users.length, games: Object.keys(D.games).length, items: Object.keys(D.items).length,
         robits: users.reduce((a, u) => a + (u.robits || 0), 0),
         playing: manager.allServers().reduce((a, s) => a + s.playerCount, 0),
+        online: users.filter((u) => presence(u).status !== 'offline').length,
+        banned: users.filter((u) => isBanned(u)).length,
+        newToday: users.filter((u) => u.created > day).length,
+        trades: (D.trades || []).filter((t) => t.status === 'pending').length,
+        resales: D.resales.length,
       },
+      announcement: D.announcement || null,
       users: users.sort((a, b) => b.lastOnline - a.lastOnline).map(adminUser),
       memberships: Object.entries(MEMBERSHIPS).map(([id, m]) => ({ id, name: m.name })),
       permissions: Object.entries(PERMISSIONS).map(([id, label]) => ({ id, label })),
@@ -1247,6 +1387,97 @@ export function createApi(db, manager, opts = {}) {
     deleteAccount(u);
     setCookie(res, sessionCookie('', 0));
     res.json({ ok: true });
+  });
+
+  // Full info about one player for the Admin Panel.
+  api.get('/admin/users/:id', requireStaff, (req, res) => {
+    const u = target(req, res); if (!u) return;
+    res.json({
+      user: {
+        ...adminUser(u), previousNames: u.previousNames || [], lastOnline: u.lastOnline || 0,
+        devices: (u.devices || []).length, ips: (u.ips || []).length, sessions: Object.values(D.sessions).filter((x) => x.userId === u.id).length,
+        friends: (D.friends[u.id] || []).length, tradePrivacy: u.tradePrivacy || 'everyone',
+        trades: (D.trades || []).filter((t) => t.from === u.id || t.to === u.id).length,
+      },
+      transactions: D.transactions.filter((t) => t.userId === u.id).slice(-40).reverse(),
+      log: D.adminLog.filter((e) => e.targetId === u.id).slice(-40).reverse(),
+    });
+  });
+
+  // Password reset: a new password (typed by the admin, or a random one) and every session is logged out.
+  const randomPassword = () => {
+    const abc = 'abcdefghjkmnpqrstuvwxyz23456789';
+    return [...crypto.randomBytes(10)].map((b) => abc[b % abc.length]).join('');
+  };
+  const staffGuard = (req, res, u) => {
+    if (u.id === req.user.id) { bad(res, 'Use Settings for your own account.'); return false; }
+    if (u.isAdmin && !req.user.isAdmin) { bad(res, 'Only admins can do that to an admin.', 403); return false; }
+    return true;
+  };
+  const logoutEverywhere = (u) => { for (const [t, x] of Object.entries(D.sessions)) if (x.userId === u.id) delete D.sessions[t]; };
+  api.post('/admin/users/:id/password', requirePerm('moderator'), (req, res) => {
+    const u = target(req, res); if (!u || !staffGuard(req, res, u)) return;
+    const typed = String(req.body?.password || '');
+    if (typed && typed.length < 6) return bad(res, 'Password must be at least 6 characters.');
+    const password = typed || randomPassword();
+    Object.assign(u, hashPassword(password));
+    logoutEverywhere(u);
+    db.save();
+    res.json({ password, user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/logout', requirePerm('moderator'), (req, res) => {
+    const u = target(req, res); if (!u || !staffGuard(req, res, u)) return;
+    logoutEverywhere(u);
+    db.save();
+    res.json({ user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/rename', requirePerm('moderator'), (req, res) => {
+    const u = target(req, res); if (!u) return;
+    if (u.isAdmin && !req.user.isAdmin && u.id !== req.user.id) return bad(res, 'Only admins can do that to an admin.', 403);
+    const name = String(req.body?.username || '').trim();
+    if (!validUsername(name)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
+    if (name === u.username) return bad(res, 'That is already their username.');
+    if (Object.values(D.users).some((o) => o !== u && o.username.toLowerCase() === name.toLowerCase())) return bad(res, 'This username is already in use.');
+    u.previousNames = [u.username, ...(u.previousNames || [])].filter((n) => n.toLowerCase() !== name.toLowerCase()).slice(0, 10);
+    u.username = name;
+    db.save();
+    res.json({ user: adminUser(u) });
+  });
+
+  api.post('/admin/users/:id/kick', requirePerm('moderator'), (req, res) => {
+    const u = target(req, res); if (!u || !staffGuard(req, res, u)) return;
+    const f = manager.findUser(u.id);
+    if (!f) return bad(res, 'This player is not in a game.');
+    const reason = String(req.body?.reason || '').trim().slice(0, 100);
+    f.server.kick(f.session, `You were kicked by a moderator.${reason ? ' Reason: ' + reason : ''}`);
+    res.json({ user: adminUser(u) });
+  });
+
+  // Games and items lists for the Admin Panel tabs.
+  api.get('/admin/games', requireStaff, (req, res) => {
+    const games = Object.values(D.games).sort((a, b) => b.updated - a.updated).map((g) => ({
+      id: g.id, name: g.name, isPublic: !!g.isPublic, featured: !!g.featured, visits: g.visits || 0, updated: g.updated, created: g.created,
+      playing: manager.serversFor(g.id).reduce((a, s) => a + s.playerCount, 0),
+      creator: D.users[g.creatorId] ? { id: g.creatorId, username: D.users[g.creatorId].username } : null,
+    }));
+    res.json({ games });
+  });
+  api.post('/admin/games/:id/delete', requirePerm('moderator'), (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    for (const srv of manager.serversFor(g.id)) srv.close();
+    delete D.games[g.id];
+    db.save();
+    res.json({ ok: true });
+  });
+  api.get('/admin/items', requireStaff, (req, res) => {
+    const items = Object.values(D.items).filter((i) => i.custom || i.limited).sort((a, b) => b.created - a.created).map((i) => ({
+      ...publicItem(i, null), owners: Object.values(D.inventory).filter((l) => l.includes(i.id)).length,
+      listings: D.resales.filter((r) => r.itemId === i.id).length,
+    }));
+    res.json({ items });
   });
 
   api.post('/admin/users/:id/ban', requirePerm('moderator'), (req, res) => {

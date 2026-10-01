@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, icon, fmtFull, fmtDate, qs, modal, toast, userLink } from '../ui.js';
+import { el, icon, fmtFull, fmtDate, qs, modal, toast, userLink, headshotImg } from '../ui.js';
 import { itemThumbnail } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'catalog', requireAuth: false });
@@ -20,8 +20,73 @@ function renderBuy() {
         item.serial ? el('span', { class: 'pill serial-pill no-i18n', text: `#${item.serial}${item.stock ? ' / ' + fmtFull(item.stock) : ''}` }) : null,
         el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
       : el('button', { class: 'btn btn-green btn-large', text: item.price ? 'Buy' : 'Get', disabled: item.limited && item.remaining === 0, onclick: buy }),
-    item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: item.remaining === 0 ? 'Sold out — you can still get it in a trade.' : item.stock ? `${fmtFull(item.remaining)} of ${fmtFull(item.stock)} remaining` : `${fmtFull(item.remaining)} remaining` }) : null].filter(Boolean));
+    item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: item.remaining === 0 ? 'Sold out — buy it from a reseller or get it in a trade.' : item.stock ? `${fmtFull(item.remaining)} of ${fmtFull(item.stock)} remaining` : `${fmtFull(item.remaining)} remaining` }) : null,
+    item.limited && item.bestPrice ? el('div', { class: 'price-line', style: { marginTop: '10px' } }, el('span', { class: 'muted', text: 'Best Price' }),
+      el('span', { class: 'big-price small-price' }, icon('robits', 'robits-icon'), fmtFull(item.bestPrice))) : null,
+    // Owners of a Limited can sell their copy to other players.
+    item.limited && item.owned ? (item.myResale
+      ? el('div', { class: 'row wrap', style: { marginTop: '10px' } },
+        el('span', { class: 'pill on-sale-pill' }, 'On sale for ', icon('robits', 'robits-icon'), fmtFull(item.myResale.price)),
+        el('button', { class: 'btn btn-small', text: 'Take off sale', onclick: () => cancelResale(item.myResale.id) }))
+      : el('button', { class: 'btn btn-primary', style: { marginTop: '10px' }, text: 'Sell', onclick: sellDialog })) : null].filter(Boolean));
 }
+
+// ---------------------------------------------------------------- reselling Limiteds
+const resellers = el('div');
+async function refreshItem() {
+  ({ item } = await api.get(`/catalog/${item.id}`));
+  renderBuy();
+  loadResellers();
+}
+async function loadResellers() {
+  if (!item.limited) return;
+  try {
+    const { resellers: list } = await api.get(`/catalog/${item.id}/resellers`);
+    resellers.replaceChildren(el('div', { class: 'panel' },
+      el('h3', { text: 'Resellers' }),
+      list.length ? el('div', { class: 'reseller-list' }, list.map((r) => el('div', { class: 'reseller-row' },
+        el('span', { class: 'reseller-head' }, headshotImg(r.seller, 64)),
+        el('div', { class: 'reseller-who' }, userLink(r.seller), r.serial ? el('span', { class: 'pill serial-pill no-i18n', text: `#${r.serial}` }) : null),
+        el('span', { class: 'big-price small-price' }, icon('robits', 'robits-icon'), fmtFull(r.price)),
+        me && r.seller.id === me.id ? el('span', { class: 'muted small', text: 'Your copy' })
+          : el('button', { class: 'btn btn-green', text: 'Buy', disabled: item.owned, onclick: () => buyResale(r) }))))
+        : el('div', { class: 'muted', text: 'Nobody is selling this item right now.' })));
+  } catch { /* offline */ }
+}
+function sellDialog() {
+  const price = el('input', { class: 'input', type: 'number', min: 1, value: item.bestPrice || item.price || 100 });
+  const youGet = el('div', { class: 'small muted' });
+  const upd = () => { youGet.textContent = `You will get R$${fmtFull(Math.floor((+price.value || 0) * 0.7))} (30% marketplace fee).`; };
+  price.oninput = upd; upd();
+  modal({
+    title: 'Sell ' + item.name,
+    body: el('div', {}, el('p', { text: `Sell your copy${item.serial ? ' #' + item.serial : ''} to another player.` }), el('label', { class: 'field' }, 'Price (R$)', price), youGet),
+    buttons: [{ text: 'Put on sale', cls: 'btn-green', onClick: async () => {
+      try { await api.post(`/catalog/${item.id}/resell`, { price: +price.value }); toast('Your item is on sale!', 'success'); refreshItem(); } catch (e) { toast(e.message, 'error'); return false; }
+    } }, { text: 'Cancel' }],
+  });
+}
+async function cancelResale(id) {
+  try { await api.post(`/resales/${id}/cancel`); toast('Taken off sale', 'success'); refreshItem(); } catch (e) { toast(e.message, 'error'); }
+}
+function buyResale(r) {
+  if (!me) { location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search); return; }
+  modal({
+    title: 'Buy Item',
+    body: el('div', { class: 'center' },
+      el('p', {}, 'Buy ', el('b', { text: item.name }), r.serial ? ` #${r.serial}` : '', ` from ${r.seller.username} for `, el('b', {}, icon('robits', 'robits-icon'), fmtFull(r.price)), '?'),
+      el('p', { class: 'small muted', text: `Your balance after this transaction will be R$ ${fmtFull(me.robits - r.price)}` })),
+    buttons: [{ text: 'Buy Now', cls: 'btn-green', onClick: async () => {
+      try {
+        const res = await api.post(`/resales/${r.id}/buy`);
+        me.robits = res.robits; setRobits(res.robits);
+        toast('Purchase completed!', 'success');
+        refreshItem();
+      } catch (e) { toast(e.message, 'error'); refreshItem(); }
+    } }, { text: 'Cancel' }],
+  });
+}
+loadResellers();
 async function buy() {
   if (!me) { location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search); return; }
   modal({
@@ -96,6 +161,13 @@ const style = document.createElement('style');
 style.textContent = `.item-page { display: flex; gap: 30px; } .item-big-thumb { width: 420px; max-width: 100%; aspect-ratio: 1; background: linear-gradient(#f7f7f7,#e2e2e2); border-radius: 3px; flex: none; }
 .item-big-thumb img { width: 100%; height: 100%; } .item-info { flex: 1; } .price-line { display: flex; align-items: center; gap: 20px; margin-bottom: 14px; }
 .big-price { font-size: 26px; font-weight: 700; color: #02b757; display: inline-flex; align-items: center; gap: 6px; } .big-price .robits-icon { width: 26px; height: 26px; }
-@media (max-width: 800px) { .item-page { flex-direction: column; } }`;
+@media (max-width: 800px) { .item-page { flex-direction: column; } }
+.small-price { font-size: 20px; } .small-price .robits-icon { width: 20px; height: 20px; }
+.on-sale-pill { background: #02b757; color: #fff; display: inline-flex; align-items: center; gap: 4px; } .on-sale-pill .robits-icon { width: 14px; height: 14px; }
+.reseller-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.reseller-row:last-child { border-bottom: 0; }
+.reseller-head img { width: 44px; height: 44px; border-radius: 50%; background: #d4d4d4; display: block; }
+.reseller-who { flex: 1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }`;
 document.head.append(style);
 app.append(owners);
+app.append(resellers);
