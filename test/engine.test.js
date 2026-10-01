@@ -153,3 +153,33 @@ test('walking into a TrussPart climbs it, walls do not', () => {
   assert.ok(run(setup('TrussPart')) > 8);
   close(run(setup('Part')), 3, 0.1);
 });
+
+test('place diffs: applying the ops turns one place into the other, and back', async () => {
+  const { diffPlaces, applyOps } = await import('../shared/engine/placediff.js');
+  const { savePlace, loadPlace } = await import('../shared/engine/serialize.js');
+  const { DataModel, createInstance } = await import('../shared/engine/instances.js');
+  const { Vector3 } = await import('../shared/engine/types.js');
+  const a = new DataModel();
+  const p1 = createInstance('Part'); p1.Name = 'Keep'; p1.Parent = a.Workspace;
+  const p2 = createInstance('Part'); p2.Name = 'Gone'; p2.Parent = a.Workspace;
+  const f = createInstance('Folder'); f.Name = 'Box'; f.Parent = a.Workspace;
+  const before = savePlace(a);
+  // a teammate's copy of the same place
+  const b = new DataModel();
+  loadPlace(b, JSON.parse(JSON.stringify(before)), { keepIds: true });
+  // edit: change, remove, add with children, move, service property
+  p1.Size = new Vector3(9, 9, 9);
+  p2.Destroy();
+  const m = createInstance('Model'); m.Name = 'New'; const c = createInstance('Part'); c.Name = 'Child'; c.Parent = m; m.Parent = a.Workspace;
+  p1.Parent = f;
+  a.Lighting.ClockTime = 3;
+  const after = savePlace(a);
+  const ops = diffPlaces(before, after);
+  // sibling order isn't tracked: compare with children sorted by id
+  const norm = (pl) => JSON.stringify(pl, (k, v) => (k === 'ch' && Array.isArray(v) ? [...v].sort((x, y) => (x.id < y.id ? -1 : 1)) : v));
+  applyOps(b, ops);
+  assert.equal(norm(savePlace(b)), norm(after));
+  // undo on the teammate's copy
+  applyOps(b, diffPlaces(after, before));
+  assert.equal(norm(savePlace(b)), norm(before));
+});

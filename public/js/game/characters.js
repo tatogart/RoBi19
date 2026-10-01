@@ -95,6 +95,11 @@ export class CharacterView {
 
   emote(e) { this.av.setEmote(e); }
 
+  // The Tool this character holds (null for none).
+  setTool(tool) {
+    this.av.setTool(tool ? tool._p.ToolModel : '', tool ? '#' + tool._p.Color.toHex().replace('#', '') : '');
+  }
+
   // Called each frame. Remote characters interpolate towards their target.
   update(dt) {
     if (this.dead) { this.updateDebris(dt); return; }
@@ -111,7 +116,10 @@ export class CharacterView {
     }
     this.group.position.copy(this.pos);
     this.group.rotation.set(0, this.ry, 0);
-    const state = this.anim === 'walk' && this.speed < 0.5 && !this.isLocal ? 'idle' : this.anim;
+    // 'drive:#rrggbb' = sitting in a go-kart of that colour.
+    const driving = typeof this.anim === 'string' && this.anim.startsWith('drive');
+    this.av.setKart(driving ? this.anim.slice(6) || '#c4281c' : '');
+    const state = driving ? 'sit' : this.anim === 'walk' && this.speed < 0.5 && !this.isLocal ? 'idle' : this.anim;
     this.av.animate(state, dt, this.isLocal ? this.speed : Math.max(this.speed, state === 'walk' ? 12 : 0));
     if (this.forceField) this.forceField.material.opacity = 0.14 + Math.sin(performance.now() / 150) * 0.06;
   }

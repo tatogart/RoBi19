@@ -1,7 +1,7 @@
 {
   "name": "robis",
   "version": "1.0.0",
-  "description": "Robis — a 2019-era Roblox-style game platform: website, multiplayer 3D client, Lua scripting and Robis Studio.",
+  "description": "Robis \u2014 a 2019-era Roblox-style game platform: website, multiplayer 3D client, Lua scripting and Robis Studio.",
   "type": "module",
   "main": "server/index.js",
   "scripts": {
@@ -10,7 +10,8 @@
     "seed": "node server/seed/reset.js",
     "reset-password": "node server/seed/reset-password.js",
     "build:standalone": "node scripts/build-standalone.mjs",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test \"test/**/*.test.js\"",
+    "smoke": "node scripts/smoke-places.mjs"
   },
   "engines": {
     "node": ">=18"

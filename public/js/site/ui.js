@@ -96,6 +96,11 @@ export function nameBadges(user) {
   return el('span', { class: 'name-badges' }, flags.filter((f) => BADGE_SVG[f]).map((f) => el('span', { class: 'name-badge ' + f, title: BADGE_TITLE[f], html: BADGE_SVG[f] })));
 }
 // "Name ✓" as a link to the profile.
+// A group's emblem: a coloured tile with a symbol.
+export function groupEmblem(gr, size = 'md') {
+  return el('span', { class: 'group-emblem ' + size, style: { background: gr.color }, text: gr.icon });
+}
+
 export function userLink(user) {
   return el('span', { class: 'user-link' }, el('a', { class: 'no-i18n', href: `/profile?id=${user.id}`, text: user.username }), nameBadges(user));
 }

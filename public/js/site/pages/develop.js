@@ -15,6 +15,17 @@ app.append(el('div', { class: 'dev-banner' },
     el('a', { class: 'btn btn-large', href: '/create', text: 'Create Item (BETA)' }))));
 const list = el('div', { class: 'panel' }, spinner());
 app.append(el('h2', { text: 'My Games' }), list);
+// Team Create: games other people added you to.
+const shared = el('div');
+app.append(shared);
+api.get('/team-create').then(({ games }) => {
+  if (!games.length) return;
+  shared.replaceChildren(el('h2', { text: 'Team Create' }), el('div', { class: 'panel' }, games.map((g) => el('div', { class: 'dev-row' },
+    el('div', { class: 'spacer', style: { minWidth: 0 } },
+      el('a', { href: `/game?id=${g.id}` }, el('b', { text: g.name })),
+      el('div', { class: 'small muted' }, el('span', { text: 'By ' }), el('span', { class: 'no-i18n', text: g.creator ? g.creator.username : '' }))),
+    el('a', { class: 'btn btn-primary btn-small', href: `/studio?gameId=${g.id}`, text: 'Edit together' })))));
+}).catch(() => {});
 
 async function load() {
   const { games } = await api.get(`/users/${me.id}/games`);

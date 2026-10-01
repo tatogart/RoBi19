@@ -45,7 +45,7 @@ function join(cookie, msg) {
     ws.on('open', () => { ws.send(JSON.stringify({ t: 'join', ...msg })); resolve({ ws, inbox, wait: (pred, ms = 3000) => {
       const found = inbox.find(pred);
       if (found) return Promise.resolve(found);
-      return new Promise((res, rej) => { waiters.push({ pred, resolve: res }); setTimeout(() => rej(new Error('timeout')), ms); });
+      return new Promise((res, rej) => { waiters.push({ pred, resolve: res }); setTimeout(() => { if (process.env.DEBUG_WS) console.log('INBOX', JSON.stringify(inbox.map((m) => m.t === 'tick' ? 'tick' : m)).slice(0, 3000)); rej(new Error('timeout')); }, ms); });
     } }); });
     ws.on('error', reject);
   });
@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 17);
+  assert.equal(data.games, 21);
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -616,4 +616,149 @@ test('admin panel: password reset, rename, log and announcement', async () => {
   assert.ok(log.some((e) => e.action === 'Announcement: Server restart at 9!'));
   assert.ok((await call('GET', '/admin/games', null, admin)).data.games.length > 0);
   assert.equal((await call('GET', '/admin/items', null, p)).status, 401);
+});
+
+test('tools: StarterPack, equip, Activated with Raycast; vehicles: drive and get out', async () => {
+  const { cookie } = await call('POST', '/auth/signup', { username: 'ToolUser', password: 'secret123' });
+  const { data } = await call('POST', '/games', { name: 'Tool Test', template: 'baseplate' }, cookie);
+  const id = data.game.id;
+  const { place } = (await call('GET', `/games/${id}/place`, null, cookie)).data;
+  place.services.StarterPack = { c: 'StarterPack', ch: [{ c: 'Tool', p: { Name: 'Blaster', ToolModel: 'gun' }, ch: [{ c: 'Script', p: { Name: 'Shoot', Source: `
+    local tool = script.Parent
+    tool.Activated:Connect(function(target)
+      local char = tool.Parent
+      local head = char.Head
+      local r = workspace:Raycast(head.Position, (target - head.Position).Unit * 200, char)
+      print("hit", r and r.Instance.Name or "nothing")
+    end)
+  ` } }] }] };
+  place.services.Workspace.ch.push({ c: 'Part', p: { Name: 'Target', Anchored: true, Size: [4, 4, 4], CFrame: [0, 5, -30, 1, 0, 0, 0, 1, 0, 0, 0, 1] } });
+  place.services.Workspace.ch.push({ c: 'VehicleSeat', p: { Name: 'Kart', Anchored: true, MaxSpeed: 70, Size: [2, 1, 2], CFrame: [40, 1, 40, 1, 0, 0, 0, 1, 0, 0, 0, 1] } });
+  const put = await call('PUT', `/games/${id}/place`, { place }, cookie);
+  assert.equal(put.status, 200, JSON.stringify(put.data));
+  const c = await join(cookie, { placeId: id });
+  const welcome = await c.wait((m) => m.t === 'welcome');
+  const charOp = await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  const spawnCf = charOp.ops.find((o) => o[0] === 'char')[3];
+  // find the Blaster in the replicated Backpack
+  const findTool = () => {
+    const scan = (nodes) => { for (const n of nodes || []) { if (n.c === 'Tool') return n; const r = scan(n.ch); if (r) return r; } return null; };
+    for (const m of c.inbox) {
+      if (m.t === 'welcome') { const r = scan(m.snapshot.flatMap((s) => s.ch || [])); if (r) return r; }
+      if (m.t === 'tick') for (const o of m.ops) if (o[0] === 'add') { const r = o[2].c === 'Tool' ? o[2] : scan(o[2].ch); if (r) return r; }
+    }
+    return null;
+  };
+  await c.wait((m) => m.t === 'tick' && !!findTool()).catch((e) => { console.log('NOTOOL', JSON.stringify(Object.keys(place.services)), JSON.stringify(c.inbox.filter((m) => m.t === 'output'))); throw e; });
+  const tool = findTool();
+  assert.ok(welcome);
+  c.ws.send(JSON.stringify({ t: 'equip', id: tool.id }));
+  await new Promise((r) => setTimeout(r, 200));
+  // stand at the spawn and shoot at the target
+  c.ws.send(JSON.stringify({ t: 'move', p: [0, spawnCf[1], 0], ry: 0, a: 'idle' }));
+  c.ws.send(JSON.stringify({ t: 'activate', id: tool.id, p: [0, 5, -30] }));
+  await c.wait((m) => m.t === 'output' && m.text === 'hit Target').catch((e) => { console.log('OUT', JSON.stringify(c.inbox.filter((m) => m.t === 'output' || m.t === 'sys'))); throw e; });
+  // walk onto the VehicleSeat: driving starts; Space gets out
+  c.ws.send(JSON.stringify({ t: 'move', p: [40, 3.5, 40], ry: 0, a: 'idle' }));
+  const drive = await c.wait((m) => m.t === 'drive' && m.on);
+  assert.equal(drive.max, 70);
+  c.ws.send(JSON.stringify({ t: 'move', p: [60, 3.5, 60], ry: 0, a: 'drive:#ff0000' }));
+  await new Promise((r) => setTimeout(r, 100));
+  c.ws.send(JSON.stringify({ t: 'exitVehicle' }));
+  await c.wait((m) => m.t === 'drive' && !m.on);
+  c.ws.close();
+});
+
+test('groups: create, join with approval, roles, wall, shout and Robis Badges', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const a = (await call('POST', '/auth/signup', { username: 'GroupBoss', password: 'secret123' })).cookie;
+  const b = (await call('POST', '/auth/signup', { username: 'GroupFan', password: 'secret123' })).cookie;
+  const aid = (await call('GET', '/auth/me', null, a)).data.user.id;
+  const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
+  const bal = (await call('GET', '/auth/me', null, a)).data.user.robits;
+  await call('POST', `/admin/users/${aid}/robits`, { amount: 500 }, admin);
+  const g = await call('POST', '/groups', { name: 'Builders Club Fans', description: 'We build!', icon: '★', approval: true }, a);
+  assert.equal(g.status, 200, JSON.stringify(g.data));
+  const gid = g.data.group.id;
+  assert.equal((await call('GET', '/auth/me', null, a)).data.user.robits, bal + 500 - 100);
+  assert.equal((await call('POST', '/groups', { name: 'builders club fans' }, a)).status, 400); // name taken
+  // approval needed
+  assert.equal((await call('POST', `/groups/${gid}/join`, {}, b)).data.pending, true);
+  assert.equal((await call('POST', `/groups/${gid}/wall`, { text: 'hi' }, b)).status, 403);
+  const full = (await call('GET', `/groups/${gid}`, null, a)).data.group;
+  assert.equal(full.requests.length, 1);
+  await call('POST', `/groups/${gid}/requests/${bid}`, { accept: true }, a);
+  assert.equal((await call('GET', `/groups/${gid}`, null, b)).data.group.myRole, 'member');
+  assert.equal((await call('POST', `/groups/${gid}/wall`, { text: 'hello damn world' }, b)).data.group.wall[0].text, 'hello #### world');
+  assert.equal((await call('POST', `/groups/${gid}/shout`, { text: 'Meeting at 5' }, b)).status, 403);
+  assert.equal((await call('POST', `/groups/${gid}/shout`, { text: 'Meeting at 5' }, a)).data.group.shout.text, 'Meeting at 5');
+  await call('POST', `/groups/${gid}/members/${bid}`, { action: 'admin' }, a);
+  assert.equal((await call('POST', `/groups/${gid}/shout`, { text: 'Admin shout' }, b)).status, 200);
+  assert.equal((await call('POST', `/groups/${gid}/leave`, {}, a)).status, 400); // owner can't leave
+  // profile: groups and Robis Badges
+  const ug = (await call('GET', `/users/${bid}/groups`)).data;
+  assert.equal(ug.groups[0].role, 'admin');
+  assert.equal(ug.primary.id, gid);
+  const ach = (await call('GET', `/users/${aid}`)).data.user.achievements.map((x) => x.id);
+  assert.ok(ach.includes('founder'));
+  // owner gives the group away
+  await call('POST', `/groups/${gid}/members/${bid}`, { action: 'owner' }, a);
+  const after = (await call('GET', `/groups/${gid}`, null, a)).data.group;
+  assert.equal(after.owner.username, 'GroupFan');
+  assert.equal(after.myRole, 'admin');
+  assert.equal((await call('GET', '/groups?q=fans')).data.groups.length, 1);
+});
+
+test('the main account is Seek_tv87 and an admin can take it over', async () => {
+  const games = (await call('GET', '/games?sort=popular')).data.games;
+  assert.equal(games[0].creator.username, 'Seek_tv87');
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  // nobody can sign up with the main account's name
+  assert.equal((await call('POST', '/auth/signup', { username: 'Seek_tv87', password: 'secret123' })).status, 400);
+  const fan = (await call('POST', '/auth/signup', { username: 'NotTheOwner', password: 'secret123' })).cookie;
+  await call('POST', '/admin/users/' + (await call('GET', '/auth/me', null, fan)).data.user.id + '/robits', { amount: 2000 }, admin);
+  assert.equal((await call('POST', '/account/username', { username: 'Seek_tv87', password: 'secret123' }, fan)).status, 400); // not an admin
+  // an admin renames themself to Seek_tv87: the games and catalog become theirs
+  const r = await call('POST', '/account/username', { username: 'Seek_tv87', password: 'secret123' }, admin);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const me = (await call('GET', '/auth/me', null, admin)).data.user;
+  const games2 = (await call('GET', '/games?sort=popular')).data.games;
+  assert.equal(games2[0].creator.id, me.id);
+  assert.deepEqual(me.flags.sort(), ['staff', 'verified']);
+  await call('POST', '/account/username', { username: 'Tester_1', password: 'secret123' }, admin); // put the name back for later tests
+});
+
+test('Team Create: collaborators edit the same place together', async () => {
+  const owner = (await call('POST', '/auth/signup', { username: 'TeamOwner', password: 'secret123' })).cookie;
+  const mate = (await call('POST', '/auth/signup', { username: 'TeamMate', password: 'secret123' })).cookie;
+  const stranger = (await call('POST', '/auth/signup', { username: 'Stranger', password: 'secret123' })).cookie;
+  const { game } = (await call('POST', '/games', { name: 'Together', template: 'baseplate' }, owner)).data;
+  assert.equal((await call('GET', `/games/${game.id}/place`, null, mate)).status, 403);
+  assert.equal((await call('POST', `/games/${game.id}/collaborators`, { username: 'TeamMate' }, mate)).status, 403);
+  assert.equal((await call('POST', `/games/${game.id}/collaborators`, { username: 'TeamMate' }, owner)).status, 200);
+  assert.equal((await call('GET', `/games/${game.id}/place`, null, mate)).status, 200);
+  assert.equal((await call('GET', '/team-create', null, mate)).data.games[0].id, game.id);
+  // live session
+  const ws = (cookie) => new Promise((resolve) => {
+    const w = new WebSocket(base.replace('http', 'ws') + '/ws', { headers: { cookie } });
+    const inbox = [];
+    w.on('message', (d) => inbox.push(JSON.parse(d)));
+    w.on('open', () => resolve({ w, inbox, until: async (pred) => { for (let i = 0; i < 60; i++) { const m = inbox.find(pred); if (m) return m; await new Promise((r) => setTimeout(r, 50)); } throw new Error('timeout'); } }));
+  });
+  const a = await ws(owner), b = await ws(mate), c = await ws(stranger);
+  a.w.send(JSON.stringify({ t: 'tc.join', gameId: game.id }));
+  await a.until((m) => m.t === 'tc.welcome');
+  b.w.send(JSON.stringify({ t: 'tc.join', gameId: game.id }));
+  // the owner is asked for the latest version for the newcomer
+  const need = await a.until((m) => m.t === 'tc.need');
+  a.w.send(JSON.stringify({ t: 'tc.snapshot', for: need.for, place: { format: 'robis-place', services: {} } }));
+  await b.until((m) => m.t === 'tc.snapshot');
+  const pres = await a.until((m) => m.t === 'tc.presence' && m.users.length === 2);
+  assert.deepEqual(pres.users.map((u) => u.name).sort(), ['TeamMate', 'TeamOwner']);
+  b.w.send(JSON.stringify({ t: 'tc.ops', ops: [['rem', 'abc']] }));
+  const ops = await a.until((m) => m.t === 'tc.ops');
+  assert.equal(ops.from, 'TeamMate');
+  c.w.send(JSON.stringify({ t: 'tc.join', gameId: game.id }));
+  await c.until((m) => m.t === 'tc.error');
+  a.w.close(); b.w.close(); c.w.close();
 });

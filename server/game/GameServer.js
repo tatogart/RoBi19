@@ -15,7 +15,8 @@ import { filterChat } from './chatfilter.js';
 
 const TICK_HZ = 30;
 const REPLICATED = new Set(['Workspace', 'Players', 'Lighting', 'ReplicatedStorage', 'StarterGui', 'Teams']);
-const RUNNABLE = new Set(['Workspace', 'ServerScriptService']);
+// Scripts run in these services (Players: scripts in Tools in a Backpack, like Roblox).
+const RUNNABLE = new Set(['Workspace', 'ServerScriptService', 'Players']);
 const EMPTY_SHUTDOWN_MS = 60_000;
 
 export class GameServer {
@@ -64,6 +65,7 @@ export class GameServer {
     game.on('changed', (inst, prop) => this._onChanged(inst, prop));
 
     this.pendingScripts = new Set();
+    this.maybeStop = new Set();
     for (const d of game.GetDescendants()) if (d instanceof Script) this._maybeQueueScript(d);
     this.touching = new Map(); // key -> [a, b]
     this.grid = new SpatialGrid(16);
@@ -106,6 +108,12 @@ export class GameServer {
       this.teleport(model, CFrame.fromPosition(pos.add(new Vector3(0, 3, 0))));
       return true;
     };
+    game._groupRank = (player, gid) => (this.manager && this.manager.groupRank ? this.manager.groupRank(player._p.UserId, gid) : 0);
+    game._groupRole = (player, gid) => (this.manager && this.manager.groupRole ? this.manager.groupRole(player._p.UserId, gid) : 'Guest');
+    game._notify = (player, text) => {
+      const s = this.sessions.get(player._p.UserId);
+      if (s) this.send(s, { t: 'sys', text: text.slice(0, 300) });
+    };
     game._getTouchingParts = (part) => {
       const out = [];
       for (const [a, b] of this.touching.values()) {
@@ -123,14 +131,19 @@ export class GameServer {
   }
 
   _onAdded(inst, root) {
-    if (inst instanceof Script) this._maybeQueueScript(inst);
+    if (inst instanceof Script) {
+      if (this.maybeStop.has(inst) && this._runnable(inst)) this.maybeStop.delete(inst);
+      else this._maybeQueueScript(inst);
+    }
     if (inst instanceof Explosion && inst.IsDescendantOf(this.game.Workspace)) this._explode(inst);
     // Only the root of an added subtree is sent; children are serialized with it at flush time.
     if (inst === root && inst._parent && this.isReplicated(inst)) this.enqueue(['add', inst._parent.id, null, inst]);
   }
 
   _onRemoving(inst, root) {
-    if (inst instanceof Script) { this.rt.stopScript(inst); this.pendingScripts.delete(inst); }
+    // A script being moved (a Tool going from the Backpack to the hand) keeps
+    // running; it's only stopped at the end of the tick if it really left.
+    if (inst instanceof Script) { this.maybeStop.add(inst); this.pendingScripts.delete(inst); }
     if (inst === root && this.isReplicated(inst)) this.enqueue(['rem', inst.id]);
   }
 
@@ -166,12 +179,22 @@ export class GameServer {
     for (const s of list) if (!s._destroyed && s.getRoot() === this.game) this.rt.runScript(s);
   }
 
-  _maybeQueueScript(s) {
-    if (s.Disabled) return;
+  _runnable(s) {
     let top = s;
     while (top._parent && top._parent !== this.game) top = top._parent;
-    if (!RUNNABLE.has(top.ClassName)) return;
+    return top._parent === this.game && RUNNABLE.has(top.ClassName);
+  }
+
+  _maybeQueueScript(s) {
+    if (s.Disabled) return;
+    if (!this._runnable(s)) return;
     this.pendingScripts.add(s);
+  }
+
+  _stopMovedScripts() {
+    if (!this.maybeStop.size) return;
+    for (const s of this.maybeStop) if (s._destroyed || !this._runnable(s)) this.rt.stopScript(s);
+    this.maybeStop.clear();
   }
 
   // ------------------------------------------------------------ players
@@ -199,6 +222,9 @@ export class GameServer {
     player._p.DisplayName = user.username;
     session.player = player;
     player._parentLocked = false;
+    const backpack = new CLASSES.Backpack();
+    backpack.Name = 'Backpack';
+    backpack.Parent = player;
 
     // Send the world first so the client can build it while scripts react.
     this.flush();
@@ -423,11 +449,20 @@ export class GameServer {
     session.respawnAt = 0;
     model.Parent = this.game.Workspace;
     player.Character = model;
+    // Every spawn starts with a fresh Backpack: the StarterPack's tools.
+    const backpack = player.FindFirstChild('Backpack');
+    if (backpack) {
+      for (const t of backpack.GetChildren()) t.Destroy();
+      for (const t of this.game.GetService('StarterPack').GetChildren()) {
+        try { t.Clone().Parent = backpack; } catch { /* not cloneable */ }
+      }
+    }
     this.enqueue(['char', player.UserId, model.id, cf.toArray()]);
     player._fire('CharacterAdded', model);
   }
 
   removeCharacter(session) {
+    this.exitVehicle(session);
     const ch = session.character;
     if (!ch) return;
     session.player._fire('CharacterRemoving', ch);
@@ -441,9 +476,43 @@ export class GameServer {
 
   _onDied(session, model) {
     if (session.character !== model) return;
+    this.exitVehicle(session);
     this.enqueue(['died', session.user.id]);
     const players = this.game.GetService('Players');
     if (players.CharacterAutoLoads) session.respawnAt = this.time + Math.max(0, players.RespawnTime);
+  }
+
+  // ------------------------------------------------------------ vehicles
+  enterVehicle(session, seat) {
+    if (session.vehicle || seat._p.Disabled || seat._occupied || !session.character) return;
+    if (session.vehicleCooldown && this.time < session.vehicleCooldown) return;
+    const model = seat.Parent && seat.Parent.ClassName === 'Model' && seat.Parent !== this.game.Workspace ? seat.Parent : seat;
+    seat._occupied = session;
+    session.vehicle = { seat, model, parent: model.Parent };
+    // The car rides with the player (drawn under them by every client) while it's driven.
+    model.Parent = this.game.GetService('ServerStorage');
+    const color = '#' + seat._p.Color.toHex().replace('#', '');
+    const look = seat._p.CFrame.LookVector;
+    this.send(session, { t: 'drive', on: true, max: seat._p.MaxSpeed, turn: seat._p.TurnSpeed, color, ry: Math.atan2(-look.X, -look.Z) });
+    seat._fire('Entered', session.player);
+  }
+
+  exitVehicle(session) {
+    const v = session.vehicle;
+    if (!v) return;
+    session.vehicle = null;
+    session.vehicleCooldown = this.time + 1.5;
+    v.seat._occupied = null;
+    const [x, y, z] = session.state.p;
+    if (v.parent && !v.parent._destroyed) {
+      // Park the car where the player got out: its seat goes under them, facing their way.
+      const delta = rootCFrame(x, y - 1.5, z, session.state.ry).mul(v.seat._p.CFrame.Inverse());
+      const parts = v.model === v.seat ? [v.seat] : v.model.GetDescendants().filter((d) => d instanceof BasePart);
+      for (const p of parts) p.CFrame = delta.mul(p._p.CFrame);
+      v.model.Parent = v.parent;
+    }
+    this.send(session, { t: 'drive', on: false });
+    v.seat._fire('Exited', session.player);
   }
 
   teleport(model, cf) {
@@ -499,6 +568,30 @@ export class GameServer {
         cd._fire('MouseClick', session.player);
         break;
       }
+      case 'equip': {
+        const ch = session.character;
+        const backpack = session.player && session.player.FindFirstChild('Backpack');
+        if (!ch || !backpack) return;
+        const tool = msg.id ? this.game.getById(String(msg.id)) : null;
+        for (const t of ch.GetChildren()) {
+          if (t.ClassName === 'Tool' && t !== tool) { t._fire('Unequipped'); t.Parent = backpack; }
+        }
+        if (tool && tool.ClassName === 'Tool' && tool.Parent === backpack) { tool.Parent = ch; tool._fire('Equipped'); }
+        break;
+      }
+      case 'activate': {
+        const tool = this.game.getById(String(msg.id));
+        if (!tool || tool.ClassName !== 'Tool' || !session.character || tool.Parent !== session.character || !tool._p.Enabled) return;
+        const hum = session.character.FindFirstChildOfClass('Humanoid');
+        if (!hum || hum.Health <= 0) return;
+        if (session.lastActivate && this.time - session.lastActivate < 0.05) return;
+        session.lastActivate = this.time;
+        const p = Array.isArray(msg.p) ? msg.p.map(Number) : null;
+        const aim = p && p.every(Number.isFinite) ? new Vector3(p[0], p[1], p[2]) : null;
+        tool._fire('Activated', aim);
+        break;
+      }
+      case 'exitVehicle': this.exitVehicle(session); break;
       case 'reset': {
         const hum = session.character && session.character.FindFirstChildOfClass('Humanoid');
         if (hum) hum.Health = 0;
@@ -525,6 +618,7 @@ export class GameServer {
     this.lastTick = nowMs;
     this.time += dt;
     try {
+      this._stopMovedScripts();
       this._runPendingScripts();
       this.rt.step();
       this.game.GetService('RunService')._fire('Stepped', this.time, dt);
@@ -664,6 +758,12 @@ export class GameServer {
       const [a, b] = pair;
       a._fire('Touched', b);
       b._fire('Touched', a);
+      // Touching a VehicleSeat gets you in.
+      for (const [seat, limb] of [[a, b], [b, a]]) {
+        if (seat.ClassName !== 'VehicleSeat' || !(limb._parent && limb._parent._isCharacter)) continue;
+        const driver = [...this.sessions.values()].find((x) => x.character === limb._parent);
+        if (driver) this.enterVehicle(driver, seat);
+      }
       for (const [limb, other] of [[a, b], [b, a]]) {
         if (limb._parent && limb._parent._isCharacter) {
           const hum = limb._parent.FindFirstChildOfClass('Humanoid');

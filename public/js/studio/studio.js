@@ -11,7 +11,8 @@ import { Explorer } from './explorer.js';
 import { Properties } from './properties.js';
 import { ScriptEditor } from './editor.js';
 import { History } from './history.js';
-import { TOOLBOX, toolboxThumb } from './toolbox.js';
+import { TOOLBOX, TOOLBOX_CATEGORIES, toolboxThumb } from './toolbox.js';
+import { TeamCreate } from './teamcreate.js';
 import { RIBBON, CLASS_ICONS, classIcon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
@@ -37,6 +38,7 @@ const INSERTABLE = {
   Values: ['IntValue', 'NumberValue', 'StringValue', 'BoolValue', 'ObjectValue', 'Vector3Value', 'Color3Value'],
   Effects: ['Fire', 'Sparkles', 'Smoke', 'PointLight', 'SpotLight', 'Explosion'],
   Interaction: ['ClickDetector', 'BillboardText', 'Hint', 'Message', 'Decal'],
+  Gameplay: ['Tool', 'VehicleSeat'],
   Other: ['Humanoid', 'Team'],
 };
 
@@ -51,6 +53,9 @@ class Studio {
     this.playing = false;
     this.dirty = false;
     this.history = new History(this);
+    this.team = null;
+    // Team Create: our own changes go to everyone else editing this place.
+    this.onLocalOps = (ops) => { if (this.team && !this.playing) this.team.sendOps(ops); };
   }
 
   // ------------------------------------------------------------ events
@@ -112,6 +117,7 @@ class Studio {
   }
 
   defaultParent(inst) {
+    if (inst.ClassName === 'Tool') return this.game.GetService('StarterPack'); // everyone gets it on spawn
     const scriptLike = inst.IsA('BaseScript') || inst.ClassName === 'ModuleScript';
     const sel = this.selection[0];
     const isPartChild = ['Fire', 'Sparkles', 'Smoke', 'PointLight', 'SpotLight', 'ClickDetector', 'BillboardText', 'Decal'].includes(inst.ClassName);
@@ -252,7 +258,8 @@ class Studio {
   openScript(s) { this.editor.open(s); }
 
   // ------------------------------------------------------------ place loading
-  loadPlaceData(place, info = null) {
+  loadPlaceData(place, info = null, opts = {}) {
+    if (!opts.keepTeam && this.team) { this.team.close(); this.team = null; }
     this.editor.closeAll();
     this.suspendEvents = true;
     clearPlace(this.game);
@@ -262,6 +269,8 @@ class Studio {
     this.gameId = info ? info.id : null;
     this.setSelection([]);
     this.history.reset();
+    if (!opts.keepTeam && info && info.id && info.canEdit) this.team = new TeamCreate(this, info.id);
+    this.emit('team');
     this.explorer.setGame(this.game);
     this.viewport.env.apply(this.game.Lighting);
     this.updateTitle();
@@ -554,6 +563,38 @@ class Studio {
     ], 720);
   }
 
+  // Team Create: who is editing right now, collaborators (owner adds them) and a team chat.
+  async teamDialog() {
+    if (!this.gameId) { this.dialog('Team Create', h('p', { text: 'Publish your place first, then invite people to edit it with you.' })); return; }
+    const body = h('div', { class: 'team-dialog' });
+    const draw = async () => {
+      let data = { collaborators: [], owner: null };
+      try { data = await api.get(`/games/${this.gameId}/collaborators`); } catch (e) { body.replaceChildren(h('p', { text: e.message })); return; }
+      const isOwner = this.gameInfo && this.gameInfo.isOwner;
+      const online = (this.team && this.team.users) || [];
+      const input = h('input', { placeholder: 'Username' });
+      input.addEventListener('keydown', (e) => e.stopPropagation());
+      const chat = h('input', { placeholder: 'Message your team (shows in Output)' });
+      chat.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && chat.value.trim()) { this.team?.chat(chat.value.trim()); chat.value = ''; } });
+      body.replaceChildren(
+        h('p', { class: 'muted', text: 'Collaborators can open this place in Studio and edit it with you at the same time. Everyone sees each other\'s changes live; Undo only undoes your own changes.' }),
+        h('h4', { text: `Editing now (${online.length})` }),
+        h('div', { class: 'team-list' }, online.map((u) => h('div', { class: 'team-user online', text: u.name }))),
+        h('h4', { text: 'Collaborators' }),
+        h('div', { class: 'team-list' },
+          data.owner ? h('div', { class: 'team-user' }, data.owner.username, h('span', { class: 'muted', text: ' (owner)' })) : null,
+          data.collaborators.map((u) => h('div', { class: 'team-user' }, u.username,
+            isOwner ? h('button', { class: 'sbtn', text: 'Remove', onclick: async () => { await api.del(`/games/${this.gameId}/collaborators/${u.id}`); draw(); } }) : null))),
+        isOwner ? h('div', { class: 'team-add' }, input, h('button', { class: 'sbtn primary', text: 'Add', onclick: async () => {
+          try { await api.post(`/games/${this.gameId}/collaborators`, { username: input.value.trim() }); draw(); } catch (e) { alert(e.message); }
+        } })) : null,
+        this.team ? h('div', { class: 'team-add' }, chat) : null);
+    };
+    draw();
+    this.on('team', () => { if (document.body.contains(body)) draw(); });
+    this.dialog('Team Create', body, [{ text: 'Close' }], 460);
+  }
+
   async gameSettings() {
     if (!this.gameId) return;
     const { game } = await api.get(`/games/${this.gameId}`);
@@ -642,6 +683,7 @@ class Studio {
             btn('anchor', 'Anchor', 'anchor', () => this.setOnSelectedParts('Anchored', (p) => !p.Anchored, 'Anchor'), { small: true }))),
         testGroup(),
         group('Settings', btn('settings', 'Game Settings', 'settings', () => this.gameSettings())),
+        group('Collaborate', btn('team', 'Team Create', 'group', () => this.teamDialog(), { title: 'Edit this place together with friends' })),
         group('Publish', btn('publish', 'Publish', 'publish', () => this.publish(), { title: 'Publish to Robis (Ctrl+S)' })),
       ],
       MODEL: () => [
@@ -729,9 +771,14 @@ class Studio {
   renderToolbox() {
     const grid = $('toolbox');
     const q = $('toolbox-filter').value.toLowerCase();
-    grid.replaceChildren(...TOOLBOX.filter((t) => t.name.toLowerCase().includes(q)).map((t) => {
+    // Category chips above the grid.
+    let cats = $('toolbox-cats');
+    if (!cats) { cats = h('div', { class: 'tb-cats', id: 'toolbox-cats' }); grid.before(cats); }
+    this.toolboxCat = this.toolboxCat || 'All';
+    cats.replaceChildren(...TOOLBOX_CATEGORIES.map((c) => h('button', { class: c === this.toolboxCat ? 'on' : '', text: c, onclick: () => { this.toolboxCat = c; this.renderToolbox(); } })));
+    grid.replaceChildren(...TOOLBOX.filter((t) => t.name.toLowerCase().includes(q) && (this.toolboxCat === 'All' || t.cat === this.toolboxCat)).map((t) => {
       const img = h('img', { alt: '' });
-      toolboxThumb(t).then((u) => { if (u) img.src = u; else img.replaceWith(h('div', { class: 'ic', style: 'width:88px;height:88px', html: CLASS_ICONS.script })); });
+      toolboxThumb(t).then((u) => { if (u) img.src = u; else img.replaceWith(h('div', { class: 'ic', style: 'width:88px;height:88px', html: t.cat === 'Weapons' ? '<div style="font-size:52px;text-align:center;line-height:88px">🧰</div>' : CLASS_ICONS.script })); });
       return h('div', { class: 'tb-item', title: `Insert ${t.name}`, onclick: () => {
         if (this.playing) return;
         const inst = t.build();
@@ -807,6 +854,13 @@ class Studio {
       if (this.isSelected(inst)) { this.selection = this.selection.filter((i) => i !== inst); queueMicrotask(() => this.emit('selection')); }
     });
     this.on('history', () => this.updateTitle());
+    // Team Create presence in the status bar.
+    const teamEl = h('span', { class: 'team-status' });
+    $('statusbar').insertBefore(teamEl, $('status-right'));
+    this.on('team', () => {
+      const users = (this.team && this.team.users) || [];
+      teamEl.textContent = users.length > 1 ? `👥 Team Create: ${users.map((u) => u.name).join(', ')}` : '';
+    });
 
     addEventListener('keydown', (e) => this.onKey(e));
     addEventListener('beforeunload', (e) => { if (this.dirty) { e.preventDefault(); e.returnValue = ''; } });

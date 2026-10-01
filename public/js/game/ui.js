@@ -90,6 +90,11 @@ export class HUD {
     this.fps = h('div', 'fps');
     this.el.append(this.fps);
 
+    // Tool hotbar (keys 1-9)
+    this.hotbar = h('div', 'hotbar');
+    this.el.append(this.hotbar);
+    this._toolsKey = '';
+
     // mobile
     this.stick = h('div', 'touch-stick', '<div class="knob"></div>');
     this.jump = h('button', 'jump-btn', ICON.jump);
@@ -111,6 +116,22 @@ export class HUD {
     this._buildMenu();
     this._buildConsole();
     this.leaderboardVisible = true;
+  }
+
+  // ------------------------------------------------------------ tools
+  setTools(tools, equipped) {
+    const key = tools.map((t) => t.id + t._p.Name).join(',') + '|' + (equipped ? equipped.id : '');
+    if (key === this._toolsKey) return;
+    this._toolsKey = key;
+    const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨' };
+    this.hotbar.replaceChildren(...tools.slice(0, 9).map((t, i) => {
+      const b = h('button', 'slot' + (equipped && equipped.id === t.id ? ' on' : ''),
+        `<span class="num">${i + 1}</span><span class="ico">${ICONS[t._p.ToolModel] || '🧰'}</span><span class="nm">${esc(t._p.Name)}</span>`);
+      b.title = t._p.ToolTip || t._p.Name;
+      b.onclick = (e) => { e.stopPropagation(); this.client.equipSlot(i); };
+      b.addEventListener('touchend', (e) => { e.preventDefault(); e.stopPropagation(); this.client.equipSlot(i); });
+      return b;
+    }));
   }
 
   // ------------------------------------------------------------ loading

@@ -15,6 +15,7 @@ const NAV = [
   ['avatar', 'Avatar', '/avatar'],
   ['inventory', 'Inventory', '/inventory'],
   ['trade', 'Trade', '/trades'],
+  ['groups', 'Groups', '/groups'],
   ['blog', 'Blog', '/blog'],
 ];
 

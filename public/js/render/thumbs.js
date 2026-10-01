@@ -18,9 +18,61 @@ function getRenderer() {
   return renderer;
 }
 
+// Rendered avatar/item pictures are kept in IndexedDB, so pages don't draw
+// the same headshot again on every visit. Bump THUMB_VERSION when the look changes.
+const THUMB_VERSION = 4;
+const PERSIST = /^(head|body|item):/;
+let dbPromise = null;
+function thumbDb() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open('robis-thumbs', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('t');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+  return dbPromise;
+}
+function hashKey(str) {
+  let h1 = 0x811c9dc5, h2 = 0x12345;
+  for (let i = 0; i < str.length; i++) { const c = str.charCodeAt(i); h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0; h2 = Math.imul(h2 + c, 0x5bd1e995) >>> 0; }
+  return THUMB_VERSION + ':' + h1.toString(36) + h2.toString(36) + ':' + str.length;
+}
+async function stored(key) {
+  const db = await thumbDb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const r = db.transaction('t').objectStore('t').get(hashKey(key));
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+let writes = 0;
+async function store(key, url) {
+  if (!url || typeof url !== 'string' || !url.startsWith('data:')) return;
+  const db = await thumbDb();
+  if (!db) return;
+  try {
+    const os = db.transaction('t', 'readwrite').objectStore('t');
+    os.put(url, hashKey(key));
+    // Keep the cache from growing forever: now and then drop it when it gets big.
+    if (++writes % 50 === 0) {
+      const c = os.count();
+      c.onsuccess = () => { if (c.result > 600) os.clear(); };
+    }
+  } catch { /* quota or private mode */ }
+}
+
 function schedule(key, fn) {
   if (cache.has(key)) return cache.get(key);
-  const p = (queue = queue.then(fn, fn)).catch((e) => { console.warn('thumbnail failed', e); return ''; });
+  const draw = () => (queue = queue.then(fn, fn)).catch((e) => { console.warn('thumbnail failed', e); return ''; });
+  const p = PERSIST.test(key)
+    ? stored(key).then((hit) => hit || draw().then((url) => { store(key, url); return url; }))
+    : draw();
   cache.set(key, p);
   return p;
 }

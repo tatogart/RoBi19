@@ -62,6 +62,10 @@
 - **Serial numbers**: every copy of a Limited has its own number (#1, #2, …). It shows on the item card, on the item page (with the list of **Owners** by number) and in trades; a copy keeps its number when it's traded.
 - **Reselling Limiteds**: owners press **Sell** on a Limited's page and set a price. The item page lists all **Resellers** (cheapest first, with serial numbers) and the **Best Price**; a sold-out Limited shows its best resale price in the Catalog. The buyer gets that exact copy and the seller gets 70% (30% marketplace fee). A listing disappears by itself if the copy is traded or taken away.
 - **Admin Panel**: live stats (online, new today, banned, open trades, items for sale), a site-wide **Announcement** (a coloured bar on every page and a chat message in every game), and tabs: **Players** (search + filters; **Manage** opens a player card with info, recent transactions and admin actions, plus **Reset password** — random or typed, logs the player out everywhere — change username, log out everywhere, kick from game, Robits, items, membership, rights, badges, ban and delete), **Games** (feature / delete), **Items** (Limited and player-made items with owners and listings) and **Admin Log** (every admin action: who did what to whom).
+- **Groups**: create a group (R$100) with an emblem (colour + symbol), a description, a **Group Shout**, a **Wall**, open or approval-only joining, roles (Owner / Admin / Member), kicking, giving the group away, and a **primary group** shown on your profile. Scripts can check `player:GetRankInGroup(id)` / `IsInGroup(id)` (e.g. group-only doors).
+- **Robis Badges**: earned automatically and shown on profiles — Administrator, Welcome To The Club, Veteran, Friendly, Friendship, Builder, Homestead, Bricksmith, Item Designer, Trader, Collector, Robit Tycoon, Badge Hunter, Group Founder, Combat Initiation and Warrior.
+- **The main account is `Seek_tv87`**: it owns the catalog and the showcase games (with the check and the Robis icon). To take it over on your server: sign up with any name, enter the admin code, then change your username to `Seek_tv87` in Settings — the games and catalog become yours. (`ROBIS_OWNER` changes the name.)
+- **Showcase games update themselves**: when Robis is updated, the built-in games are replaced by their newest versions — unless you edited them in Studio.
 - **Deleting accounts**: Admin Panel → **Delete account** removes the account, its games, friends, messages and trades for good. It is *not* a device ban — the person can sign up again (use Ban → Account + device and IP for that). Players can also delete their own account in Settings.
 
 ### 🎮 Game client
@@ -73,6 +77,9 @@
 - Materials: Plastic with **studs and inlets**, Wood, WoodPlanks, Brick, Slate, Concrete, Marble, Granite, Metal, DiamondPlate, CorrodedMetal, Grass, Sand, Ice, Fabric, Glass, **Neon** and ForceField, all generated procedurally.
 - A sky with procedural clouds, sun, moon and stars, a day/night cycle driven by `Lighting.ClockTime`, fog and shadows.
 - Effects: `Fire`, `Sparkles`, `Smoke`, `PointLight`, `SpotLight`, `Explosion` (with knock-back), `BillboardText`, `ForceField` and `ClickDetector` (with a hover cursor).
+- **Tools**: a hotbar (keys **1-9** or tap) with the Tools in your Backpack; click (or tap) to use them. Swords, blasters, rocket launchers, flashlights, paint brushes and coils are drawn in the character's hand for everyone.
+- **Vehicles**: touch a `VehicleSeat` to drive — W/S throttle, A/D steer (joystick on phones), Space to get out. Everyone sees you in a go-kart.
+- **Auto graphics**: if a device can't keep up, the game lowers the graphics quality once by itself. Avatar and item pictures are cached on the device, so the website loads faster.
 
 ### 🛠️ Robis Studio
 - The 2019 layout: a **FILE** menu and HOME / MODEL / TEST / VIEW ribbon tabs, with Toolbox, Explorer, Properties, Output and a Command Bar.
@@ -82,25 +89,31 @@
 - **Script editor** (CodeMirror) with Lua highlighting and tabs.
 - **Play (F5)**: runs your unsaved place on a private test server inside the viewport. Server `print`/`warn`/errors (with stack traces) go to Output, and the Explorer shows the live game.
 - Undo and redo, clipboard, duplicate, group and ungroup, Anchor, Lock, colour and material pickers, 90° rotate and tilt.
-- A **Toolbox** of ready-made scripted models: Kill Brick, Checkpoint, Coin, Spinner, Moving Platform, Disappearing Brick, Speed and Jump Pads, Teleporter, Push Button, Lamp Post, Tree, Campfire, Brick House, a leaderboard script and a day/night script.
+- A **Toolbox** of 44 ready-made scripted models in categories: **Obby** (Kill Brick, Checkpoint, Spinner, Moving Platform, Disappearing Brick, Speed/Jump Pads, Trampoline), **Gameplay** (Coin, Teleporter, Push Button, Round System, Team Setup, VIP Door, Group Door, Sliding Door, Health Pack, Badge Giver), **Weapons** (Sword, Blaster, Rocket Launcher, Flashlight, Speed Coil, Gravity Coil), **Vehicles** (Go-Kart, Race Car, Monster Truck), **Buildings** (Brick House, Skyscraper, Bridge, Castle Tower, Shop Stand), **Decor** and **Scripts** (leaderboard, day/night, saving coins).
+- **Team Create**: Home → **Team Create** — the owner adds collaborators by username; everyone who opens the place in Studio edits it **together, live**. Changes appear for everyone at once, a newcomer gets the latest (even unpublished) version, there's a team chat, and **Undo only undoes your own changes**. Shared places are listed on the Create page.
 - Templates (Baseplate, Classic, Flat Terrain, Obby), **Publish to Robis** (it renders a thumbnail too), game settings, and save/open `.robis.json` files.
 
 ### 📜 Lua 5.3 scripting (server-side)
 - Runs on [fengari](https://github.com/fengari-lua/fengari). Every `Script` is its own coroutine, and `wait()`, `spawn`, `delay`, `:Wait()` and `WaitForChild` really yield.
 - Roblox-like API: `game`, `workspace`, `script`, `Instance.new`, `Vector3`, `CFrame`, `Color3`, `BrickColor`, `Enum`, `TweenInfo`, `UDim2`, `Random` and events (`Touched`, `Changed`, `PlayerAdded`, `Died`, …).
+- `workspace:Raycast(origin, direction, ignore)` (returns `Instance`, `Position`, `Normal`, `Distance`), `FindPartOnRay(Ray.new(...))`, **Tools** (`Activated(target)`, `Equipped`, `Unequipped`, `StarterPack`, `player.Backpack`), **VehicleSeat** (`MaxSpeed`, `TurnSpeed`, `Entered`, `Exited`), `player:Notify(text)` (a private chat message), `player:GetRankInGroup(id)`.
 - Services: Players, Lighting, **TweenService**, **DataStoreService** (persistent), RunService (Heartbeat/Stepped), Debris, HttpService (JSON/GUID), **BadgeService** (badges show up on profiles), ReplicatedStorage, ServerStorage and ServerScriptService. `ModuleScript` works with `require`.
 - Sandboxed: no `io`, `os.execute`, `require` of files or bytecode loading. A 10-second **script timeout** stops runaway loops.
 
-### 🎲 Seventeen showcase games
+### 🎲 Twenty-one showcase games
 | Game | What it shows |
 |---|---|
 | **Crossroads** | The classic hangout map with a tower, houses, a fountain and a day/night cycle |
 | **Mega Fun Obby** | 8 stages, checkpoints, `leaderstats`, **DataStore** save, moving and fading platforms, a spinner, speed and jump pads, a badge |
 | **Coin Rush** | Spinning coins (`RunService.Heartbeat`), leaderstats and a saved best score |
-| **Lava Rising** | A round-based game loop with `Hint` timers, a rising lava tween and Wins |
+| **Lava Rising** | A round-based game loop with `Hint` timers, a slowly rising lava tween, easy-to-climb towers (wide steps + trusses) and Wins |
 | **Button Mania** | `ClickDetector` buttons, raining unanchored bricks, explosions and a party mode |
-| **Disaster Island** | Rounds with random disasters: a flash flood, a meteor shower (tweens + `Explosion`) and an earthquake that unanchors buildings; the map is restored with `Clone()` |
-| **Tower of Robis** | A spiral tower obby with lava, **truss climbing**, checkpoints, Wins and a badge |
+| **Disaster Island** | **4 maps** (Suburbia, Construction Site, Pirate Cove, Mountain Village) and **11 disasters**: flood, meteors, earthquake, tornado, acid rain, lightning, volcano, blizzard, tsunami, wildfire, sandstorm. Later rounds can be **double disasters**. Only real survivors win |
+| **Tower of Robis** | A **new random tower every round** (generated in Lua): beams, trusses, kill strips, moving and fading platforms, sweepers, ramps — harder the higher you climb, no checkpoints, random mutators |
+| **DOORS** | A haunted hotel generated door by door: closets to hide in, locked doors with keys in drawers, dark rooms (flashlight), **Rush** and **Ambush**, and **Seek's chase**. Reach Door 50 to escape |
+| **Robis Kart Racing** | Go-karts (`VehicleSeat`) on a circuit with barriers and a jump ramp: 3 laps, checkpoints in order, lap times and results |
+| **Brick Battle** | Red vs Blue team deathmatch with a **Blaster** (Raycast, headshots), a **Rocket Launcher** and a **Sword**, health packs and KO streaks |
+| **Speed Draw** | Draw the secret word on a canvas with the **Paint Brush** tool, everyone else guesses in the chat |
 | **Speed Run** | A neon course with a timer (`tick()`), speed pads and a best time saved in a DataStore |
 | **Brick Tycoon** | Claim a plot, droppers send bricks down a conveyor for Cash, buy upgrades with buttons |
 | **Robis Café** | A hangout: bake pizzas and grab sodas (`ClickDetector`), a jukebox dance party with lights |

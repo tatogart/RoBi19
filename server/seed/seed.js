@@ -5,6 +5,7 @@ import { SEED_GAMES } from './places.js';
 import { MORE_GAMES } from './places2.js';
 import { TEAM_GAMES } from './places3.js';
 import { NOSTALGIA_GAMES } from './places4.js';
+import { NEW_GAMES } from './places6.js';
 
 export const STARTER_ITEMS = ['Bacon Hair', 'Smile', 'Blue Hoodie', 'Jeans', 'Robis Logo T-Shirt', 'Classic Robis Cap', 'Pal Hair', 'Man Face', 'Woman Face'];
 export const STARTER_WEARING = ['Bacon Hair', 'Smile', 'Blue Hoodie', 'Jeans'];
@@ -61,7 +62,7 @@ export function seed(db) {
   // but has no password, so nobody can log into it. Players create their own accounts.
   const robis = createSystemUser(db, 'Robis', {
     membership: 'OutrageousBuildersClub',
-    blurb: 'Welcome to Robis! This is the official account that made the catalog and the first games. Create your own account and start building!',
+    blurb: 'Welcome to Robis! This is the main account that made the catalog and the first games. Create your own account and start building!',
     status: 'Building the future, one brick at a time.',
   });
   db.data.inventory[robis.id] = Object.keys(db.data.items).map(Number);
@@ -71,16 +72,64 @@ export function seed(db) {
     wearing: [find('Dominator of Robis'), find('Epic Face'), find('Black Suit'), find('Suit Pants')],
   };
 
+  ensureOwner(db);
   addSeedGames(db);
   db.flush();
   console.log('[seed] done. Open the site and sign up — the first account you create becomes the admin (with ROBIS_ADMIN_CODE set: whoever enters that code).');
 }
 
+// ---------------------------------------------------------------- main account
+// The main (official) account owns the catalog and the showcase games. It is
+// Seek_tv87. Until a real admin account with that name exists, the built-in
+// system account (no password, nobody can log in) carries the name; once an
+// admin is called Seek_tv87 (sign up, enter the admin code, then rename in
+// Settings), everything is handed over to that account.
+export const OWNER_NAME = (typeof process !== 'undefined' && process.env && process.env.ROBIS_OWNER) || 'Seek_tv87';
+export function officialAccount(D) {
+  const users = Object.values(D.users);
+  return users.find((u) => u.official) || users.find((u) => u.system && u.username === 'Robis') || null;
+}
+export function ensureOwner(db) {
+  const D = db.data;
+  const off = officialAccount(D);
+  if (!off) return null;
+  off.official = true;
+  const same = (u) => u.username.toLowerCase() === OWNER_NAME.toLowerCase();
+  const real = Object.values(D.users).find((u) => !u.system && u.isAdmin && same(u));
+  if (off.system && real) {
+    for (const g of Object.values(D.games)) if (g.creatorId === off.id) g.creatorId = real.id;
+    for (const it of Object.values(D.items)) if (it.creatorId === off.id) it.creatorId = real.id;
+    if (!real.flags || !Object.keys(real.flags).length) real.flags = { ...(off.flags || { verified: true, staff: true }) };
+    real.official = true;
+    for (const map of Object.values(D.serials || {})) delete map[off.id];
+    for (const list of Object.values(D.friends)) { const i = list.indexOf(off.id); if (i >= 0) list.splice(i, 1); }
+    delete D.inventory[off.id];
+    delete D.users[off.id];
+    db.save();
+    return real;
+  }
+  if (off.system && !same(off) && !Object.values(D.users).some((u) => u !== off && same(u))) {
+    off.previousNames = [off.username, ...(off.previousNames || [])].slice(0, 10);
+    off.username = OWNER_NAME;
+    db.save();
+  }
+  return off;
+}
+
+// A quick fingerprint of a place file, to notice when someone edited it.
+function placeHash(place) {
+  const str = JSON.stringify(place);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16) + ':' + str.length;
+}
+
 // Adds showcase games this world doesn't have yet (so older worlds get new
-// places too). Returns how many were added.
+// places too), and updates the ones nobody has edited to the newest version.
+// Returns how many were added.
 export function addSeedGames(db) {
   const D = db.data;
-  const robis = Object.values(D.users).find((u) => u.system && u.username === 'Robis');
+  const robis = officialAccount(D);
   if (!robis) return 0;
   const done = new Set(D.meta.seedKeys || []);
   const now = Date.now();
@@ -89,19 +138,34 @@ export function addSeedGames(db) {
     ...g,
     visits: [48213, 125903, 8721, 67390, 3321][i], up: [912, 2210, 144, 1398, 67][i], down: [48, 190, 21, 120, 9][i],
     favorites: [3002, 9120, 311, 5120, 82][i], copyable: g.key !== 'obby', age: 40 - i * 7,
-  })), ...MORE_GAMES.map((g) => ({ ...g, copyable: true, age: 3 })), ...TEAM_GAMES.map((g) => ({ ...g, copyable: true, age: 1 })), ...NOSTALGIA_GAMES.map((g) => ({ ...g, copyable: true, age: 0 }))];
+  })), ...MORE_GAMES.map((g) => ({ ...g, copyable: true, age: 3 })), ...TEAM_GAMES.map((g) => ({ ...g, copyable: true, age: 1 })), ...NOSTALGIA_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...NEW_GAMES.map((g) => ({ ...g, copyable: true, age: 0 }))];
   for (const sg of all) {
-    if (done.has(sg.key)) continue;
+    const existing = Object.values(D.games).find((g) => g.seedKey === sg.key)
+      || Object.values(D.games).find((g) => g.creatorId === robis.id && g.name === sg.name && !g.seedKey);
+    if (existing) {
+      // Update the showcase game to the newest version, unless someone edited it in Studio.
+      existing.seedKey = sg.key;
+      const current = db.readPlace(existing.id);
+      if (current && (!existing.seedHash || placeHash(current) === existing.seedHash)) {
+        const fresh = sg.build();
+        const h = placeHash(fresh);
+        if (h !== placeHash(current)) { db.writePlace(existing.id, fresh); existing.updated = now; }
+        existing.seedHash = h;
+      }
+      done.add(sg.key);
+      continue;
+    }
+    if (done.has(sg.key)) continue; // the owner deleted it on purpose
     done.add(sg.key);
-    // Worlds from before seedKeys existed already have the first five.
-    if (Object.values(D.games).some((g) => g.creatorId === robis.id && g.name === sg.name)) continue;
     const id = db.nextId('game');
-    db.writePlace(id, sg.build());
+    const place = sg.build();
+    db.writePlace(id, place);
     D.games[id] = {
       id, name: sg.name, description: sg.description, creatorId: robis.id, genre: sg.genre,
       created: now - sg.age * 86400e3, updated: now - 3600e3,
       visits: sg.visits || 0, maxPlayers: sg.maxPlayers, isPublic: true, featured: sg.featured, copyable: sg.copyable,
       upVotes: sg.up || 0, downVotes: sg.down || 0, favorites: sg.favorites || 0,
+      seedKey: sg.key, seedHash: placeHash(place),
     };
     added++;
   }

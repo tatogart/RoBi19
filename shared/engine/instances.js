@@ -454,6 +454,16 @@ export const Seat = defineClass('Seat', Part, {
   icon: 'seat',
   props: { Disabled: { type: 'bool', default: false, cat: 'Behavior' } },
 });
+// Touch it to drive: the player steers with WASD (or the joystick), Space gets out.
+// The whole Model it's in rides along (it's hidden while driven, and put back where you get out).
+export const VehicleSeat = defineClass('VehicleSeat', Seat, {
+  icon: 'seat',
+  props: {
+    MaxSpeed: { type: 'number', default: 60, cat: 'Behavior' },
+    TurnSpeed: { type: 'number', default: 2.2, cat: 'Behavior' },
+  },
+  events: ['Entered', 'Exited'],
+});
 
 // ---------------------------------------------------------------- containers
 class ModelImpl extends Instance {
@@ -496,6 +506,22 @@ class ModelImpl extends Instance {
   BreakJoints() { this.getRoot()._breakJoints && this.getRoot()._breakJoints(this); }
   MakeJoints() {}
 }
+// Tools: put them in StarterPack (everyone gets them on spawn) or a player's
+// Backpack. Players equip them from the hotbar (keys 1-9) and click to use:
+// Activated fires with the Vector3 the player aimed at.
+export const Tool = defineClass('Tool', Instance, {
+  icon: 'tool',
+  props: {
+    ToolModel: { type: 'string', default: 'sword', cat: 'Appearance' },
+    Color: { type: 'Color3', default: C3(163, 162, 165), cat: 'Appearance' },
+    ToolTip: { type: 'string', default: '', cat: 'Data' },
+    Automatic: { type: 'bool', default: false, cat: 'Behavior' },
+    Enabled: { type: 'bool', default: true, cat: 'Behavior' },
+  },
+  events: ['Activated', 'Equipped', 'Unequipped'],
+});
+export const Backpack = defineClass('Backpack', Instance, { icon: 'folder', creatable: false });
+
 export const Model = defineClass('Model', Instance, {
   cls: ModelImpl,
   icon: 'model',
@@ -711,7 +737,11 @@ export const Player = defineClass('Player', Instance, {
     Kick(msg) { const r = this.getRoot(); r._kick && r._kick(this, msg); }
     GetMouse() { return null; }
     IsFriendsWith() { return false; }
-    GetRankInGroup() { return 0; }
+    GetRankInGroup(id) { const r = this.getRoot(); return r._groupRank ? r._groupRank(this, id) : 0; }
+    GetRoleInGroup(id) { const r = this.getRoot(); return r._groupRole ? r._groupRole(this, id) : 'Guest'; }
+    IsInGroup(id) { return this.GetRankInGroup(id) > 0; }
+    // Robis extra: a private system message in this player's chat.
+    Notify(text) { const r = this.getRoot(); r._notify && r._notify(this, String(text)); }
     DistanceFromCharacter(pos) {
       const c = this._p.Character;
       const hrp = c && c.FindFirstChild('HumanoidRootPart');
@@ -745,8 +775,64 @@ export const Workspace = defineClass('Workspace', Model, {
     FilteringEnabled: { type: 'bool', default: true, cat: 'Behavior', readonly: true },
   },
 });
-Workspace.prototype.FindPartOnRay = function () { return [null, null]; };
-Workspace.prototype.Raycast = function () { return null; };
+// Ray casts against every visible part in the Workspace. ignore: an Instance
+// (and its descendants) or a list of them. Returns { Instance, Position, Normal, Distance } or nil.
+function castRay(ws, origin, dir, ignore) {
+  const len = dir.Magnitude;
+  if (!(len > 0)) return null;
+  const ign = (Array.isArray(ignore) ? ignore : ignore ? [ignore] : []).filter((x) => x instanceof Instance);
+  const ignored = (p) => ign.some((i) => p === i || p.IsDescendantOf(i));
+  const ox = origin.X, oy = origin.Y, oz = origin.Z;
+  const ux = dir.X / len, uy = dir.Y / len, uz = dir.Z / len;
+  let best = null, bestT = len;
+  const visit = (inst) => {
+    for (const c of inst._children) {
+      if (c instanceof BasePart) {
+        if (c._p.Transparency < 1 && !ignored(c)) {
+          const cf = c._p.CFrame, r = cf.r, sz = c._p.Size;
+          const dx = ox - cf.x, dy = oy - cf.y, dz = oz - cf.z;
+          // ray in the part's local space
+          const lo = [dx * r[0] + dy * r[3] + dz * r[6], dx * r[1] + dy * r[4] + dz * r[7], dx * r[2] + dy * r[5] + dz * r[8]];
+          const ld = [ux * r[0] + uy * r[3] + uz * r[6], ux * r[1] + uy * r[4] + uz * r[7], ux * r[2] + uy * r[5] + uz * r[8]];
+          const h = [sz.X / 2, sz.Y / 2, sz.Z / 2];
+          let t0 = 0, t1 = bestT, axis = -1, sign = 1;
+          let hit = true;
+          for (let a = 0; a < 3; a++) {
+            if (Math.abs(ld[a]) < 1e-9) { if (lo[a] < -h[a] || lo[a] > h[a]) { hit = false; break; } continue; }
+            let ta = (-h[a] - lo[a]) / ld[a], tb = (h[a] - lo[a]) / ld[a];
+            let sg = -1;
+            if (ta > tb) { const t = ta; ta = tb; tb = t; sg = 1; }
+            if (ta > t0) { t0 = ta; axis = a; sign = sg; }
+            if (tb < t1) t1 = tb;
+            if (t0 > t1) { hit = false; break; }
+          }
+          if (hit && t0 <= bestT) {
+            bestT = t0;
+            const n = [0, 0, 0];
+            if (axis >= 0) n[axis] = sign;
+            // normal back to world space: columns of r
+            best = { part: c, t: t0, n: new Vector3(r[0] * n[0] + r[1] * n[1] + r[2] * n[2], r[3] * n[0] + r[4] * n[1] + r[5] * n[2], r[6] * n[0] + r[7] * n[1] + r[8] * n[2]) };
+          }
+        }
+      }
+      if (c._children.length) visit(c);
+    }
+  };
+  visit(ws);
+  if (!best) return null;
+  return { Instance: best.part, Position: new Vector3(ox + ux * best.t, oy + uy * best.t, oz + uz * best.t), Normal: best.n, Distance: best.t };
+}
+Workspace.prototype.Raycast = function (origin, direction, ignore) {
+  if (!(origin instanceof Vector3) || !(direction instanceof Vector3)) return null;
+  return castRay(this, origin, direction, ignore);
+};
+// Old-style: workspace:FindPartOnRay(Ray.new(origin, direction), ignore) -> part, position
+Workspace.prototype.FindPartOnRay = function (ray, ignore) {
+  const o = ray && (ray.Origin || ray.origin), d = ray && (ray.Direction || ray.direction);
+  if (!(o instanceof Vector3) || !(d instanceof Vector3)) return [null, null];
+  const r = castRay(this, o, d, ignore);
+  return r ? [r.Instance, r.Position] : [null, o.add(d)];
+};
 
 export const Players = defineClass('Players', Instance, {
   cls: class extends Instance {
@@ -830,6 +916,7 @@ export const RunService = defineClass('RunService', Instance, {
   },
   service: true, creatable: false, icon: 'service', events: ['Heartbeat', 'Stepped', 'RenderStepped'],
 });
+export const StarterPack = defineClass('StarterPack', Instance, { service: true, creatable: false, icon: 'storage' });
 export const Debris = defineClass('Debris', Instance, { service: true, creatable: false, icon: 'service' });
 export const TweenService = defineClass('TweenService', Instance, { service: true, creatable: false, icon: 'service' });
 export const HttpService = defineClass('HttpService', Instance, { service: true, creatable: false, icon: 'service' });
@@ -839,8 +926,8 @@ export const MarketplaceService = defineClass('MarketplaceService', Instance, { 
 export const BadgeService = defineClass('BadgeService', Instance, { service: true, creatable: false, icon: 'service' });
 
 // Services shown in the Explorer (in order) and saved with a place.
-export const TREE_SERVICES = ['Workspace', 'Players', 'Lighting', 'ReplicatedStorage', 'ServerScriptService', 'ServerStorage', 'StarterGui', 'Teams'];
-export const SAVED_SERVICES = ['Workspace', 'Lighting', 'ReplicatedStorage', 'ServerScriptService', 'ServerStorage', 'StarterGui', 'Teams'];
+export const TREE_SERVICES = ['Workspace', 'Players', 'Lighting', 'ReplicatedStorage', 'ServerScriptService', 'ServerStorage', 'StarterGui', 'StarterPack', 'Teams'];
+export const SAVED_SERVICES = ['Workspace', 'Lighting', 'ReplicatedStorage', 'ServerScriptService', 'ServerStorage', 'StarterGui', 'StarterPack', 'Teams'];
 
 // ---------------------------------------------------------------- DataModel
 class DataModelImpl extends Instance {

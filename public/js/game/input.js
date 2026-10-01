@@ -31,16 +31,18 @@ export class Input {
         if (k === 'KeyO') this.onZoom(1);
       },
       keyup: (e) => { this.keys.delete(e.code); if (e.code === 'Space') this.jumpPressed = false; },
-      blur: () => { this.keys.clear(); this.jumpPressed = false; this.rmb = false; },
+      blur: () => { this.keys.clear(); this.jumpPressed = false; this.rmb = false; this.lmb = false; },
       mousedown: (e) => {
         if (e.button === 2) { this.rmb = true; this.lastX = e.clientX; this.lastY = e.clientY; }
-        if (e.button === 0) { this.downX = e.clientX; this.downY = e.clientY; }
+        if (e.button === 0) { this.downX = e.clientX; this.downY = e.clientY; this.lmb = true; this.lmbEvent = e; }
       },
       mouseup: (e) => {
         if (e.button === 2) this.rmb = false;
+        if (e.button === 0) this.lmb = false;
         if (e.button === 0 && this.downX !== undefined && Math.hypot(e.clientX - this.downX, e.clientY - this.downY) < 6) this.onClick(e);
       },
       mousemove: (e) => {
+        if (this.lmb) this.lmbEvent = e;
         if (this.pointerLocked) { this.onRotate(e.movementX, e.movementY); return; }
         if (this.rmb) {
           this.onRotate(e.clientX - this.lastX, e.clientY - this.lastY);

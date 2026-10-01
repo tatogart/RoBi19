@@ -2,6 +2,9 @@
 // code: parts plus server Scripts written in Robis Lua.
 import { Vector3, Color3 } from '../../shared/engine/types.js';
 import { newGame, part, model, folder, script, inst, baseplate, spawn, tree, finish } from './builder.js';
+import { gameDisaster, gameTower } from './places5.js';
+
+export { gameDisaster, gameTower };
 
 const RAINBOW = ['#c4281c', '#da8541', '#f5cd30', '#4b974b', '#0d69ac', '#6b327c', '#ff66cc'];
 
@@ -27,295 +30,13 @@ Players.PlayerAdded:Connect(function(player)
 	local inRound = Instance.new("BoolValue")
 	inRound.Name = "InRound"
 	inRound.Parent = player
+	-- Dying knocks you out of the round (you respawn in the lobby, alive, but you didn't survive).
+	player.CharacterAdded:Connect(function(char)
+		local hum = char:FindFirstChild("Humanoid")
+		if hum then hum.Died:Connect(function() if player:FindFirstChild("InRound") then player.InRound.Value = false end end) end
+	end)
 end)
 `;
-
-// ================================================================ Disaster Island
-function disasterMap(parent) {
-  const map = model(parent, 'Map');
-  const house = (x, z, color) => {
-    const h = model(map, 'House');
-    part(h, { name: 'Floor', size: [20, 1, 16], pos: [x, 2.5, z], color: '#7c5c46', material: 'WoodPlanks' });
-    part(h, { name: 'Wall', size: [20, 10, 1], pos: [x, 8, z - 7.5], color, material: 'Brick' });
-    part(h, { name: 'Wall', size: [1, 10, 16], pos: [x - 9.5, 8, z], color, material: 'Brick' });
-    part(h, { name: 'Wall', size: [1, 10, 16], pos: [x + 9.5, 8, z], color, material: 'Brick' });
-    part(h, { name: 'Wall', size: [7, 10, 1], pos: [x - 6.5, 8, z + 7.5], color, material: 'Brick' });
-    part(h, { name: 'Wall', size: [7, 10, 1], pos: [x + 6.5, 8, z + 7.5], color, material: 'Brick' });
-    part(h, { name: 'Roof', size: [22, 1, 18], pos: [x, 13.5, z], color: '#56422f', material: 'Wood' });
-    part(h, { cls: 'TrussPart', name: 'Ladder', size: [2, 12, 2], pos: [x + 11, 8, z], color: '#a3a2a5', material: 'Metal' });
-  };
-  house(-40, -35, '#c4281c');
-  house(40, -35, '#0d69ac');
-  house(-40, 30, '#f5cd30');
-  const tower = model(map, 'Tower');
-  for (let f = 0; f < 4; f++) {
-    const y = 2 + f * 9;
-    part(tower, { name: 'TowerFloor', size: [14, 1, 14], pos: [35, y + 0.5, 35], color: '#a3a2a5', material: 'Concrete' });
-    for (const [dx, dz] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) {
-      part(tower, { name: 'Pillar', size: [1.5, 9, 1.5], pos: [35 + dx, y + 5, 35 + dz], color: '#635f62', material: 'Concrete' });
-    }
-  }
-  part(tower, { name: 'TowerTop', size: [14, 1, 14], pos: [35, 38.5, 35], color: '#a3a2a5', material: 'Concrete' });
-  part(tower, { cls: 'TrussPart', name: 'Ladder', size: [2, 37, 2], pos: [35, 20.5, 43], color: '#f5cd30', material: 'Metal' });
-  for (const [x, z] of [[-10, -55], [15, 60], [-65, 0], [60, -5], [0, 10]]) tree(map, x, z, 2);
-  return map;
-}
-
-export function gameDisaster() {
-  const g = newGame();
-  const ws = g.Workspace;
-  g.Lighting.ClockTime = 13.5;
-  part(ws, { name: 'Sea', size: [700, 20, 700], pos: [0, -12, 0], color: '#2f7fb5', material: 'Glass', top: 'Smooth', props: { Locked: true } });
-  part(ws, { name: 'Beach', size: [176, 3.6, 176], pos: [0, -0.2, 0], color: '#d7c59a', material: 'Sand' });
-  part(ws, { name: 'Island', size: [160, 4, 160], pos: [0, 0, 0], color: '#4b974b', material: 'Grass' });
-  part(ws, { cls: 'SpawnLocation', name: 'IslandSpawn', size: [12, 1, 12], pos: [0, 2.5, -10], color: '#f5cd30', props: { Enabled: false } });
-  lobby(ws, 160);
-  disasterMap(ws);
-  disasterMap(g.ServerStorage);
-  part(ws, { name: 'Flood', size: [700, 2, 700], pos: [0, -4, 0], color: '#1e6fb8', material: 'Glass', transparency: 0.35, canCollide: false });
-  script(g.ServerScriptService, 'Disasters', `
--- Natural disasters: survive the round to earn a Win.
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local Debris = game:GetService("Debris")
-local storage = game:GetService("ServerStorage")
-local lobbySpawn = workspace.Lobby.LobbySpawn
-local islandSpawn = workspace.IslandSpawn
-local flood = workspace.Flood
-local hint = Instance.new("Hint", workspace)
-local flooding = false
-${WINS_STATS}
-flood.Touched:Connect(function(hit)
-	if not flooding then return end
-	local h = hit.Parent:FindFirstChild("Humanoid")
-	if h then h:TakeDamage(100) end
-end)
-
-local function announce(text, secs)
-	local m = Instance.new("Message")
-	m.Text = text
-	m.Parent = workspace
-	Debris:AddItem(m, secs or 3)
-end
-
-local function resetMap()
-	local old = workspace:FindFirstChild("Map")
-	if old then old:Destroy() end
-	storage.Map:Clone().Parent = workspace
-end
-
-local function alivePlayers()
-	local list = {}
-	for _, p in ipairs(Players:GetPlayers()) do
-		local h = p.Character and p.Character:FindFirstChild("Humanoid")
-		if h and h.Health > 0 and p.InRound.Value then table.insert(list, p) end
-	end
-	return list
-end
-
-local disasters = {
-	{ name = "Flash Flood", tip = "Get up high!", run = function(t)
-		flooding = true
-		TweenService:Create(flood, TweenInfo.new(10, Enum.EasingStyle.Sine), {Position = Vector3.new(0, 11, 0)}):Play()
-		wait(t)
-		flooding = false
-		TweenService:Create(flood, TweenInfo.new(3), {Position = Vector3.new(0, -4, 0)}):Play()
-	end },
-	{ name = "Meteor Shower", tip = "Watch the sky and keep moving!", run = function(t)
-		local stop = tick() + t
-		while tick() < stop do
-			local target = Vector3.new(math.random(-75, 75), 2, math.random(-75, 75))
-			local m = Instance.new("Part")
-			m.Name = "Meteor"
-			m.Shape = Enum.PartType.Ball
-			m.Size = Vector3.new(4, 4, 4)
-			m.Material = Enum.Material.Neon
-			m.Color = Color3.fromRGB(255, 110, 20)
-			m.Anchored = true
-			m.CanCollide = false
-			m.Position = target + Vector3.new(30, 120, 0)
-			m.Parent = workspace
-			Instance.new("Fire", m)
-			local fall = TweenService:Create(m, TweenInfo.new(1.4, Enum.EasingStyle.Linear), {Position = target})
-			fall:Play()
-			delay(1.4, function()
-				local e = Instance.new("Explosion")
-				e.Position = target
-				e.BlastRadius = 9
-				e.Parent = workspace
-				m:Destroy()
-			end)
-			wait(0.35)
-		end
-	end },
-	{ name = "Earthquake", tip = "Get out of the buildings!", run = function(t)
-		for _, d in ipairs(workspace.Map:GetDescendants()) do
-			if d:IsA("BasePart") and d.Name ~= "Leaves" and d.Name ~= "Trunk" then d.Anchored = false end
-		end
-		local stop = tick() + t
-		while tick() < stop do
-			local e = Instance.new("Explosion")
-			e.Position = Vector3.new(math.random(-60, 60), 1, math.random(-60, 60))
-			e.BlastRadius = 3
-			e.BlastPressure = 200000
-			e.Parent = workspace
-			wait(1)
-		end
-	end },
-}
-
-while true do
-	for i = 10, 1, -1 do
-		hint.Text = "Intermission: " .. i
-		wait(1)
-	end
-	if #Players:GetPlayers() == 0 then
-		hint.Text = "Waiting for players..."
-		wait(2)
-	else
-		resetMap()
-		hint.Text = "Teleporting to the island..."
-		for _, p in ipairs(Players:GetPlayers()) do
-			p.InRound.Value = true
-			p.RespawnLocation = islandSpawn
-			p:LoadCharacter()
-			p.RespawnLocation = lobbySpawn
-		end
-		wait(4)
-		local d = disasters[math.random(1, #disasters)]
-		announce("Disaster: " .. d.name .. "! " .. d.tip, 4)
-		hint.Text = d.name .. "!"
-		local done = false
-		spawn(function() d.run(30); done = true end)
-		for t = 30, 1, -1 do
-			hint.Text = d.name .. "!  " .. t .. "s  |  " .. #alivePlayers() .. " alive"
-			wait(1)
-		end
-		while not done do wait(0.5) end
-		local winners = alivePlayers()
-		local names = {}
-		for _, p in ipairs(winners) do
-			p.leaderstats.Wins.Value = p.leaderstats.Wins.Value + 1
-			table.insert(names, p.Name)
-		end
-		hint.Text = #names > 0 and ("Survivors: " .. table.concat(names, ", ")) or "Nobody survived!"
-		for _, p in ipairs(Players:GetPlayers()) do p.InRound.Value = false end
-		wait(4)
-		for _, p in ipairs(Players:GetPlayers()) do p:LoadCharacter() end
-	end
-end
-`);
-  return finish(g, { name: 'Disaster Island' });
-}
-
-// ================================================================ Tower of Robis
-export function gameTower() {
-  const g = newGame();
-  const ws = g.Workspace;
-  g.Lighting.ClockTime = 15;
-  baseplate(ws, { color: '#6b327c', size: [300, 20, 300] });
-  spawn(ws, [0, 0.5, 26], { color: '#f8f8f8' });
-  const kill = folder(ws, 'KillBricks');
-  const cps = folder(ws, 'Checkpoints');
-  // A path that spirals up around the core.
-  let a = Math.PI / 2, y = 1, stage = 1;
-  const R = 16;
-  const at = (ang) => [Math.cos(ang) * R, Math.sin(ang) * R];
-  for (let i = 0; i < 44; i++) {
-    const color = RAINBOW[Math.floor(i / 6) % RAINBOW.length];
-    const [x, z] = at(a);
-    if (i > 0 && i % 8 === 0) {
-      part(cps, { cls: 'SpawnLocation', name: String(++stage), size: [6, 1, 6], pos: [x, y, z], color: '#f8f8f8', props: { Enabled: false } });
-    } else if (i % 11 === 5) {
-      // Truss outside the platform: climb it to a ledge further out.
-      part(ws, { name: 'Platform', size: [5, 1, 5], pos: [x, y, z], color });
-      const k = (R + 3.5) / R, k2 = (R + 7) / R;
-      part(ws, { cls: 'TrussPart', name: 'Truss', size: [2, 11, 2], pos: [x * k, y + 5, z * k], color: '#a3a2a5', material: 'Metal' });
-      y += 10;
-      part(ws, { name: 'Ledge', size: [5, 1, 5], pos: [x * k2, y, z * k2], color });
-      y -= 2.2;
-    } else if (i % 5 === 3) {
-      // Lava next to a small safe block.
-      const ki = (R - 2) / R, ko = (R + 2) / R;
-      part(ws, { name: 'Safe', size: [3, 1, 3], pos: [x * ki, y, z * ki], color: '#f8f8f8' });
-      part(kill, { name: 'Lava', size: [3, 1.2, 3], pos: [x * ko, y, z * ko], color: '#ff2a00', material: 'Neon' });
-    } else {
-      part(ws, { name: 'Platform', size: i % 3 === 0 ? [4, 1, 4] : [5, 1, 5], pos: [x, y, z], color });
-    }
-    a += 0.42;
-    y += 2.2;
-  }
-  const top = y + 1;
-  part(ws, { name: 'Core', size: [top - 1, 18, 18], pos: [0, (top - 1) / 2, 0], color: '#635f62', material: 'Slate', shape: 'Cylinder', rot: [0, 0, 90] });
-  part(ws, { name: 'TopBridge', size: [4, 1, 10], pos: [Math.cos(a) * 11, top, Math.sin(a) * 11], rot: [0, -a * 180 / Math.PI + 90, 0], color: '#f8f8f8' });
-  const fin = part(ws, { name: 'Finish', size: [20, 1, 20], pos: [0, top + 0.5, 0], color: '#ffc400', material: 'Neon' });
-  inst(fin, 'BillboardText', { Text: 'THE TOP!', StudsOffset: new Vector3(0, 6, 0) });
-  script(g.ServerScriptService, 'KillScript', `
-local folder = workspace:WaitForChild("KillBricks")
-for _, part in ipairs(folder:GetChildren()) do
-	part.Touched:Connect(function(hit)
-		local h = hit.Parent:FindFirstChild("Humanoid")
-		if h then h.Health = 0 end
-	end)
-end
-`);
-  script(g.ServerScriptService, 'Tower', `
--- Climb the tower: checkpoints save your stage, the top gives a Win.
-local Players = game:GetService("Players")
-local BadgeService = game:GetService("BadgeService")
-local checkpoints = workspace.Checkpoints
-
-Players.PlayerAdded:Connect(function(player)
-	local ls = Instance.new("Folder")
-	ls.Name = "leaderstats"
-	ls.Parent = player
-	local stage = Instance.new("IntValue")
-	stage.Name = "Stage"
-	stage.Value = 1
-	stage.Parent = ls
-	local wins = Instance.new("IntValue")
-	wins.Name = "Wins"
-	wins.Parent = ls
-end)
-
-for _, cp in ipairs(checkpoints:GetChildren()) do
-	cp.Touched:Connect(function(hit)
-		local player = Players:GetPlayerFromCharacter(hit.Parent)
-		local n = tonumber(cp.Name)
-		if player and n and n > player.leaderstats.Stage.Value then
-			player.leaderstats.Stage.Value = n
-			player.RespawnLocation = cp
-		end
-	end)
-end
-
--- Fell to the ground? Back to your checkpoint.
-workspace.Baseplate.Touched:Connect(function(hit)
-	local player = Players:GetPlayerFromCharacter(hit.Parent)
-	local h = hit.Parent:FindFirstChild("Humanoid")
-	if player and h and h.Health > 0 and player.leaderstats.Stage.Value > 1 then h.Health = 0 end
-end)
-
-local cooldown = {}
-workspace.Finish.Touched:Connect(function(hit)
-	local player = Players:GetPlayerFromCharacter(hit.Parent)
-	if not player or cooldown[player] then return end
-	cooldown[player] = true
-	player.leaderstats.Wins.Value = player.leaderstats.Wins.Value + 1
-	BadgeService:AwardBadge(player.UserId, "Tower Climber")
-	local m = Instance.new("Message")
-	m.Text = player.Name .. " reached the top of the Tower of Robis!"
-	m.Parent = workspace
-	game:GetService("Debris"):AddItem(m, 4)
-	wait(4)
-	player.leaderstats.Stage.Value = 1
-	player.RespawnLocation = nil
-	player:LoadCharacter()
-	cooldown[player] = nil
-end)
-`);
-  return finish(g, { name: 'Tower of Robis' });
-}
 
 // ================================================================ Speed Run
 export function gameSpeedRun() {
@@ -844,10 +565,10 @@ end
 export const MORE_GAMES = [
   { key: 'disaster', name: 'Disaster Island', build: gameDisaster, genre: 'Adventure', featured: true, maxPlayers: 16,
     visits: 91233, up: 1840, down: 130, favorites: 6100,
-    description: 'Floods, meteor showers and earthquakes! Survive each disaster on the island to earn Wins.' },
+    description: 'Four maps and eleven disasters: floods, tornadoes, acid rain, lightning, volcanoes, tsunamis and more. Later rounds bring DOUBLE disasters!' },
   { key: 'tower', name: 'Tower of Robis', build: gameTower, genre: 'Adventure', featured: true, maxPlayers: 16,
     visits: 54210, up: 1230, down: 160, favorites: 3900,
-    description: 'Climb the spiral tower: jump, dodge lava and climb trusses. Reach the top for a Win and the Tower Climber badge.' },
+    description: 'A brand-new random tower every round! No checkpoints, moving platforms, sweepers and fading blocks. It gets harder the higher you climb.' },
   { key: 'speedrun', name: 'Speed Run', build: gameSpeedRun, genre: 'Adventure', featured: false, maxPlayers: 12,
     visits: 23877, up: 610, down: 55, favorites: 1500,
     description: 'Neon speed run! Touch START, run the course and beat your best time. Speed pads help.' },

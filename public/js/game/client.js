@@ -150,6 +150,21 @@ export class GameClient {
     this.resize();
   }
 
+  // Slow device? Lower the graphics once (after the world has settled), so the game stays playable.
+  autoQuality(fps) {
+    if (!this.game || this.local === null || document.hidden) { this._slow = 0; return; }
+    this._played = (this._played || 0) + 0.5;
+    if (this._played < 8 || this._autoLowered) return;
+    this._slow = fps < 24 ? (this._slow || 0) + 1 : 0;
+    if (this._slow >= 8 && this.settings.quality !== 'Low') {
+      const next = this.settings.quality === 'High' ? 'Medium' : 'Low';
+      this.setQuality(next);
+      this.saveSettings();
+      this._autoLowered = true;
+      this.hud.addChat('', `Graphics lowered to ${next} to keep the game smooth (change it in the menu).`, { system: true });
+    }
+  }
+
   resize() {
     const w = this.root.clientWidth, h = this.root.clientHeight;
     if (!w || !h) return;
@@ -188,6 +203,11 @@ export class GameClient {
         }
         return;
       }
+      case 'drive':
+        this.vehicle = m.on ? { max: +m.max || 60, turn: +m.turn || 2.2, color: m.color || '#c4281c', speed: 0 } : null;
+        if (m.on && Number.isFinite(m.ry)) { const v = this.views.get(this.userId); if (v) v.ry = m.ry; this.cam.yaw = m.ry; }
+        if (m.on) this.hud.addChat('', 'You are driving! WASD / joystick to steer, Space or Jump to get out.', { system: true });
+        return;
       case 'impulse': if (this.local) { this.local.vx += m.v[0]; this.local.vy = m.v[1]; this.local.vz += m.v[2]; this.local.grounded = false; } return;
       case 'output':
         if (this.opts.onOutput) this.opts.onOutput(m); else this.hud.log(m);
@@ -367,6 +387,8 @@ export class GameClient {
     if (e.code === 'Tab') { hud.toggleBoard(); return false; }
     if (e.code === 'F9') { hud.toggleConsole(); return false; }
     if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) { this.toggleShiftLock(); return true; }
+    const digit = /^Digit([1-9])$/.exec(e.code);
+    if (digit && !e.repeat) { this.equipSlot(+digit[1] - 1); return false; }
     sound.unlock();
     return true;
   }
@@ -420,6 +442,12 @@ export class GameClient {
   onClick(e) {
     sound.unlock();
     if (this.cam.firstPerson && !document.pointerLockElement) this.canvas.requestPointerLock?.();
+    if (this.equippedTool()) {
+      // Mouse: fired on mouse down (see frame); taps on phones fire here.
+      if (e.touch !== false && !e.button && this.isTouch && !this._mouseFired) this.useTool(e.clientX, e.clientY);
+      this._mouseFired = false;
+      return;
+    }
     const hit = this.pickPart(e.clientX, e.clientY);
     if (!hit) return;
     const cd = this.clickDetectorFor(hit.inst);
@@ -434,6 +462,62 @@ export class GameClient {
     this._hoverT = performance.now();
     const hit = this.pickPart(e.clientX, e.clientY);
     this.root.classList.toggle('hover-click', !!(hit && this.clickDetectorFor(hit.inst)));
+  }
+
+  // ------------------------------------------------------------ tools
+  myPlayer() {
+    if (!this.game) return null;
+    return this.game.GetService('Players').GetChildren().find((p) => p._p.UserId === this.userId) || null;
+  }
+  myCharacter() {
+    const v = this.views.get(this.userId);
+    return v && v.modelId && this.game ? this.game.getById(v.modelId) : null;
+  }
+  backpackTools() {
+    const bp = this.myPlayer()?.FindFirstChild('Backpack');
+    const eq = this.equippedTool();
+    const list = bp ? bp.GetChildren().filter((t) => t.ClassName === 'Tool') : [];
+    // Keep slot order stable: equipping moves a tool out of the Backpack.
+    this._slots = (this._slots || []).filter((id) => (eq && eq.id === id) || list.some((t) => t.id === id));
+    for (const t of [eq, ...list]) if (t && !this._slots.includes(t.id)) this._slots.push(t.id);
+    return this._slots.map((id) => this.game.getById(id)).filter(Boolean);
+  }
+  equippedTool() {
+    const ch = this.myCharacter();
+    return ch ? ch.GetChildren().find((t) => t.ClassName === 'Tool') || null : null;
+  }
+  equipSlot(i) {
+    const tools = this.backpackTools();
+    const t = tools[i];
+    if (!t) return;
+    const eq = this.equippedTool();
+    this.send({ t: 'equip', id: eq && eq.id === t.id ? null : t.id });
+    sound.click();
+    setTimeout(() => this.hud.setTools(this.backpackTools(), this.equippedTool()), 250);
+  }
+  // Where the player aims: the first thing under the mouse (players included), or far away.
+  aimPoint(clientX, clientY) {
+    const r = this.canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    if (document.pointerLockElement || clientX === undefined) ndc.set(0, 0);
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const targets = [...this.sync.root.children];
+    for (const v of this.views.values()) if (!v.isLocal && v.group.visible) targets.push(v.group);
+    const hits = this.raycaster.intersectObjects(targets, true);
+    const me = this.local ? new THREE.Vector3(this.local.x, this.local.y, this.local.z) : null;
+    for (const h of hits) {
+      const inst = h.object.userData.inst;
+      if (inst && inst._p.Transparency >= 1) continue;
+      if (me && h.point.distanceTo(me) < 2) continue;
+      return h.point;
+    }
+    return this.raycaster.ray.origin.clone().addScaledVector(this.raycaster.ray.direction, 600);
+  }
+  useTool(clientX, clientY) {
+    const t = this.equippedTool();
+    if (!t || !this.sync) return;
+    const p = this.aimPoint(clientX, clientY);
+    this.send({ t: 'activate', id: t.id, p: [p.x, p.y, p.z] });
   }
 
   // ------------------------------------------------------------ simulation
@@ -463,6 +547,7 @@ export class GameClient {
       if (!this.cam.shiftLock) this.cam.yaw += dyaw;
     }
 
+    if (this.vehicle) { this.stepVehicle(dt, v, s, humP); return; }
     const mv = this.input.moveVector();
     const f = this.cam.forward, r = this.cam.right;
     let mx = f.x * mv.y + r.x * mv.x, mz = f.z * mv.y + r.z * mv.x;
@@ -497,6 +582,46 @@ export class GameClient {
     }
   }
 
+  // Go-kart driving: W/S throttle, A/D steer, Space (or Jump) to get out.
+  stepVehicle(dt, v, s, humP) {
+    const car = this.vehicle;
+    const mv = this.input.moveVector();
+    if (this.input.wantsJump()) {
+      if (!car.exitSent) { car.exitSent = true; this.send({ t: 'exitVehicle' }); }
+    }
+    const target = mv.y * car.max * (mv.y < 0 ? 0.45 : 1);
+    const accel = Math.sign(target - car.speed) * (Math.abs(target) > Math.abs(car.speed) ? 38 : 60);
+    car.speed += accel * dt;
+    if (Math.abs(target - car.speed) < Math.abs(accel * dt)) car.speed = target;
+    const steer = -mv.x * car.turn * Math.min(1, Math.abs(car.speed) / 12) * Math.sign(car.speed || 1);
+    v.ry += steer * dt;
+    if (!this.cam.firstPerson) {
+      let d = v.ry - this.cam.yaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      this.cam.yaw += d * Math.min(1, dt * 3);
+    }
+    const dirx = -Math.sin(v.ry), dirz = -Math.cos(v.ry);
+    const sgn = car.speed < 0 ? -1 : 1;
+    const before = Math.hypot(s.vx, s.vz);
+    stepCharacter(s, { mx: dirx * sgn, mz: dirz * sgn, jump: false }, dt,
+      { query: (a, b, c, d) => this.world.query(a, b, c, d), gravity: this.game.GetService('Workspace')._p.Gravity },
+      { ...humP, WalkSpeed: Math.abs(car.speed), JumpPower: 0 });
+    // Hitting a wall stops the kart.
+    const after = Math.hypot(s.vx, s.vz);
+    if (Math.abs(car.speed) > 10 && after < Math.abs(car.speed) * 0.35 && before > 5) car.speed *= 0.3;
+    s.groundCF = s.groundPart ? s.groundPart._p.CFrame : null;
+    const anim = 'drive:' + car.color;
+    v.pos.set(s.x, s.y, s.z);
+    v.anim = anim;
+    v.speed = 0;
+    this.hud.setHealth(humP.Health, humP.MaxHealth);
+    const now = performance.now();
+    if (now - this.lastSend > 1000 / SEND_HZ) {
+      this.lastSend = now;
+      this.send({ t: 'move', p: [s.x, s.y, s.z], ry: v.ry, a: anim, v: [s.vx, s.vy, s.vz] });
+    }
+  }
+
   frame(now) {
     if (!this.running) return;
     requestAnimationFrame((t) => this.frame(t));
@@ -513,13 +638,31 @@ export class GameClient {
         me.group.visible = !me.dead && !this.cam.firstPerson;
         this.env.setFocus(me.pos);
       }
+      // Tools: fire on mouse down; automatic tools keep firing while held.
+      const tool = this.equippedTool();
+      if (tool && this.input.lmb && !this.isTouchOnly) {
+        const ev = this.input.lmbEvent;
+        const first = !this._lmbWas;
+        if (first || (tool._p.Automatic && now - (this._lastFire || 0) > 100)) {
+          this._lastFire = now;
+          this._mouseFired = true;
+          this.useTool(ev ? ev.clientX : undefined, ev ? ev.clientY : undefined);
+        }
+      }
+      this._lmbWas = !!this.input.lmb;
       this.hud.crosshair.style.display = this.cam.shiftLock || this.cam.firstPerson ? 'block' : 'none';
+      this.root.classList.toggle('tool-cursor', !!tool);
       this.sync.update(dt);
       this.boardTimer -= dt;
       if (this.boardTimer <= 0) {
         this.boardTimer = 0.5;
         this.hud.updateBoard(this.game, this.userId);
         this.refreshHints();
+        this.hud.setTools(this.backpackTools(), this.equippedTool());
+        for (const v of this.views.values()) {
+          const model = v.modelId && this.game.getById(v.modelId);
+          v.setTool(model ? model.GetChildren().find((t) => t.ClassName === 'Tool') || null : null);
+        }
         for (const v of this.views.values()) {
           if (v.isLocal || !v.modelId) continue;
           const model = this.game.getById(v.modelId);
@@ -538,8 +681,10 @@ export class GameClient {
     this.frames++;
     this.fpsTime += dt;
     if (this.fpsTime > 0.5) {
-      this.hud.fps.textContent = this.settings.showFps ? `${Math.round(this.frames / this.fpsTime)} FPS` : '';
+      const fps = this.frames / this.fpsTime;
+      this.hud.fps.textContent = this.settings.showFps ? `${Math.round(fps)} FPS` : '';
       this.frames = 0; this.fpsTime = 0;
+      this.autoQuality(fps);
     }
   }
 }

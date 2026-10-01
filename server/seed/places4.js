@@ -184,6 +184,11 @@ Players.PlayerAdded:Connect(function(player)
 	local r = Instance.new("BoolValue")
 	r.Name = "InRound"
 	r.Parent = player
+	-- Dying knocks you out of the round (you respawn in the lobby, alive, but you didn't survive).
+	player.CharacterAdded:Connect(function(char)
+		local hum = char:FindFirstChild("Humanoid")
+		if hum then hum.Died:Connect(function() if player:FindFirstChild("InRound") then player.InRound.Value = false end end) end
+	end)
 end)
 
 workspace.Lava.Touched:Connect(function(hit)

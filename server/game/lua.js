@@ -222,6 +222,7 @@ export class LuaRuntime {
       lookAt: (a, b) => CFrame.lookAt(a, b),
     });
     this._setGlobalLib('UDim2', { new: (a, b, c, d) => new UDim2(a, b, c, d) });
+    this._setGlobalLib('Ray', { new: (o, d) => ({ Origin: o, Direction: d }) });
     this._setGlobalLib('TweenInfo', {
       new: (t, style, dir, rep, rev, delay) => new TweenInfo(t ?? 1, style ?? 'Quad', dir ?? 'Out', rep ?? 0, rev ?? false, delay ?? 0),
     });

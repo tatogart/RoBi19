@@ -596,6 +596,37 @@ const GEARS = {
     g.add(M(new THREE.CylinderGeometry(0.4, 0.4, 0.4, 16), mat('#2a2a2a'), 0, 0, -2.3, Math.PI / 2, 0, 0));
     return g;
   },
+  gun(d) {
+    const g = new THREE.Group();
+    const body = mat(d.color || '#2a2a2a', { metalness: 0.4, roughness: 0.5 });
+    g.add(M(new THREE.BoxGeometry(0.35, 0.45, 1.6), body, 0, 0.15, -0.9));
+    g.add(M(new THREE.CylinderGeometry(0.1, 0.1, 1.1, 10), mat('#1b1b1b', { metalness: 0.7 }), 0, 0.22, -2.1, Math.PI / 2, 0, 0));
+    g.add(M(new THREE.BoxGeometry(0.3, 0.7, 0.35), mat('#3a2a1a'), 0, -0.3, -0.35, 0.3, 0, 0));
+    return g;
+  },
+  flashlight(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.CylinderGeometry(0.18, 0.18, 1.4, 12), mat(d.color || '#333333'), 0, 0, -0.8, Math.PI / 2, 0, 0));
+    const lens = new THREE.MeshBasicMaterial({ color: '#fff7c2' }); lens.toneMapped = false;
+    g.add(M(new THREE.CylinderGeometry(0.26, 0.2, 0.3, 12), lens, 0, 0, -1.6, Math.PI / 2, 0, 0));
+    const spot = new THREE.SpotLight(0xfff2c4, 6, 70, 0.45, 0.5, 1.2);
+    spot.position.set(0, 0, -1.7);
+    spot.target.position.set(0, 0, -12);
+    g.add(spot, spot.target);
+    return g;
+  },
+  brush(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.CylinderGeometry(0.1, 0.1, 2, 8), mat('#a0703c'), 0, 0, -1, Math.PI / 2, 0, 0));
+    g.add(M(new THREE.BoxGeometry(0.4, 0.25, 0.5), mat(d.color || '#c4281c'), 0, 0, -2.2));
+    return g;
+  },
+  hammer(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.CylinderGeometry(0.1, 0.1, 2, 8), mat('#7c5c46'), 0, 0, -1, Math.PI / 2, 0, 0));
+    g.add(M(new THREE.BoxGeometry(0.5, 0.5, 1.1), mat(d.color || '#635f62', { metalness: 0.6 }), 0, 0, -2.1, 0, Math.PI / 2, 0));
+    return g;
+  },
 };
 
 // ------------------------------------------------------------ build
@@ -652,8 +683,37 @@ export function buildAvatar(avatar, opts = {}) {
   const limbs = { Torso: torso, Head: head, 'Left Arm': lArm, 'Right Arm': rArm, 'Left Leg': lLeg, 'Right Leg': rLeg };
   const pivots = { head: headPivot, lArm: lArmP, rArm: rArmP, lLeg: lLegP, rLeg: rLegP };
   const anim = new AvatarAnimator(pivots, !!gear && look.gear.model !== 'rocket', root);
+  // In-game Tools replace the catalog gear while equipped.
+  let toolMesh = null, toolKey = '';
+  const holdsGear = !!gear && look.gear.model !== 'rocket';
+  const setTool = (name, color) => {
+    const key = name ? name + color : '';
+    if (key === toolKey) return;
+    toolKey = key;
+    if (toolMesh) { disposeTree(toolMesh); toolMesh = null; }
+    if (gear) gear.visible = !name;
+    anim.tool = name ? name !== 'rocket' : holdsGear;
+    const fn = name && (GEARS[name] || GEARS.sword);
+    if (!fn) return;
+    toolMesh = fn({ color: color || '#a3a2a5' });
+    if (name === 'rocket') { toolMesh.position.set(0.3, 1.3, 0); } else { toolMesh.position.set(0, -1, -0.1); toolMesh.rotation.x = -Math.PI / 2; }
+    toolMesh.traverse((o) => { if (o.isMesh) o.castShadow = shadow; });
+    rArm.add(toolMesh);
+  };
+  // Driving: a go-kart under the player, who sits in it.
+  let kart = null, kartColor = '';
+  const setKart = (color) => {
+    if (color === kartColor) return;
+    kartColor = color || '';
+    if (kart) { disposeTree(kart); kart = null; }
+    if (!color) return;
+    kart = buildKart(color);
+    kart.traverse((o) => { if (o.isMesh) o.castShadow = shadow; });
+    root.add(kart);
+  };
   return {
-    group: root, limbs, pivots, gear, look,
+    group: root, limbs, pivots, gear, look, setTool, setKart,
+    get driving() { return !!kart; },
     animate: (state, dt, speed) => anim.update(state, dt, speed),
     setEmote: (e) => anim.setEmote(e),
     dispose() {
@@ -663,6 +723,30 @@ export function buildAvatar(avatar, opts = {}) {
       });
     },
   };
+}
+
+function disposeTree(o) {
+  o.removeFromParent();
+  o.traverse((x) => {
+    if (x.geometry && x.geometry !== HEAD_GEO) x.geometry.dispose();
+    if (x.material) for (const m of [].concat(x.material)) m.dispose();
+  });
+}
+
+// A classic go-kart; the player's root is 3 studs above the ground.
+function buildKart(color) {
+  const g = new THREE.Group();
+  const body = mat(color, { roughness: 0.4, metalness: 0.2 });
+  const dark = mat('#1b1b1b', { roughness: 0.9 });
+  g.add(M(new THREE.BoxGeometry(4, 0.8, 6.4), body, 0, -2.2, 0.2));
+  g.add(M(new THREE.BoxGeometry(3.2, 0.6, 1.4), body, 0, -1.6, -2.6, -0.35, 0, 0));
+  g.add(M(new THREE.BoxGeometry(2.6, 1.6, 0.6), body, 0, -1.2, 2.2));
+  g.add(M(new THREE.BoxGeometry(4.6, 0.25, 0.9), dark, 0, -1.5, 3.3));
+  for (const [x, z] of [[-2.1, -2.2], [2.1, -2.2], [-2.1, 2.4], [2.1, 2.4]]) {
+    g.add(M(new THREE.CylinderGeometry(0.85, 0.85, 0.8, 16), dark, x, -2.15, z, 0, 0, Math.PI / 2));
+  }
+  g.add(M(new THREE.TorusGeometry(0.45, 0.08, 6, 16), dark, 0, -0.9, -1.2, -0.9, 0, 0));
+  return g;
 }
 
 // ------------------------------------------------------------ animation

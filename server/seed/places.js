@@ -472,13 +472,15 @@ export function gameLava() {
     part(lobby, { name: 'Glass', size: [sx, 8, sz], pos: [x, 125, z], color: '#b4d2e4', material: 'Glass', transparency: 0.6 });
   }
   const map = model(ws, 'Map');
-  const towers = [[-40, -40, 60], [40, -40, 45], [-40, 40, 35], [40, 40, 70], [0, 0, 55], [-70, 0, 30], [70, 0, 40], [0, -75, 50], [0, 75, 28]];
+  const towers = [[-40, -40, 60], [40, -40, 58], [-40, 40, 56], [40, 40, 70], [0, 0, 64], [-70, 0, 56], [70, 0, 58], [0, -75, 62], [0, 75, 56]];
   towers.forEach(([x, z, h], i) => {
     part(map, { name: 'Tower', size: [10, h, 10], pos: [x, h / 2, z], color: ['#a3a2a5', '#635f62', '#cc8e69'][i % 3], material: 'Concrete' });
-    for (let s = 0; s < Math.floor(h / 6); s++) {
-      const a = s * 1.2;
-      part(map, { name: 'Step', size: [4, 1, 4], pos: [x + Math.cos(a) * 8, 3 + s * 6, z + Math.sin(a) * 8], color: '#f5cd30' });
+    // Wide steps close together (an easy climb), plus a truss ladder up one side.
+    for (let s = 0; s < Math.floor(h / 4); s++) {
+      const a = s * 1.1;
+      part(map, { name: 'Step', size: [6, 1, 6], pos: [x + Math.cos(a) * 8, 2.5 + s * 4, z + Math.sin(a) * 8], color: '#f5cd30' });
     }
+    part(map, { cls: 'TrussPart', name: 'Ladder', size: [2, h, 2], pos: [x, h / 2, z - 6], color: '#a3a2a5', material: 'Metal' });
   });
   part(map, { cls: 'SpawnLocation', name: 'ArenaSpawn', size: [12, 1, 12], pos: [0, 0.5, -20], color: '#4b974b', props: { Enabled: false } });
   const lava = part(ws, { name: 'Lava', size: [220, 2, 220], pos: [0, -3, 0], color: '#ff5a00', material: 'Neon', canCollide: false });
@@ -501,6 +503,11 @@ Players.PlayerAdded:Connect(function(player)
 	local alive = Instance.new("BoolValue")
 	alive.Name = "InRound"
 	alive.Parent = player
+	-- Dying knocks you out of the round (you respawn in the lobby, alive, but you didn't survive).
+	player.CharacterAdded:Connect(function(char)
+		local hum = char:FindFirstChild("Humanoid")
+		if hum then hum.Died:Connect(function() if player:FindFirstChild("InRound") then player.InRound.Value = false end end) end
+	end)
 end)
 
 lava.Touched:Connect(function(hit)
@@ -537,9 +544,10 @@ while true do
 			p.RespawnLocation = lobbySpawn
 		end
 		wait(3)
-		local rise = TweenService:Create(lava, TweenInfo.new(45, Enum.EasingStyle.Linear), {Position = Vector3.new(0, 62, 0)})
+		-- The lava rises slowly: about 1 stud a second, so there's time to climb.
+		local rise = TweenService:Create(lava, TweenInfo.new(55, Enum.EasingStyle.Linear), {Position = Vector3.new(0, 52, 0)})
 		rise:Play()
-		for t = 45, 1, -1 do
+		for t = 55, 1, -1 do
 			local n = #alivePlayers()
 			hint.Text = "Survive! " .. t .. "s  |  " .. n .. " alive"
 			if n == 0 then break end

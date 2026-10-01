@@ -1,6 +1,6 @@
 import { initPage } from '../layout.js';
 import { api } from '../api.js';
-import { el, qs, fmtFull, fmtDate, headshotImg, avatarCard, gameCard, itemCard, presenceText, toast, modal, spinner, icon, launchGame, MEMBERSHIP, nameBadges } from '../ui.js';
+import { el, qs, fmtFull, fmtDate, headshotImg, avatarCard, gameCard, itemCard, presenceText, toast, modal, spinner, icon, launchGame, MEMBERSHIP, nameBadges, groupEmblem } from '../ui.js';
 import { avatarFullBody } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'profile', requireAuth: false });
@@ -78,8 +78,18 @@ async function about() {
       el('div', {}, el('div', { class: 'label', text: 'Place Visits' }), el('div', { class: 'value', text: fmtFull(user.placeVisits) }))),
     user.previousNames && user.previousNames.length ? el('div', { class: 'small muted', style: { marginTop: '10px' } },
       el('span', { text: 'Previous usernames' }), ': ', el('span', { class: 'no-i18n', text: user.previousNames.join(', ') })) : null);
-  body.replaceChildren(aboutPanel, wearing, friendsP, favP, badgesP, statsP);
-  const [fr, fav] = await Promise.all([api.get(`/users/${uid}/friends`), api.get(`/users/${uid}/favorites`)]);
+  const groupsP = el('div', { class: 'panel' }, el('div', { class: 'section-header' }, el('h3', { text: 'Groups' }), own ? el('a', { class: 'btn btn-small', href: '/groups', text: 'Find Groups' }) : null), spinner());
+  const robisBadgesP = el('div', { class: 'panel' }, el('h3', { text: 'Robis Badges' }),
+    (user.achievements || []).length ? el('div', { class: 'badges' }, user.achievements.map((b) => el('div', { class: 'badge-card robis-badge', title: b.desc },
+      el('span', { class: 'rb-icon', text: b.icon }), el('b', { text: b.name }), el('span', { class: 'small muted', text: b.desc })))) : el('div', { class: 'muted', text: 'No Robis Badges yet.' }));
+  body.replaceChildren(aboutPanel, wearing, friendsP, groupsP, favP, robisBadgesP, badgesP, statsP);
+  const [fr, fav, grs] = await Promise.all([api.get(`/users/${uid}/friends`), api.get(`/users/${uid}/favorites`), api.get(`/users/${uid}/groups`).catch(() => ({ groups: [], primary: null }))]);
+  const ROLE = { owner: 'Owner', admin: 'Admin', member: 'Member' };
+  const sorted = grs.groups.slice().sort((a, b) => (grs.primary && b.id === grs.primary.id) - (grs.primary && a.id === grs.primary.id));
+  groupsP.lastChild.replaceWith(sorted.length ? el('div', { class: 'group-grid' }, sorted.map((gr) => el('a', { class: 'group-card', href: `/group?id=${gr.id}` },
+    groupEmblem(gr), el('div', { class: 'gc-info' }, el('div', { class: 'gc-name no-i18n', text: gr.name }),
+      el('div', { class: 'small muted' }, el('span', { text: ROLE[gr.role] || '' }), grs.primary && grs.primary.id === gr.id ? el('span', { text: ' · Primary' }) : null)))))
+    : el('div', { class: 'muted', text: 'Not in any groups.' }));
   friendsP.lastChild.replaceWith(fr.friends.length ? el('div', { class: 'friends-row', style: { padding: 0 } }, fr.friends.slice(0, 9).map(avatarCard)) : el('div', { class: 'muted', text: 'No friends yet.' }));
   favP.lastChild.replaceWith(fav.games.length ? el('div', { class: 'game-row' }, fav.games.map(gameCard)) : el('div', { class: 'muted', text: 'No favorites yet.' }));
 }

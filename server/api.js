@@ -4,11 +4,12 @@ import express from 'express';
 import {
   checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies, bannedClient, noteClient, isBanned, banDetails,
 } from './auth.js';
-import { createUser, addSeedGames } from './seed/seed.js';
+import { createUser, addSeedGames, ensureOwner, officialAccount, OWNER_NAME } from './seed/seed.js';
 import { hashPassword } from './auth.js';
 import { TEMPLATES } from './seed/places.js';
 import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES, CATALOG } from '../shared/avatar.js';
 import { PLACE_FORMAT } from '../shared/engine/serialize.js';
+import { filterChat } from './game/chatfilter.js';
 
 const ONLINE_MS = 2 * 60 * 1000;
 const STIPEND_MS = 24 * 3600 * 1000;
@@ -105,7 +106,8 @@ export function createApi(db, manager, opts = {}) {
   // Also for admins created before perks existed.
   for (const u of Object.values(D.users)) grantAdminPerks(u);
   // The official Robis account wears the Robis icon and the check (once; admins can change it).
-  for (const u of Object.values(D.users)) if (u.system && u.username === 'Robis' && !u.flags) u.flags = { staff: true, verified: true };
+  { const off = officialAccount(D); if (off && !off.flags) off.flags = { staff: true, verified: true }; }
+  ensureOwner(db);
 
   // New showcase places reach existing worlds too.
   addSeedGames(db);
@@ -199,6 +201,10 @@ export function createApi(db, manager, opts = {}) {
     next();
   };
   const bad = (res, msg, code = 400) => res.status(code).json({ error: msg });
+  // Is this name taken? The main account's name (Seek_tv87) can be taken over
+  // from the built-in system account by an admin (see ensureOwner).
+  const nameTaken = (name, self, mayClaim) => Object.values(D.users).some((o) => o !== self && o.username.toLowerCase() === name.toLowerCase()
+    && !(mayClaim && o.system && o.official && name.toLowerCase() === OWNER_NAME.toLowerCase()));
   const toInt = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
 
   const presence = (u) => {
@@ -208,6 +214,27 @@ export function createApi(db, manager, opts = {}) {
     if (Date.now() - (u.lastOnline || 0) < ONLINE_MS) return { status: 'online' };
     return { status: 'offline', lastOnline: u.lastOnline };
   };
+
+  // Robis Badges: earned automatically for what you do on the site (shown on profiles).
+  const ACHIEVEMENTS = [
+    ['admin', '🛡️', 'Administrator', 'Runs this Robis.', (u) => u.isAdmin],
+    ['club', '🏗️', 'Welcome To The Club', 'Has a Builders Club membership.', (u) => u.membership && u.membership !== 'None'],
+    ['veteran', '🎖️', 'Veteran', 'Has been on Robis for a year.', (u) => Date.now() - u.created > 365 * 86400e3],
+    ['friendly', '🤝', 'Friendly', 'Has 5 friends.', (u, x) => x.friendCount >= 5],
+    ['friendship', '💞', 'Friendship', 'Has 20 friends.', (u, x) => x.friendCount >= 20],
+    ['builder', '🧱', 'Builder', 'Made a game.', (u) => Object.values(D.games).some((g) => g.creatorId === u.id)],
+    ['homestead', '🏠', 'Homestead', 'Their places were visited 100 times.', (u, x) => x.placeVisits >= 100],
+    ['bricksmith', '⚒️', 'Bricksmith', 'Their places were visited 1,000 times.', (u, x) => x.placeVisits >= 1000],
+    ['designer', '🎨', 'Item Designer', 'Made a catalog item.', (u) => Object.values(D.items).some((i) => i.custom && i.creatorId === u.id)],
+    ['trader', '🔁', 'Trader', 'Completed a trade.', (u) => (D.trades || []).some((t) => t.status === 'accepted' && (t.from === u.id || t.to === u.id))],
+    ['collector', '💎', 'Collector', 'Owns a Limited item.', (u) => (D.inventory[u.id] || []).some((i) => D.items[i] && D.items[i].limited)],
+    ['rich', '💰', 'Robit Tycoon', 'Has 10,000 Robits.', (u) => (u.robits || 0) >= 10000],
+    ['hunter', '🏅', 'Badge Hunter', 'Earned 10 game badges.', (u, x) => (D.badges[u.id] || []).length >= 10],
+    ['founder', '👑', 'Group Founder', 'Owns a group.', (u) => Object.values(D.groups || {}).some((gr) => gr.ownerId === u.id)],
+    ['combat', '⚔️', 'Combat Initiation', 'Knocked someone out in a battle game.', (u) => (D.badges[u.id] || []).some((b) => b.name === 'First Blood')],
+    ['warrior', '🗡️', 'Warrior', 'Got 25 KOs in one battle.', (u) => (D.badges[u.id] || []).some((b) => b.name === 'Warrior')],
+  ];
+  const achievements = (u, x) => ACHIEVEMENTS.filter((a) => { try { return a[4](u, x); } catch { return false; } }).map(([id, icon, name, desc]) => ({ id, icon, name, desc }));
 
   const publicUser = (u, full = false) => {
     if (!u) return null;
@@ -222,6 +249,7 @@ export function createApi(db, manager, opts = {}) {
       out.badges = (D.badges[u.id] || []).slice(-50);
       out.placeVisits = Object.values(D.games).filter((g) => g.creatorId === u.id).reduce((a, g) => a + g.visits, 0);
       out.previousNames = u.previousNames || [];
+      out.achievements = achievements(u, out);
     }
     return out;
   };
@@ -239,6 +267,8 @@ export function createApi(db, manager, opts = {}) {
     perms: u.isAdmin ? Object.keys(PERMISSIONS) : (u.perms || []), tradePrivacy: u.tradePrivacy || 'everyone',
   });
 
+  // Owners, admins and the people they add to Team Create can edit a place.
+  const canEditPlace = (g, u) => !!g && !!u && (u.id === g.creatorId || !!u.isAdmin || (g.collaborators || []).includes(u.id));
   const publicGame = (g, user) => {
     const creator = D.users[g.creatorId];
     const servers = manager.serversFor(g.id);
@@ -253,7 +283,7 @@ export function createApi(db, manager, opts = {}) {
       copyable: !!g.copyable, hasThumbnail: db.hasThumb('game', g.id),
       myVote: user ? D.votes[`${g.id}:${user.id}`] || 0 : 0,
       isFavorite: user ? (D.favorites[user.id] || []).includes(g.id) : false,
-      canEdit: user ? user.id === g.creatorId || user.isAdmin : false,
+      canEdit: canEditPlace(g, user), isOwner: !!user && (user.id === g.creatorId || !!user.isAdmin),
     };
   };
 
@@ -303,11 +333,16 @@ export function createApi(db, manager, opts = {}) {
     if (!validUsername(username)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
     if (typeof password !== 'string' || password.length < 6) return bad(res, 'Password must be at least 6 characters.');
     if (password.toLowerCase() === username.toLowerCase()) return bad(res, 'Password cannot be your username.');
-    if (Object.values(D.users).some((u) => u.username.toLowerCase() === username.toLowerCase())) return bad(res, 'This username is already in use.');
     // The very first person to sign up on a fresh server becomes its admin.
     const isFirst = firstUserIsAdmin && !Object.values(D.users).some((u) => !u.system);
+    if (nameTaken(username, null, isFirst)) {
+      return bad(res, username.toLowerCase() === OWNER_NAME.toLowerCase()
+        ? `${OWNER_NAME} is the main account. Sign up with another name, enter the admin code, then change your username to ${OWNER_NAME} in Settings.`
+        : 'This username is already in use.');
+    }
     const user = createUser(db, username, password, isFirst ? { isAdmin: true } : {});
     grantAdminPerks(user);
+    if (isFirst) ensureOwner(db);
     noteClient(db, user, req.client);
     const token = createSession(db, user.id);
     setCookie(res, sessionCookie(token));
@@ -564,6 +599,232 @@ export function createApi(db, manager, opts = {}) {
     res.json({ user: me(req.user) });
   });
 
+  // ------------------------------------------------------------ groups
+  // Communities, like 2019 Groups: an emblem, a shout, a wall, members with
+  // roles (Owner / Admin / Member) and open or approval-only joining.
+  const GROUP_PRICE = 100;
+  const GROUP_ICONS = ['★', '⚔', '♛', '☠', '♥', '⚡', '☀', '☾', '♪', '✿', '⚽', '🎮', '🏰', '🐉', '🚀', '🔥', '💎', '🍕'];
+  const ROLE_RANK = { owner: 255, admin: 200, member: 1 };
+  if (!D.groups) D.groups = {};
+  const groupRole = (gr, uid) => (gr && gr.members[uid]) || null;
+  const isGroupAdmin = (gr, u) => !!u && (['owner', 'admin'].includes(groupRole(gr, u.id)) || can(u, 'moderator'));
+  const groupsOf = (uid) => Object.values(D.groups).filter((gr) => gr.members[uid]);
+  const publicGroup = (gr, viewer, full = false) => {
+    const owner = D.users[gr.ownerId];
+    const out = {
+      id: gr.id, name: gr.name, description: gr.description, color: gr.color, icon: gr.icon, approval: !!gr.approval,
+      created: gr.created, memberCount: Object.keys(gr.members).length,
+      owner: owner ? { id: owner.id, username: owner.username, flags: userFlags(owner) } : null,
+      shout: gr.shout || null,
+      myRole: viewer ? groupRole(gr, viewer.id) : null,
+      requested: viewer ? (gr.requests || []).includes(viewer.id) : false,
+    };
+    if (full) {
+      const order = { owner: 0, admin: 1, member: 2 };
+      out.members = Object.entries(gr.members)
+        .map(([uid, role]) => ({ role, user: publicUser(D.users[uid]) }))
+        .filter((m) => m.user)
+        .sort((a, b) => order[a.role] - order[b.role] || a.user.username.localeCompare(b.user.username))
+        .slice(0, 200);
+      out.wall = (gr.wall || []).slice(-60).reverse().map((p) => ({ ...p, user: publicUser(D.users[p.userId]) })).filter((p) => p.user);
+      if (viewer && isGroupAdmin(gr, viewer)) out.requests = (gr.requests || []).map((uid) => publicUser(D.users[uid])).filter(Boolean);
+    }
+    return out;
+  };
+  const groupFor = (req, res) => {
+    const gr = D.groups[toInt(req.params.id)];
+    if (!gr) { bad(res, 'Group not found', 404); return null; }
+    return gr;
+  };
+  const cleanText = (v, max) => filterChat(String(v || '').trim().slice(0, max));
+
+  api.get('/groups', (req, res) => {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const list = Object.values(D.groups)
+      .filter((gr) => !q || gr.name.toLowerCase().includes(q))
+      .sort((a, b) => Object.keys(b.members).length - Object.keys(a.members).length || b.created - a.created)
+      .slice(0, 60);
+    res.json({ groups: list.map((gr) => publicGroup(gr, req.user)), mine: req.user ? groupsOf(req.user.id).map((gr) => publicGroup(gr, req.user)) : [], icons: GROUP_ICONS, price: GROUP_PRICE });
+  });
+
+  api.post('/groups', requireUser, (req, res) => {
+    const u = req.user;
+    const name = String(req.body?.name || '').trim().replace(/\s+/g, ' ');
+    if (name.length < 3 || name.length > 40) return bad(res, 'Group names are 3 to 40 characters long.');
+    if (filterChat(name) !== name) return bad(res, 'That group name is not allowed.');
+    if (Object.values(D.groups).some((gr) => gr.name.toLowerCase() === name.toLowerCase())) return bad(res, 'A group with this name already exists.');
+    if (groupsOf(u.id).filter((gr) => gr.ownerId === u.id).length >= 10 && !u.isAdmin) return bad(res, 'You can own at most 10 groups.');
+    const price = u.isAdmin ? 0 : GROUP_PRICE;
+    if (u.robits < price) return bad(res, `Creating a group costs R$${GROUP_PRICE}.`);
+    u.robits -= price;
+    const id = db.nextId('group');
+    D.groups[id] = {
+      id, name, description: cleanText(req.body?.description, 1000), ownerId: u.id, created: Date.now(),
+      color: /^#[0-9a-f]{6}$/i.test(req.body?.color) ? req.body.color : '#0d69ac',
+      icon: GROUP_ICONS.includes(req.body?.icon) ? req.body.icon : GROUP_ICONS[0],
+      approval: !!req.body?.approval, members: { [u.id]: 'owner' }, requests: [], wall: [], shout: null,
+    };
+    if (!u.primaryGroup) u.primaryGroup = id;
+    log(u.id, -price, `Created the group ${name}`);
+    db.save();
+    res.json({ group: publicGroup(D.groups[id], u), robits: u.robits });
+  });
+
+  api.get('/groups/:id', (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.post('/groups/:id', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    if (!isGroupAdmin(gr, req.user)) return bad(res, 'Only the group\'s admins can change it.', 403);
+    const b = req.body || {};
+    if (b.description !== undefined) gr.description = cleanText(b.description, 1000);
+    if (/^#[0-9a-f]{6}$/i.test(b.color)) gr.color = b.color;
+    if (GROUP_ICONS.includes(b.icon)) gr.icon = b.icon;
+    if (b.approval !== undefined) gr.approval = !!b.approval;
+    db.save();
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.delete('/groups/:id', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    if (gr.ownerId !== req.user.id && !can(req.user, 'moderator')) return bad(res, 'Only the owner can delete the group.', 403);
+    delete D.groups[gr.id];
+    for (const u of Object.values(D.users)) if (u.primaryGroup === gr.id) u.primaryGroup = null;
+    db.save();
+    res.json({ ok: true });
+  });
+
+  api.post('/groups/:id/join', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    const uid = req.user.id;
+    if (gr.members[uid]) return bad(res, 'You are already in this group.');
+    if (groupsOf(uid).length >= 100) return bad(res, 'You can be in at most 100 groups.');
+    if (gr.approval) {
+      gr.requests = gr.requests || [];
+      if (!gr.requests.includes(uid)) gr.requests.push(uid);
+      db.save();
+      return res.json({ group: publicGroup(gr, req.user, true), pending: true });
+    }
+    gr.members[uid] = 'member';
+    if (!req.user.primaryGroup) req.user.primaryGroup = gr.id;
+    db.save();
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.post('/groups/:id/leave', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    const uid = req.user.id;
+    gr.requests = (gr.requests || []).filter((x) => x !== uid);
+    if (gr.ownerId === uid) return bad(res, 'The owner can\'t leave. Give the group to someone else or delete it.');
+    delete gr.members[uid];
+    if (req.user.primaryGroup === gr.id) req.user.primaryGroup = null;
+    db.save();
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.post('/groups/:id/requests/:uid', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    if (!isGroupAdmin(gr, req.user)) return bad(res, 'Only the group\'s admins can do that.', 403);
+    const uid = toInt(req.params.uid);
+    if (!(gr.requests || []).includes(uid)) return bad(res, 'Request not found', 404);
+    gr.requests = gr.requests.filter((x) => x !== uid);
+    if (req.body?.accept && D.users[uid]) {
+      gr.members[uid] = 'member';
+      if (!D.users[uid].primaryGroup) D.users[uid].primaryGroup = gr.id;
+    }
+    db.save();
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.post('/groups/:id/members/:uid', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    const uid = toInt(req.params.uid);
+    const target = gr.members[uid];
+    if (!target) return bad(res, 'That player is not in this group.', 404);
+    const me = groupRole(gr, req.user.id);
+    const mod = can(req.user, 'moderator');
+    const action = String(req.body?.action || '');
+    if (action === 'kick') {
+      if (target === 'owner') return bad(res, 'The owner can\'t be removed.');
+      if (!(me === 'owner' || mod || (me === 'admin' && target === 'member'))) return bad(res, 'You can\'t remove this member.', 403);
+      delete gr.members[uid];
+      if (D.users[uid] && D.users[uid].primaryGroup === gr.id) D.users[uid].primaryGroup = null;
+    } else if (action === 'admin' || action === 'member') {
+      if (me !== 'owner' && !mod) return bad(res, 'Only the owner can change roles.', 403);
+      if (target === 'owner') return bad(res, 'The owner\'s role can\'t be changed.');
+      gr.members[uid] = action;
+    } else if (action === 'owner') {
+      if (me !== 'owner' && !mod) return bad(res, 'Only the owner can give the group away.', 403);
+      gr.members[gr.ownerId] = 'admin';
+      gr.members[uid] = 'owner';
+      gr.ownerId = uid;
+    } else return bad(res, 'Unknown action.');
+    db.save();
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.post('/groups/:id/wall', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    if (!gr.members[req.user.id]) return bad(res, 'Join the group to post on its wall.', 403);
+    if (limited(req, res, 'wall', 30, 600e3)) return;
+    const text = cleanText(req.body?.text, 500);
+    if (!text) return bad(res, 'Write something first.');
+    gr.wall = gr.wall || [];
+    gr.wall.push({ id: db.nextId('message'), userId: req.user.id, text, time: Date.now() });
+    if (gr.wall.length > 500) gr.wall.splice(0, gr.wall.length - 500);
+    db.save();
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.delete('/groups/:id/wall/:postId', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    const pid = toInt(req.params.postId);
+    const post = (gr.wall || []).find((p) => p.id === pid);
+    if (!post) return bad(res, 'Post not found', 404);
+    if (post.userId !== req.user.id && !isGroupAdmin(gr, req.user)) return bad(res, 'You can\'t delete this post.', 403);
+    gr.wall = gr.wall.filter((p) => p !== post);
+    db.save();
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.post('/groups/:id/shout', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    if (!isGroupAdmin(gr, req.user)) return bad(res, 'Only the group\'s admins can post a shout.', 403);
+    const text = cleanText(req.body?.text, 255);
+    gr.shout = text ? { text, userId: req.user.id, username: req.user.username, time: Date.now() } : null;
+    db.save();
+    res.json({ group: publicGroup(gr, req.user, true) });
+  });
+
+  api.post('/groups/:id/primary', requireUser, (req, res) => {
+    const gr = groupFor(req, res); if (!gr) return;
+    if (!gr.members[req.user.id]) return bad(res, 'You are not in this group.');
+    req.user.primaryGroup = gr.id;
+    db.save();
+    res.json({ ok: true });
+  });
+
+  api.get('/users/:id/groups', (req, res) => {
+    const id = toInt(req.params.id);
+    const u = D.users[id];
+    if (!u) return bad(res, 'User not found', 404);
+    const list = groupsOf(id).map((gr) => ({ ...publicGroup(gr, req.user), role: gr.members[id] }));
+    res.json({ groups: list, primary: u.primaryGroup && D.groups[u.primaryGroup] ? publicGroup(D.groups[u.primaryGroup], req.user) : null });
+  });
+  // Used by Player:GetRankInGroup() in games.
+  manager.groupRank = (uid, gid) => {
+    const gr = D.groups[toInt(gid)];
+    const role = gr && gr.members[uid];
+    return role ? ROLE_RANK[role] || 1 : 0;
+  };
+  manager.groupRole = (uid, gid) => {
+    const gr = D.groups[toInt(gid)];
+    const role = gr && gr.members[uid];
+    return role ? role[0].toUpperCase() + role.slice(1) : 'Guest';
+  };
+
   // ------------------------------------------------------------ account settings
   // Changing your username costs 1,000 R$ (like in 2019); old names stay on the profile.
   const USERNAME_PRICE = 1000;
@@ -573,13 +834,14 @@ export function createApi(db, manager, opts = {}) {
     if (!checkPassword(u, String(req.body?.password || ''))) return bad(res, 'Incorrect password.', 401);
     if (!validUsername(name)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
     if (name === u.username) return bad(res, 'That is already your username.');
-    if (Object.values(D.users).some((o) => o !== u && o.username.toLowerCase() === name.toLowerCase())) return bad(res, 'This username is already in use.');
+    if (nameTaken(name, u, u.isAdmin)) return bad(res, 'This username is already in use.');
     const price = u.isAdmin ? 0 : USERNAME_PRICE;
     if (u.robits < price) return bad(res, `You need R$${USERNAME_PRICE} to change your username.`);
     u.robits -= price;
     u.previousNames = [u.username, ...(u.previousNames || [])].filter((n) => n.toLowerCase() !== name.toLowerCase()).slice(0, 10);
     u.username = name;
     log(u.id, -price, `Username changed to ${name}`);
+    ensureOwner(db);
     db.save();
     res.json({ user: me(u) });
   });
@@ -962,6 +1224,7 @@ export function createApi(db, manager, opts = {}) {
     req.user.isAdmin = true;
     req.user.adminByCode = true;
     grantAdminPerks(req.user);
+    ensureOwner(db);
     db.save();
     res.json({ user: me(req.user) });
   });
@@ -1071,10 +1334,43 @@ export function createApi(db, manager, opts = {}) {
     res.json({ ok: true });
   });
 
+  // ---- Team Create: collaborators
+  api.get('/games/:id/collaborators', requireUser, (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    if (!canEditPlace(g, req.user)) return bad(res, 'Forbidden', 403);
+    res.json({ collaborators: (g.collaborators || []).map((id) => publicUser(D.users[id])).filter(Boolean), owner: publicUser(D.users[g.creatorId]) });
+  });
+  api.post('/games/:id/collaborators', requireUser, (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    if (g.creatorId !== req.user.id && !req.user.isAdmin) return bad(res, 'Only the game\'s owner can add collaborators.', 403);
+    const name = String(req.body?.username || '').trim().toLowerCase();
+    const u = Object.values(D.users).find((x) => !x.system && x.username.toLowerCase() === name);
+    if (!u) return bad(res, 'User not found', 404);
+    if (u.id === g.creatorId) return bad(res, 'The owner can already edit this place.');
+    g.collaborators = [...new Set([...(g.collaborators || []), u.id])].slice(0, 20);
+    db.save();
+    res.json({ collaborators: g.collaborators.map((id) => publicUser(D.users[id])).filter(Boolean) });
+  });
+  api.delete('/games/:id/collaborators/:uid', requireUser, (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    const uid = toInt(req.params.uid);
+    if (g.creatorId !== req.user.id && !req.user.isAdmin && req.user.id !== uid) return bad(res, 'Forbidden', 403);
+    g.collaborators = (g.collaborators || []).filter((x) => x !== uid);
+    db.save();
+    res.json({ collaborators: g.collaborators.map((id) => publicUser(D.users[id])).filter(Boolean) });
+  });
+  // Games you can edit together with others.
+  api.get('/team-create', requireUser, (req, res) => {
+    res.json({ games: Object.values(D.games).filter((g) => (g.collaborators || []).includes(req.user.id)).map((g) => publicGame(g, req.user)) });
+  });
+
   api.get('/games/:id/place', (req, res) => {
     const g = D.games[toInt(req.params.id)];
     if (!g) return bad(res, 'Game not found', 404);
-    const canEdit = req.user && (req.user.id === g.creatorId || req.user.isAdmin);
+    const canEdit = canEditPlace(g, req.user);
     if (!canEdit && !g.copyable) return bad(res, 'This place is not copyable.', 403);
     const place = db.readPlace(g.id);
     if (!place) return bad(res, 'Place file missing', 404);
@@ -1084,7 +1380,7 @@ export function createApi(db, manager, opts = {}) {
   api.put('/games/:id/place', requireUser, (req, res) => {
     const g = D.games[toInt(req.params.id)];
     if (!g) return bad(res, 'Game not found', 404);
-    if (g.creatorId !== req.user.id && !req.user.isAdmin) return bad(res, 'You do not have permission to edit this place.', 403);
+    if (!canEditPlace(g, req.user)) return bad(res, 'You do not have permission to edit this place.', 403);
     const place = req.body?.place;
     if (!place || place.format !== PLACE_FORMAT || typeof place.services !== 'object') return bad(res, 'Invalid place file');
     db.writePlace(g.id, place);
@@ -1113,7 +1409,7 @@ export function createApi(db, manager, opts = {}) {
   api.put('/games/:id/thumbnail', (req, res) => {
     const g = D.games[toInt(req.params.id)];
     if (!g) return bad(res, 'Game not found', 404);
-    const canEdit = req.user && (req.user.id === g.creatorId || req.user.isAdmin);
+    const canEdit = canEditPlace(g, req.user);
     if (!canEdit && db.hasThumb('game', g.id)) return bad(res, 'Forbidden', 403);
     if (!saveThumb('game', g.id, String(req.body?.image || ''))) return bad(res, 'Invalid image');
     res.json({ ok: true });
@@ -1321,7 +1617,7 @@ export function createApi(db, manager, opts = {}) {
   api.post('/admin/users/:id/admin', requireAdmin, (req, res) => {
     const u = target(req, res); if (!u) return;
     if (u.id === req.user.id) return bad(res, 'You can\'t change your own admin rights.');
-    if (req.body?.isAdmin) { u.isAdmin = true; u.adminByCode = true; grantAdminPerks(u); } else { u.adminByCode = false; revokeAdmin(u); }
+    if (req.body?.isAdmin) { u.isAdmin = true; u.adminByCode = true; grantAdminPerks(u); ensureOwner(db); } else { u.adminByCode = false; revokeAdmin(u); }
     db.save();
     res.json({ user: adminUser(u) });
   });
@@ -1368,6 +1664,15 @@ export function createApi(db, manager, opts = {}) {
     D.trades = (D.trades || []).filter((t) => t.from !== id && t.to !== id);
     delete D.favorites[id];
     delete D.badges[id];
+    // Groups: leave them; owned groups go to an admin (or the oldest member), or are deleted when empty.
+    for (const gr of Object.values(D.groups || {})) {
+      gr.requests = (gr.requests || []).filter((x) => x !== id);
+      if (!gr.members[id]) continue;
+      delete gr.members[id];
+      if (gr.ownerId !== id) continue;
+      const next = Object.entries(gr.members).sort(([, a], [, b]) => (a === 'admin' ? 0 : 1) - (b === 'admin' ? 0 : 1))[0];
+      if (next) { gr.ownerId = +next[0]; gr.members[next[0]] = 'owner'; } else delete D.groups[gr.id];
+    }
     delete D.users[id];
     db.save();
   };
@@ -1439,9 +1744,10 @@ export function createApi(db, manager, opts = {}) {
     const name = String(req.body?.username || '').trim();
     if (!validUsername(name)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
     if (name === u.username) return bad(res, 'That is already their username.');
-    if (Object.values(D.users).some((o) => o !== u && o.username.toLowerCase() === name.toLowerCase())) return bad(res, 'This username is already in use.');
+    if (nameTaken(name, u, u.isAdmin)) return bad(res, 'This username is already in use.');
     u.previousNames = [u.username, ...(u.previousNames || [])].filter((n) => n.toLowerCase() !== name.toLowerCase()).slice(0, 10);
     u.username = name;
+    ensureOwner(db);
     db.save();
     res.json({ user: adminUser(u) });
   });

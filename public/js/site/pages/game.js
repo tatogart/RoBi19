@@ -54,7 +54,7 @@ const details = el('div', { class: 'game-details' },
   } }) : null,
   game.canEdit ? el('div', { class: 'row', style: { marginTop: '12px' } },
     el('a', { class: 'btn btn-small', href: `/studio?gameId=${id}`, text: 'Edit in Studio' }),
-    el('a', { class: 'btn btn-small', href: `/develop?configure=${id}`, text: 'Configure' })) : null);
+    game.isOwner ? el('a', { class: 'btn btn-small', href: `/develop?configure=${id}`, text: 'Configure' }) : null) : null);
 
 app.append(el('div', { class: 'panel game-top' }, thumb, details));
 
