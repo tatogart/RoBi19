@@ -498,3 +498,59 @@ test('Limited Creators make Limited items with a stock', async () => {
   assert.equal(l.data.item.remaining, 5);
   assert.equal((await call('POST', `/catalog/${plain.id}/limited`, { limited: false }, maker)).data.item.limited, false);
 });
+
+test('Limited copies have serial numbers that move with trades', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const a = (await call('POST', '/auth/signup', { username: 'SerialA', password: 'secret123' })).cookie;
+  const b = (await call('POST', '/auth/signup', { username: 'SerialB', password: 'secret123' })).cookie;
+  const aid = (await call('GET', '/auth/me', null, a)).data.user.id;
+  const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
+  const it = (await call('GET', '/catalog')).data.items.find((i) => !i.limited && i.price > 0 && i.price < 500);
+  await call('POST', `/catalog/${it.id}/limited`, { stock: 10 }, admin);
+  for (const c of [a, b]) {
+    await call('POST', `/admin/users/${c === a ? aid : bid}/robits`, { amount: 1000 }, admin);
+  }
+  // players who already owned it got the first numbers
+  const adminSerial = (await call('GET', `/catalog/${it.id}`, null, admin)).data.item.serial;
+  assert.ok(adminSerial >= 1);
+  const n = (await call('GET', `/catalog/${it.id}`)).data.item.lastSerial;
+  await call('POST', `/catalog/${it.id}/buy`, {}, a);
+  assert.equal((await call('GET', `/catalog/${it.id}`, null, a)).data.item.serial, n + 1);
+  assert.equal((await call('GET', `/users/${aid}/inventory`)).data.items.find((i) => i.id === it.id).serial, n + 1);
+  // trade the copy: #2 goes to B
+  const other = (await call('GET', '/catalog')).data.items.find((i) => !i.limited && i.price > 0 && i.id !== it.id);
+  await call('POST', `/admin/users/${bid}/items`, { itemId: other.id }, admin);
+  const t = (await call('POST', '/trades', { toUserId: bid, give: [it.id], get: [other.id] }, a)).data.trade;
+  assert.equal(t.give[0].serial, n + 1);
+  await call('POST', `/trades/${t.id}/accept`, {}, b);
+  assert.equal((await call('GET', `/catalog/${it.id}`, null, b)).data.item.serial, n + 1);
+  const owners = (await call('GET', `/catalog/${it.id}/owners`)).data.owners;
+  assert.ok(owners.some((o) => o.serial === adminSerial && o.user.username === 'Tester_1'));
+  assert.ok(owners.some((o) => o.serial === n + 1 && o.user.username === 'SerialB'));
+  assert.ok(!owners.some((o) => o.user.username === 'SerialA'));
+  // the next buyer gets a new number
+  await call('POST', `/catalog/${it.id}/buy`, {}, a);
+  assert.equal((await call('GET', `/catalog/${it.id}`, null, a)).data.item.serial, n + 2);
+});
+
+test('deleting an account does not ban the device', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const gone = (await call('POST', '/auth/signup', { username: 'GoneSoon', password: 'secret123' })).cookie;
+  const goneId = (await call('GET', '/auth/me', null, gone)).data.user.id;
+  const friend = (await call('POST', '/auth/signup', { username: 'StaysHere', password: 'secret123' })).cookie;
+  const friendId = (await call('GET', '/auth/me', null, friend)).data.user.id;
+  await call('POST', `/friends/${friendId}/request`, {}, gone);
+  await call('POST', `/friends/${goneId}/request`, {}, friend);
+  assert.equal((await call('POST', `/admin/users/${goneId}/delete`, {}, friend)).status, 403);
+  assert.equal((await call('POST', `/admin/users/${goneId}/delete`, {}, admin)).status, 200);
+  assert.equal((await call('GET', `/users/${goneId}`)).status, 404);
+  assert.equal((await call('GET', '/auth/me', null, gone)).data.user, null); // logged out
+  assert.equal((await call('POST', '/auth/login', { username: 'GoneSoon', password: 'secret123' })).status, 401);
+  assert.equal((await call('GET', `/users/${friendId}/friends`)).data.friends.length, 0);
+  // same device can sign up again, even with the same name
+  assert.equal((await call('POST', '/auth/signup', { username: 'GoneSoon', password: 'secret123' }, gone)).status, 200);
+  // players can delete their own account with their password
+  assert.equal((await call('POST', '/account/delete', { password: 'nope' }, friend)).status, 401);
+  assert.equal((await call('POST', '/account/delete', { password: 'secret123' }, friend)).status, 200);
+  assert.equal((await call('GET', `/users/${friendId}`)).status, 404);
+});

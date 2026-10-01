@@ -16,7 +16,9 @@ function renderBuy() {
     el('div', { class: 'price-line' }, el('span', { class: 'muted', text: 'Price' }),
       item.price ? el('span', { class: 'big-price' }, icon('robits', 'robits-icon'), fmtFull(item.price)) : el('span', { class: 'big-price', text: 'Free' })),
     item.owned
-      ? el('div', { class: 'row' }, el('span', { class: 'pill', text: '✓ You own this item' }), el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
+      ? el('div', { class: 'row wrap' }, el('span', { class: 'pill', text: '✓ You own this item' }),
+        item.serial ? el('span', { class: 'pill serial-pill no-i18n', text: `#${item.serial}${item.stock ? ' / ' + fmtFull(item.stock) : ''}` }) : null,
+        el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
       : el('button', { class: 'btn btn-green btn-large', text: item.price ? 'Buy' : 'Get', disabled: item.limited && item.remaining === 0, onclick: buy }),
     item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: item.remaining === 0 ? 'Sold out — you can still get it in a trade.' : item.stock ? `${fmtFull(item.remaining)} of ${fmtFull(item.stock)} remaining` : `${fmtFull(item.remaining)} remaining` }) : null].filter(Boolean));
 }
@@ -59,6 +61,17 @@ function limitedDialog() {
 }
 
 renderBuy();
+// Limiteds: every copy has a serial number; list who owns which.
+const owners = el('div');
+if (item.limited) {
+  api.get(`/catalog/${item.id}/owners`).then(({ owners: list }) => {
+    if (!list.length) return;
+    owners.replaceChildren(el('div', { class: 'panel' },
+      el('h3', { text: 'Owners' }),
+      el('div', { class: 'owners-list' }, list.map((o) => el('div', { class: 'owner-row' },
+        el('span', { class: 'serial-pill pill no-i18n', text: `#${o.serial}` }), userLink(o.user))))));
+  }).catch(() => {});
+}
 app.append(el('div', { class: 'panel item-page' }, thumb,
   el('div', { class: 'item-info' },
     el('h1', { text: item.name }),
@@ -85,3 +98,4 @@ style.textContent = `.item-page { display: flex; gap: 30px; } .item-big-thumb { 
 .big-price { font-size: 26px; font-weight: 700; color: #02b757; display: inline-flex; align-items: center; gap: 6px; } .big-price .robits-icon { width: 26px; height: 26px; }
 @media (max-width: 800px) { .item-page { flex-direction: column; } }`;
 document.head.append(style);
+app.append(owners);

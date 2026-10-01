@@ -48,6 +48,36 @@ export function createApi(db, manager, opts = {}) {
   const api = express.Router();
   const D = db.data;
 
+  // Serial numbers of Limited copies: D.serials[itemId][userId] = #. Copies keep
+  // their number when traded; a number taken away by an admin is never reused.
+  if (!D.serials) D.serials = {};
+  const giveSerial = (it, userId) => {
+    if (!it || !it.limited) return null;
+    const map = D.serials[it.id] || (D.serials[it.id] = {});
+    if (!map[userId]) { it.lastSerial = (it.lastSerial || 0) + 1; map[userId] = it.lastSerial; }
+    return map[userId];
+  };
+  const serialOf = (it, userId) => (it && it.limited && D.serials[it.id]?.[userId]) || null;
+  const moveSerial = (itemId, from, to) => {
+    const map = D.serials[itemId];
+    if (!map || !map[from]) return;
+    map[to] = map[from];
+    delete map[from];
+  };
+  const dropSerial = (itemId, userId) => { if (D.serials[itemId]) delete D.serials[itemId][userId]; };
+  // Gives numbers to every owner of a Limited that doesn't have one yet (oldest accounts first).
+  const syncSerials = (only) => {
+    let changed = false;
+    const owners = Object.keys(D.inventory).map(Number).sort((a, b) => a - b);
+    for (const it of only ? [only] : Object.values(D.items)) {
+      if (!it.limited) continue;
+      for (const uid of owners) {
+        if ((D.inventory[uid] || []).includes(it.id) && !serialOf(it, uid)) { giveSerial(it, uid); changed = true; }
+      }
+    }
+    return changed;
+  };
+
   // Admins get the full owner experience: Robits, OBC and every catalog item.
   const grantAdminPerks = (u) => {
     if (!u || !u.isAdmin || u.adminPerks || u.system) return;
@@ -55,6 +85,7 @@ export function createApi(db, manager, opts = {}) {
     u.robits = (u.robits || 0) + ADMIN_ROBITS;
     u.membership = 'OutrageousBuildersClub';
     D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...Object.keys(D.items).map(Number)])];
+    for (const it of Object.values(D.items)) giveSerial(it, u.id);
     D.transactions.push({ userId: u.id, amount: ADMIN_ROBITS, desc: 'Admin bonus', time: Date.now() });
     db.save();
   };
@@ -78,6 +109,7 @@ export function createApi(db, manager, opts = {}) {
 
   // New showcase places reach existing worlds too.
   addSeedGames(db);
+  if (syncSerials()) db.save();
 
   // The free Robits packs and self-service Builders Club are gone: take back
   // what players gave themselves (runs once per database).
@@ -232,6 +264,7 @@ export function createApi(db, manager, opts = {}) {
       creator: creator ? { id: creator.id, username: creator.username, flags: userFlags(creator) } : null,
       created: it.created, sales: it.sales, limited: !!it.limited, remaining: it.remaining ?? null, stock: it.stock ?? null, custom: !!it.custom,
       owned: user ? (D.inventory[user.id] || []).includes(it.id) : false,
+      serial: user ? serialOf(it, user.id) : null, lastSerial: it.limited ? it.lastSerial || 0 : null,
     };
   };
 
@@ -387,6 +420,7 @@ export function createApi(db, manager, opts = {}) {
     const inv = D.inventory[userId] || [];
     const i = inv.indexOf(itemId);
     if (i >= 0) inv.splice(i, 1);
+    dropSerial(itemId, userId);
     const u = D.users[userId];
     if (u && u.avatar && Array.isArray(u.avatar.wearing)) u.avatar.wearing = u.avatar.wearing.filter((x) => x !== itemId);
   };
@@ -420,8 +454,8 @@ export function createApi(db, manager, opts = {}) {
   const publicTrade = (t, viewer) => ({
     id: t.id, status: t.status, created: t.created, updated: t.updated || t.created, reason: t.reason || '',
     from: publicUser(D.users[t.from]), to: publicUser(D.users[t.to]),
-    give: t.give.map((i) => D.items[i]).filter(Boolean).map((i) => publicItem(i, viewer)), giveRobits: t.giveRobits,
-    get: t.get.map((i) => D.items[i]).filter(Boolean).map((i) => publicItem(i, viewer)), getRobits: t.getRobits,
+    give: t.give.map((i) => D.items[i]).filter(Boolean).map((i) => ({ ...publicItem(i, viewer), serial: t.status === 'accepted' ? serialOf(i, t.to) : serialOf(i, t.from) })), giveRobits: t.giveRobits,
+    get: t.get.map((i) => D.items[i]).filter(Boolean).map((i) => ({ ...publicItem(i, viewer), serial: t.status === 'accepted' ? serialOf(i, t.from) : serialOf(i, t.to) })), getRobits: t.getRobits,
     inbound: t.to === viewer.id,
   });
   const tradeFor = (req, res) => {
@@ -488,8 +522,13 @@ export function createApi(db, manager, opts = {}) {
       return bad(res, `The trade could not be completed: ${problem}`);
     }
     const from = D.users[t.from], to = D.users[t.to];
-    for (const id of t.give) { takeItem(from.id, id); (D.inventory[to.id] || (D.inventory[to.id] = [])).push(id); }
-    for (const id of t.get) { takeItem(to.id, id); (D.inventory[from.id] || (D.inventory[from.id] = [])).push(id); }
+    const hand = (a, b, id) => {
+      moveSerial(id, a.id, b.id); // the copy keeps its serial number
+      takeItem(a.id, id);
+      (D.inventory[b.id] || (D.inventory[b.id] = [])).push(id);
+    };
+    for (const id of t.give) hand(from, to, id);
+    for (const id of t.get) hand(to, from, id);
     const move = (payer, payee, amount) => {
       if (!amount) return;
       const received = Math.floor(amount * (1 - TRADE_TAX));
@@ -577,7 +616,7 @@ export function createApi(db, manager, opts = {}) {
     const id = toInt(req.params.id);
     const type = req.query.type;
     const items = (D.inventory[id] || []).map((i) => D.items[i]).filter((i) => i && (!type || i.type === type));
-    res.json({ items: items.map((i) => publicItem(i, req.user)) });
+    res.json({ items: items.map((i) => ({ ...publicItem(i, req.user), serial: serialOf(i, id) })) });
   });
 
   // ------------------------------------------------------------ friends
@@ -778,6 +817,7 @@ export function createApi(db, manager, opts = {}) {
     if (it.creatorId !== req.user.id && !can(req.user, 'moderator')) return bad(res, 'You don\'t have permission to do that.', 403);
     if (it.limited && it.sales > 0 && !can(req.user, 'moderator')) return bad(res, 'Players already own this Limited, so it can\'t be deleted.');
     delete D.items[it.id];
+    delete D.serials[it.id];
     for (const list of Object.values(D.inventory)) { const i = list.indexOf(it.id); if (i >= 0) list.splice(i, 1); }
     for (const u of Object.values(D.users)) if (u.avatar && Array.isArray(u.avatar.wearing)) u.avatar.wearing = u.avatar.wearing.filter((x) => x !== it.id);
     db.save();
@@ -791,13 +831,27 @@ export function createApi(db, manager, opts = {}) {
     if (!it) return bad(res, 'Item not found', 404);
     if (req.body?.limited === false) {
       it.limited = false; it.remaining = null; it.stock = null;
+      delete D.serials[it.id]; it.lastSerial = 0;
     } else {
       const stock = stockAmount(req.body?.stock);
       if (!(stock >= 0 && stock <= MAX_STOCK)) return bad(res, `The stock must be between 0 and ${fmtStock(MAX_STOCK)}.`);
       it.limited = true; it.remaining = stock; it.stock = it.sales + stock;
+      syncSerials(it); // the players who already own it get the first numbers
     }
     db.save();
     res.json({ item: publicItem(it, req.user) });
+  });
+
+  // Who owns which copy of a Limited, by serial number.
+  api.get('/catalog/:id/owners', (req, res) => {
+    const it = D.items[toInt(req.params.id)];
+    if (!it) return bad(res, 'Item not found', 404);
+    if (!it.limited) return res.json({ owners: [] });
+    const owners = Object.entries(D.serials[it.id] || {})
+      .filter(([uid]) => D.users[uid] && (D.inventory[uid] || []).includes(it.id))
+      .map(([uid, serial]) => ({ serial, user: publicUser(D.users[uid]) }))
+      .sort((a, b) => a.serial - b.serial).slice(0, 500);
+    res.json({ owners });
   });
 
   api.post('/catalog/:id/buy', requireUser, (req, res) => {
@@ -818,6 +872,7 @@ export function createApi(db, manager, opts = {}) {
     inv.push(it.id);
     it.sales++;
     if (it.limited && it.remaining !== null) it.remaining--;
+    giveSerial(it, req.user.id);
     db.save();
     res.json({ ok: true, robits: req.user.robits, item: publicItem(it, req.user) });
   });
@@ -1106,6 +1161,7 @@ export function createApi(db, manager, opts = {}) {
     const ids = req.body?.all ? Object.keys(D.items).map(Number) : [toInt(req.body?.itemId)].filter((i) => D.items[i]);
     if (!ids.length) return bad(res, 'Item not found.');
     D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...ids])];
+    for (const id of ids) giveSerial(D.items[id], u.id);
     db.save();
     res.json({ user: adminUser(u) });
   });
@@ -1147,6 +1203,50 @@ export function createApi(db, manager, opts = {}) {
     log(u.id, 0, `Permissions set by ${req.user.username}: ${u.perms.join(', ') || 'none'}`);
     db.save();
     res.json({ user: adminUser(u) });
+  });
+
+  // Deletes an account for good: the player, their games, friends, messages and
+  // trades. Unlike a device ban, the device and IP stay free, so the person can
+  // sign up again with a new account.
+  const deleteAccount = (u) => {
+    const id = u.id;
+    for (const [t, s] of Object.entries(D.sessions)) if (s.userId === id) delete D.sessions[t];
+    const f = manager.findUser(id);
+    if (f) f.server.kick(f.session, 'This account has been deleted.');
+    for (const g of Object.values(D.games)) {
+      if (g.creatorId !== id) continue;
+      for (const srv of manager.serversFor(g.id)) srv.close();
+      delete D.games[g.id];
+    }
+    for (const itemId of D.inventory[id] || []) dropSerial(itemId, id);
+    delete D.inventory[id];
+    delete D.friends[id];
+    for (const list of Object.values(D.friends)) { const i = list.indexOf(id); if (i >= 0) list.splice(i, 1); }
+    D.friendRequests = D.friendRequests.filter((r) => r.from !== id && r.to !== id);
+    D.messages = D.messages.filter((m) => m.from !== id && m.to !== id);
+    D.invites = (D.invites || []).filter((i) => i.from !== id && i.to !== id);
+    D.trades = (D.trades || []).filter((t) => t.from !== id && t.to !== id);
+    delete D.favorites[id];
+    delete D.badges[id];
+    delete D.users[id];
+    db.save();
+  };
+
+  api.post('/admin/users/:id/delete', requirePerm('moderator'), (req, res) => {
+    const u = target(req, res); if (!u) return;
+    if (u.id === req.user.id) return bad(res, 'Delete your own account in Settings.');
+    if (u.isAdmin && !req.user.isAdmin) return bad(res, 'Only admins can delete an admin.', 403);
+    log(req.user.id, 0, `Deleted the account ${u.username}`);
+    deleteAccount(u);
+    res.json({ ok: true });
+  });
+
+  api.post('/account/delete', requireUser, (req, res) => {
+    const u = req.user;
+    if (!checkPassword(u, String(req.body?.password || ''))) return bad(res, 'Incorrect password.', 401);
+    deleteAccount(u);
+    setCookie(res, sessionCookie('', 0));
+    res.json({ ok: true });
   });
 
   api.post('/admin/users/:id/ban', requirePerm('moderator'), (req, res) => {

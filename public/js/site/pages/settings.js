@@ -68,6 +68,20 @@ app.append(el('div', { class: 'panel' },
       } catch (e) { toast(e.message, 'error'); }
     } }))));
 
+// ---------------------------------------------------------------- delete account
+const delPass = el('input', { class: 'input', type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
+app.append(el('div', { class: 'panel' },
+  el('h3', { text: 'Delete Account' }),
+  el('p', { class: 'small muted', text: 'Your account, games, items, friends and messages are deleted for good. This can\'t be undone.' }),
+  el('div', { class: 'row wrap' }, delPass,
+    el('button', { class: 'btn btn-red', text: 'Delete my account', onclick: async () => {
+      if (!confirm('Delete your account forever?')) return;
+      try {
+        await api.post('/account/delete', { password: delPass.value });
+        location.href = '/';
+      } catch (e) { toast(e.message, 'error'); }
+    } }))));
+
 const style = document.createElement('style');
 style.textContent = `
 .settings-row { display: flex; align-items: center; gap: 16px; padding: 8px 0; flex-wrap: wrap; }

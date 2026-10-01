@@ -68,7 +68,26 @@ function row(u) {
       self || !me.isAdmin ? null : el('button', { class: 'btn btn-small', text: u.isAdmin ? 'Remove admin' : 'Make admin', onclick: () => act(`/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin }, u.isAdmin ? 'Admin removed' : `${u.username} is now an admin`) }),
       self || !me.isAdmin || u.isAdmin ? null : el('button', { class: 'btn btn-small', text: 'Permissions', onclick: () => permsDialog(u) }),
       me.isAdmin ? el('button', { class: 'btn btn-small', text: 'Badges', onclick: () => flagsDialog(u) }) : null,
-      self || !perm('moderator') ? null : el('button', { class: 'btn btn-small btn-red', text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) })));
+      self || !perm('moderator') ? null : el('button', { class: 'btn btn-small btn-red', text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) }),
+      self || !perm('moderator') || (u.isAdmin && !me.isAdmin) ? null : el('button', { class: 'btn btn-small btn-red', text: 'Delete account', onclick: () => deleteAccount(u) })));
+}
+
+// Removes the account only: the device and IP are NOT banned, so the person can make a new account.
+function deleteAccount(u) {
+  modal({
+    title: `Delete ${u.username}?`,
+    body: el('div', {},
+      el('p', { text: 'The account, its games, friends, messages and trades are deleted for good. This can\'t be undone.' }),
+      el('p', { class: 'small muted', text: 'This is not a device ban: the person can sign up again with a new account. To stop that, use Ban → Account + device and IP instead.' })),
+    buttons: [{ text: 'Delete account', cls: 'btn-red', onClick: async () => {
+      try {
+        await api.post(`/admin/users/${u.id}/delete`);
+        toast(`${u.username} was deleted`, 'success');
+        data.users = data.users.filter((x) => x.id !== u.id);
+        draw();
+      } catch (e) { toast(e.message, 'error'); }
+    } }, { text: 'Cancel' }],
+  });
 }
 
 // Admins decide who gets the check, the Robis icon and the star (see FLAGS in server/api.js).

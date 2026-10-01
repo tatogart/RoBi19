@@ -59,6 +59,8 @@
 - **Trading** like in 2019: open a player's profile → **Trade Items**, pick up to 4 items and some Robits on each side and send the offer. Trades live in **Trade** (Inbound / Outbound / Completed / Inactive); nothing changes hands until the other player accepts. Only paid or Limited items can be traded, Robits received in a trade have a 30% fee, and *Settings → Trading* chooses who may send you trades.
 - **Taking items away**: in the Admin Panel, **Take items** shows a player's inventory — click an item to remove it (it's also taken off their avatar), or take everything at once.
 - **Limiteds**: the *Limited Creator* right (Admin Panel → Permissions) lets a player tick **Make it a Limited** on the Create page and set a stock, or press **Make Limited** on any item page. When the stock sells out, the item can only be had through trades. A Limited that players already own can't be deleted by its creator.
+- **Serial numbers**: every copy of a Limited has its own number (#1, #2, …). It shows on the item card, on the item page (with the list of **Owners** by number) and in trades; a copy keeps its number when it's traded.
+- **Deleting accounts**: Admin Panel → **Delete account** removes the account, its games, friends, messages and trades for good. It is *not* a device ban — the person can sign up again (use Ban → Account + device and IP for that). Players can also delete their own account in Settings.
 
 ### 🎮 Game client
 - Multiplayer over WebSocket with a server-authoritative world and client-side character movement.
