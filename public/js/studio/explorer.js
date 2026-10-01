@@ -73,11 +73,15 @@ export class Explorer {
     const tw = document.createElement('span');
     tw.className = 'tw';
     tw.textContent = hasKids ? (this.expanded.has(inst.id) ? '▼' : '▶') : '';
-    tw.onclick = (e) => {
+    // Toggle on mousedown: the row's own mousedown (selection) re-renders the
+    // tree, so a 'click' would land on an element that no longer exists.
+    tw.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || !hasKids) return;
       e.stopPropagation();
+      e.preventDefault();
       if (this.expanded.has(inst.id)) this.expanded.delete(inst.id); else this.expanded.add(inst.id);
       this.render();
-    };
+    });
     const ic = document.createElement('span');
     ic.className = 'ic';
     ic.innerHTML = classIcon(inst.constructor);
