@@ -206,6 +206,7 @@ export class GameClient {
       case 'drive':
         this.vehicle = m.on ? { max: +m.max || 60, turn: +m.turn || 2.2, color: m.color || '#c4281c', speed: 0 } : null;
         if (m.on && Number.isFinite(m.ry)) { const v = this.views.get(this.userId); if (v) v.ry = m.ry; this.cam.yaw = m.ry; }
+        this.input.jumpTap = false;
         if (m.on) this.hud.addChat('', 'You are driving! WASD / joystick to steer, Space or Jump to get out.', { system: true });
         return;
       case 'impulse': if (this.local) { this.local.vx += m.v[0]; this.local.vy = m.v[1]; this.local.vz += m.v[2]; this.local.grounded = false; } return;
@@ -588,7 +589,8 @@ export class GameClient {
   stepVehicle(dt, v, s, humP) {
     const car = this.vehicle;
     const mv = this.input.moveVector();
-    if (this.input.wantsJump()) {
+    // A fresh press (not one still held from jumping in) gets you out.
+    if (this.input.takeJumpTap()) {
       if (!car.exitSent) { car.exitSent = true; this.send({ t: 'exitVehicle' }); }
     }
     const target = mv.y * car.max * (mv.y < 0 ? 0.45 : 1);

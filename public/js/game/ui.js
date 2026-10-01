@@ -117,7 +117,7 @@ export class HUD {
     this.el.append(this.stick, this.jump, this.useBtn);
     client.input.stickEl = this.stick;
     client.input.knobEl = this.stick.firstChild;
-    const press = (on) => (e) => { client.input.touchJump = on; this.jump.classList.toggle('down', on); e.preventDefault(); e.stopPropagation(); };
+    const press = (on) => (e) => { client.input.touchJump = on; if (on) client.input.jumpTap = true; this.jump.classList.toggle('down', on); e.preventDefault(); e.stopPropagation(); };
     this.jump.addEventListener('touchstart', press(true), { passive: false });
     this.jump.addEventListener('touchend', press(false));
     this.jump.addEventListener('touchcancel', press(false));

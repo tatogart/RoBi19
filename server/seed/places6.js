@@ -520,8 +520,9 @@ export function gameKartRacing() {
   }
   folder(ws, 'Karts');
   script(g.ServerScriptService, 'Race', `
--- Kart Racing: 3 laps. Touch your kart's seat to get in (WASD to drive,
--- Space to get out). Checkpoints must be passed in order.
+-- Kart Racing: 3 laps. Everyone is put in a kart at the start (late joiners
+-- get one too). WASD to drive, Space to get out, walk into a kart to get back
+-- in. Checkpoints must be passed in order.
 local Players = game:GetService("Players")
 local Debris = game:GetService("Debris")
 local BadgeService = game:GetService("BadgeService")
@@ -552,6 +553,14 @@ local function say(text, secs)
 	m.Text = text
 	m.Parent = workspace
 	Debris:AddItem(m, secs or 3)
+end
+
+-- Seats a player in a kart (moving them there and putting them in).
+local function seatIn(p, kart)
+	local ch = p.Character
+	local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+	if not hum then return false end
+	return kart.Seat:Sit(hum)
 end
 
 local function resetKarts()
@@ -597,6 +606,41 @@ for _, cp in ipairs(cps:GetChildren()) do
 	end)
 end
 
+-- Joined (or respawned) while a race is on: take a free kart from the grid
+-- (or a fresh one) and go. Your lap and checkpoint progress is kept.
+local templates = game:GetService("ServerStorage").KartTemplates:GetChildren()
+local owned = {}   -- kart -> player
+local spare = 0
+local function lateJoin(p)
+	if not racing then return end
+	local pr = progress[p]
+	if pr and pr.finished then return end
+	if not pr then
+		progress[p] = { lap = 1, next = 1, finished = false }
+		p.leaderstats.Lap.Value = "1/" .. LAPS
+	end
+	local kart
+	for _, k in ipairs(workspace.Karts:GetChildren()) do
+		if not owned[k] then kart = k break end
+	end
+	if not kart then
+		spare = spare % #templates + 1
+		kart = templates[spare]:Clone()
+		kart:TranslateBy(Vector3.new(-50, 0, 0)) -- behind the grid
+		kart.Parent = workspace.Karts
+	end
+	owned[kart] = p
+	if seatIn(p, kart) then
+		p:Notify(pr and "Here's a new kart - keep racing!" or "The race is on - you got a kart, go go go!")
+	end
+end
+Players.PlayerAdded:Connect(function(p)
+	p.CharacterAdded:Connect(function()
+		wait(1)
+		if p.Parent then lateJoin(p) end
+	end)
+end)
+
 while true do
 	racing = false
 	resetKarts()
@@ -611,6 +655,7 @@ while true do
 	else
 		progress = {}
 		finishOrder = {}
+		owned = {}
 		local karts = workspace.Karts:GetChildren()
 		for i, p in ipairs(players) do
 			if i <= #karts then
@@ -618,10 +663,8 @@ while true do
 				p.leaderstats.Lap.Value = "1/" .. LAPS
 				p.RespawnLocation = pitSpawn
 				p:LoadCharacter()
-				wait(0.1)
-				-- drop them onto their kart's seat: touching it gets them in
-				local seat = karts[i].Seat
-				if p.Character then p.Character:MoveTo(seat.Position - Vector3.new(0, 0.5, 0)) end
+				owned[karts[i]] = p
+				seatIn(p, karts[i])
 			end
 		end
 		for i = 3, 1, -1 do

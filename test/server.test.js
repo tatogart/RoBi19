@@ -634,6 +634,14 @@ test('tools: StarterPack, equip, Activated with Raycast; vehicles: drive and get
   ` } }] }] };
   place.services.Workspace.ch.push({ c: 'Part', p: { Name: 'Target', Anchored: true, Size: [4, 4, 4], CFrame: [0, 5, -30, 1, 0, 0, 0, 1, 0, 0, 0, 1] } });
   place.services.Workspace.ch.push({ c: 'VehicleSeat', p: { Name: 'Kart', Anchored: true, MaxSpeed: 70, Size: [2, 1, 2], CFrame: [40, 1, 40, 1, 0, 0, 0, 1, 0, 0, 0, 1] } });
+  place.services.Workspace.ch.push({ c: 'VehicleSeat', p: { Name: 'Kart2', Anchored: true, MaxSpeed: 50, Size: [2, 1, 2], CFrame: [80, 1, 80, 1, 0, 0, 0, 1, 0, 0, 0, 1] } });
+  place.services.ServerScriptService.ch.push({ c: 'Script', p: { Name: 'Sitter', Source: `
+    game.Players.PlayerAdded:Connect(function(p)
+      p.Chatted:Connect(function(msg)
+        if msg == "sit" then print("sat", workspace.Kart2:Sit(p.Character.Humanoid)) end
+      end)
+    end)
+  ` } });
   const put = await call('PUT', `/games/${id}/place`, { place }, cookie);
   assert.equal(put.status, 200, JSON.stringify(put.data));
   const c = await join(cookie, { placeId: id });
@@ -666,6 +674,16 @@ test('tools: StarterPack, equip, Activated with Raycast; vehicles: drive and get
   await new Promise((r) => setTimeout(r, 100));
   c.ws.send(JSON.stringify({ t: 'exitVehicle' }));
   await c.wait((m) => m.t === 'drive' && !m.on);
+  // you step out beside the car
+  const out = await c.wait((m) => m.t === 'teleport');
+  assert.ok(Math.hypot(out.cf[0] - 60, out.cf[2] - 60) > 3);
+  // a script seats you (seat:Sit): moved to the seat, then driving
+  c.inbox.length = 0;
+  c.ws.send(JSON.stringify({ t: 'chat', text: 'sit' }));
+  await c.wait((m) => m.t === 'output' && m.text === 'sat true');
+  const tp = c.inbox.find((m) => m.t === 'teleport');
+  assert.ok(tp && Math.abs(tp.cf[0] - 80) < 0.01 && Math.abs(tp.cf[2] - 80) < 0.01);
+  assert.equal((await c.wait((m) => m.t === 'drive' && m.on)).max, 50);
   c.ws.close();
 });
 

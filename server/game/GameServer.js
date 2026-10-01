@@ -103,6 +103,12 @@ export class GameServer {
       if (hum && model._isCharacter) hum.Health = 0;
     };
     game._hasForceField = (hum) => !!(hum.Parent && hum.Parent.FindFirstChildOfClass('ForceField'));
+    game._sit = (seat, hum) => {
+      const s = [...this.sessions.values()].find((x) => x.character && x.character === hum.Parent);
+      if (!s || seat.ClassName !== 'VehicleSeat') return false;
+      this.enterVehicle(s, seat, { scripted: true });
+      return !!(s.vehicle && s.vehicle.seat === seat);
+    };
     game._moveCharacter = (model, pos) => {
       if (!model._isCharacter) return false;
       this.teleport(model, CFrame.fromPosition(pos.add(new Vector3(0, 3, 0))));
@@ -462,7 +468,7 @@ export class GameServer {
   }
 
   removeCharacter(session) {
-    this.exitVehicle(session);
+    this.exitVehicle(session, { aside: false });
     const ch = session.character;
     if (!ch) return;
     session.player._fire('CharacterRemoving', ch);
@@ -476,16 +482,19 @@ export class GameServer {
 
   _onDied(session, model) {
     if (session.character !== model) return;
-    this.exitVehicle(session);
+    this.exitVehicle(session, { aside: false });
     this.enqueue(['died', session.user.id]);
     const players = this.game.GetService('Players');
     if (players.CharacterAutoLoads) session.respawnAt = this.time + Math.max(0, players.RespawnTime);
   }
 
   // ------------------------------------------------------------ vehicles
-  enterVehicle(session, seat) {
-    if (session.vehicle || seat._p.Disabled || seat._occupied || !session.character) return;
-    if (session.vehicleCooldown && this.time < session.vehicleCooldown) return;
+  enterVehicle(session, seat, { scripted = false } = {}) {
+    if (seat._p.Disabled || seat._occupied || !session.character || seat._destroyed) return;
+    if (session.vehicle) { if (!scripted) return; this.exitVehicle(session, { aside: false }); }
+    if (!scripted && session.vehicleCooldown && this.time < session.vehicleCooldown) return;
+    // Seated by a script (seat:Sit): bring the player to the seat first.
+    if (scripted) this.teleport(session.character, CFrame.fromPosition(seat._p.CFrame.Position.add(new Vector3(0, 1.5, 0))));
     const model = seat.Parent && seat.Parent.ClassName === 'Model' && seat.Parent !== this.game.Workspace ? seat.Parent : seat;
     seat._occupied = session;
     session.vehicle = { seat, model, parent: model.Parent };
@@ -497,7 +506,7 @@ export class GameServer {
     seat._fire('Entered', session.player);
   }
 
-  exitVehicle(session) {
+  exitVehicle(session, { aside = true } = {}) {
     const v = session.vehicle;
     if (!v) return;
     session.vehicle = null;
@@ -512,6 +521,11 @@ export class GameServer {
       v.model.Parent = v.parent;
     }
     this.send(session, { t: 'drive', on: false });
+    // Step out beside the car, not inside it.
+    if (aside && session.character) {
+      const ry = session.state.ry || 0;
+      this.teleport(session.character, CFrame.fromPosition(new Vector3(x - Math.cos(ry) * 4.5, y + 0.5, z + Math.sin(ry) * 4.5)));
+    }
     v.seat._fire('Exited', session.player);
   }
 
@@ -522,6 +536,8 @@ export class GameServer {
     this._posing = false;
     if (session) {
       session.state.p = [cf.x, cf.y, cf.z];
+      // A just-loaded character must reach the client first, or its spawn would undo the teleport.
+      if (this.queue.some((op) => op[0] === 'char')) this.flush();
       this.send(session, { t: 'teleport', cf: cf.toArray() });
     }
   }
@@ -758,9 +774,13 @@ export class GameServer {
       const [a, b] = pair;
       a._fire('Touched', b);
       b._fire('Touched', a);
-      // Touching a VehicleSeat gets you in.
-      for (const [seat, limb] of [[a, b], [b, a]]) {
-        if (seat.ClassName !== 'VehicleSeat' || !(limb._parent && limb._parent._isCharacter)) continue;
+      // Touching a VehicleSeat (or any part of the car it's in) gets you in.
+      for (const [part, limb] of [[a, b], [b, a]]) {
+        if (!(limb._parent && limb._parent._isCharacter) || part._parent === limb._parent) continue;
+        let seat = part.ClassName === 'VehicleSeat' ? part : null;
+        const m = part._parent;
+        if (!seat && m && m.ClassName === 'Model' && !m._isCharacter) seat = m.FindFirstChildOfClass('VehicleSeat');
+        if (!seat) continue;
         const driver = [...this.sessions.values()].find((x) => x.character === limb._parent);
         if (driver) this.enterVehicle(driver, seat);
       }

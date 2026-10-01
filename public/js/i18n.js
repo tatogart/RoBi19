@@ -158,6 +158,8 @@ const RU = {
   'Creating a group costs R$100.': 'Создание группы стоит R$100.', 'A group with this name already exists.': 'Группа с таким названием уже есть.', 'Group names are 3 to 40 characters long.': 'Название группы — от 3 до 40 символов.',
   'Only the owner can delete the group.': 'Удалить группу может только владелец.', "The owner can't leave. Give the group to someone else or delete it.": 'Владелец не может уйти. Передай группу другому или удали её.',
   'You are driving! WASD / joystick to steer, Space or Jump to get out.': 'Ты за рулём! WASD / джойстик — руль, Пробел или прыжок — выйти.',
+  'The race is on - you got a kart, go go go!': 'Гонка уже идёт — вот тебе карт, вперёд!',
+  "Here's a new kart - keep racing!": 'Вот новый карт — гони дальше!',
   'Resellers': 'Перепродавцы', 'Best Price': 'Лучшая цена', 'Sell': 'Продать', 'Take off sale': 'Снять с продажи', 'On sale for': 'В продаже за', 'Your copy': 'Твоя копия',
   'Nobody is selling this item right now.': 'Сейчас никто не продаёт этот предмет.', 'Put on sale': 'Выставить', 'Your item is on sale!': 'Предмет выставлен на продажу!', 'Taken off sale': 'Снято с продажи',
   'Sold out': 'Распродано', 'Sold out — buy it from a reseller or get it in a trade.': 'Распродано — купи у перепродавца или получи обменом.',

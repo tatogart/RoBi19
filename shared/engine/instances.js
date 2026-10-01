@@ -457,6 +457,13 @@ export const Seat = defineClass('Seat', Part, {
 // Touch it to drive: the player steers with WASD (or the joystick), Space gets out.
 // The whole Model it's in rides along (it's hidden while driven, and put back where you get out).
 export const VehicleSeat = defineClass('VehicleSeat', Seat, {
+  cls: class extends Seat {
+    // Puts a player's character in the driver's seat (like Seat:Sit on Roblox).
+    Sit(humanoid) {
+      const r = this.getRoot();
+      return !!(r && r._sit && humanoid && r._sit(this, humanoid));
+    }
+  },
   icon: 'seat',
   props: {
     MaxSpeed: { type: 'number', default: 60, cat: 'Behavior' },

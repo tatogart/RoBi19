@@ -25,7 +25,7 @@ export class Input {
         if (this.onKey(e) === false) { e.preventDefault(); return; }
         if (!this.enabled) return;
         const k = e.code;
-        if (k === 'Space') { this.jumpPressed = true; e.preventDefault(); }
+        if (k === 'Space') { this.jumpPressed = true; this.jumpTap = true; e.preventDefault(); }
         this.keys.add(k);
         if (k === 'KeyI') this.onZoom(-1);
         if (k === 'KeyO') this.onZoom(1);
@@ -155,6 +155,9 @@ export class Input {
   }
 
   wantsJump() { return this.enabled && (this.jumpPressed || this.touchJump); }
+
+  // True once per press, even if it was released before the next frame.
+  takeJumpTap() { const t = this.jumpTap; this.jumpTap = false; return this.enabled && !!t; }
 
   dispose() {
     removeEventListener('keydown', this.h.keydown);
