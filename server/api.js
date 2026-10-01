@@ -26,6 +26,7 @@ export const PERMISSIONS = {
   moderator: 'Moderator: ban, kick and mute players',
   economy: 'Economy: give Robits, items and Builders Club',
   items: 'Item Creator (BETA): make catalog items',
+  limiteds: 'Limited Creator: make Limited items with a set stock',
   games: 'Game Curator: feature games on the front page',
 };
 // Name badges shown next to a username. Only admins hand them out (Admin Panel).
@@ -229,7 +230,7 @@ export function createApi(db, manager, opts = {}) {
     return {
       id: it.id, name: it.name, type: it.type, price: it.price, data: it.data, description: it.description,
       creator: creator ? { id: creator.id, username: creator.username, flags: userFlags(creator) } : null,
-      created: it.created, sales: it.sales, limited: it.limited, remaining: it.remaining, custom: !!it.custom,
+      created: it.created, sales: it.sales, limited: !!it.limited, remaining: it.remaining ?? null, stock: it.stock ?? null, custom: !!it.custom,
       owned: user ? (D.inventory[user.id] || []).includes(it.id) : false,
     };
   };
@@ -735,11 +736,20 @@ export function createApi(db, manager, opts = {}) {
   };
 
   api.get('/create/options', requireUser, (req, res) => {
-    res.json({ types: ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair'], models: MODELS, patterns: PATTERNS, allowed: can(req.user, 'items') });
+    res.json({ types: ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair'], models: MODELS, patterns: PATTERNS, allowed: can(req.user, 'items') || can(req.user, 'limiteds'), limiteds: can(req.user, 'limiteds'), onlyLimiteds: !can(req.user, 'items') });
   });
 
-  api.post('/catalog/create', requirePerm('items'), (req, res) => {
+  // Limited items: a fixed stock; once it sells out the item can only be traded.
+  const MAX_STOCK = 100000;
+  const fmtStock = (n) => n.toLocaleString('en-US');
+  const stockAmount = (v) => Math.trunc(+v);
+  api.post('/catalog/create', requireUser, (req, res) => {
     const b = req.body || {};
+    const limited = !!b.limited;
+    if (!can(req.user, 'items') && !(limited && can(req.user, 'limiteds'))) return bad(res, 'You don\'t have permission to do that.', 403);
+    if (limited && !can(req.user, 'limiteds')) return bad(res, 'Only players with the Limited Creator right can make Limited items.', 403);
+    const stock = stockAmount(b.stock);
+    if (limited && !(stock >= 1 && stock <= MAX_STOCK)) return bad(res, `The stock must be between 1 and ${fmtStock(MAX_STOCK)}.`);
     const type = String(b.type || '');
     const name = String(b.name || '').trim().slice(0, 50);
     if (name.length < 3) return bad(res, 'The name needs at least 3 characters.');
@@ -752,9 +762,10 @@ export function createApi(db, manager, opts = {}) {
     const id = db.nextId('item');
     D.items[id] = {
       id, name, type, price, data, description: String(b.description || '').slice(0, 500),
-      creatorId: req.user.id, created: Date.now(), sales: 0, limited: false, remaining: null, custom: true,
+      creatorId: req.user.id, created: Date.now(), sales: 0, limited, remaining: limited ? stock : null, stock: limited ? stock : null, custom: true,
     };
-    (D.inventory[req.user.id] || (D.inventory[req.user.id] = [])).push(id);
+    // The creator keeps a copy of normal items; a Limited's whole stock goes on sale.
+    if (!limited) (D.inventory[req.user.id] || (D.inventory[req.user.id] = [])).push(id);
     db.save();
     res.json({ item: publicItem(D.items[id], req.user) });
   });
@@ -765,11 +776,28 @@ export function createApi(db, manager, opts = {}) {
     if (!it) return bad(res, 'Item not found', 404);
     if (!it.custom) return bad(res, 'Built-in items can\'t be deleted.');
     if (it.creatorId !== req.user.id && !can(req.user, 'moderator')) return bad(res, 'You don\'t have permission to do that.', 403);
+    if (it.limited && it.sales > 0 && !can(req.user, 'moderator')) return bad(res, 'Players already own this Limited, so it can\'t be deleted.');
     delete D.items[it.id];
     for (const list of Object.values(D.inventory)) { const i = list.indexOf(it.id); if (i >= 0) list.splice(i, 1); }
     for (const u of Object.values(D.users)) if (u.avatar && Array.isArray(u.avatar.wearing)) u.avatar.wearing = u.avatar.wearing.filter((x) => x !== it.id);
     db.save();
     res.json({ ok: true });
+  });
+
+  // Turns any item into a Limited with a stock (0 = off sale right away, trade only),
+  // or back into a normal item.
+  api.post('/catalog/:id/limited', requirePerm('limiteds'), (req, res) => {
+    const it = D.items[toInt(req.params.id)];
+    if (!it) return bad(res, 'Item not found', 404);
+    if (req.body?.limited === false) {
+      it.limited = false; it.remaining = null; it.stock = null;
+    } else {
+      const stock = stockAmount(req.body?.stock);
+      if (!(stock >= 0 && stock <= MAX_STOCK)) return bad(res, `The stock must be between 0 and ${fmtStock(MAX_STOCK)}.`);
+      it.limited = true; it.remaining = stock; it.stock = it.sales + stock;
+    }
+    db.save();
+    res.json({ item: publicItem(it, req.user) });
   });
 
   api.post('/catalog/:id/buy', requireUser, (req, res) => {

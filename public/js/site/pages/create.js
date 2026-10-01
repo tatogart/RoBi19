@@ -16,7 +16,7 @@ const opts = await api.get('/create/options');
 if (!opts.allowed) {
   app.append(el('div', { class: 'panel' },
     el('h3', { text: 'Item creation is in BETA' }),
-    el('p', { text: 'Right now only players with the Item Creator right can make items. Ask an admin of this Robis to give it to you in the Admin Panel.' })));
+    el('p', { text: 'Right now only players with the Item Creator or Limited Creator right can make items. Ask an admin of this Robis to give it to you in the Admin Panel.' })));
   await new Promise(() => {});
 }
 
@@ -104,6 +104,13 @@ const nameIn = el('input', { class: 'input', maxlength: 50, placeholder: 'Item n
 const descIn = el('textarea', { class: 'input', rows: 2, maxlength: 500, placeholder: 'Description (optional)' });
 const priceIn = el('input', { class: 'input', type: 'number', min: 0, max: 100000, value: 10 });
 const preview = el('div', { class: 'create-preview' }, spinner());
+// Limited Creator right: a fixed stock; when it sells out the item can only be traded.
+const limitedIn = el('input', { type: 'checkbox', checked: !!opts.onlyLimiteds, disabled: !!opts.onlyLimiteds });
+const stockIn = el('input', { class: 'input', type: 'number', min: 1, max: 100000, value: 100 });
+const stockField = el('label', { class: 'field' }, 'Stock (how many can be sold)', stockIn);
+const syncLimited = () => stockField.classList.toggle('hidden', !limitedIn.checked);
+limitedIn.onchange = syncLimited;
+syncLimited();
 const colorRow = () => el('div', { class: 'row wrap' },
   el('label', { class: 'field' }, 'Main colour', el('input', { type: 'color', value: state.color, oninput: (e) => { state.color = e.target.value; changed(); } })),
   el('label', { class: 'field' }, 'Second colour', el('input', { type: 'color', value: state.accent, oninput: (e) => { state.accent = e.target.value; changed(); } })));
@@ -151,7 +158,7 @@ function changed() {
 const create = el('button', { class: 'btn btn-green btn-large', text: 'Create', onclick: async () => {
   create.disabled = true;
   try {
-    const { item } = await api.post('/catalog/create', { type, name: nameIn.value, description: descIn.value, price: +priceIn.value, data: itemData() });
+    const { item } = await api.post('/catalog/create', { type, name: nameIn.value, description: descIn.value, price: +priceIn.value, data: itemData(), limited: limitedIn.checked, stock: +stockIn.value });
     toast('Item created!', 'success');
     location.href = `/item?id=${item.id}`;
   } catch (e) { toast(e.message, 'error'); create.disabled = false; }
@@ -167,6 +174,8 @@ app.append(
       el('label', { class: 'field' }, 'Name', nameIn),
       el('label', { class: 'field' }, 'Description', descIn),
       el('label', { class: 'field' }, 'Price (R$)', priceIn),
+      opts.limiteds ? el('label', { class: 'perm-row limited-row' }, limitedIn, el('span', { class: 'limited-chip', text: 'LIMITED' }), el('span', { text: 'Make it a Limited' })) : null,
+      opts.limiteds ? stockField : null,
       create)));
 
 // ---------------------------------------------------------------- my items

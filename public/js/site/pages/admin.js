@@ -57,7 +57,7 @@ function row(u) {
     el('div', { class: 'admin-info' },
       el('div', {}, el('a', { href: `/profile?id=${u.id}` }, el('b', { class: 'no-i18n', text: u.username })), nameBadges(u),
         u.isAdmin ? el('span', { class: 'pill admin-pill', text: 'Admin' }) : null,
-        ...(u.perms || []).map((p) => el('span', { class: 'pill perm-pill', text: { moderator: 'Moderator', economy: 'Economy', items: 'Item Creator', games: 'Curator' }[p] || p })),
+        ...(u.perms || []).map((p) => el('span', { class: 'pill perm-pill', text: { moderator: 'Moderator', economy: 'Economy', items: 'Item Creator', limiteds: 'Limited Creator', games: 'Curator' }[p] || p })),
         u.banned ? el('span', { class: 'pill ban-pill', text: (u.deviceBan ? 'Device ban' : 'Banned') + (u.banUntil ? ' until ' + new Date(u.banUntil).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') }) : null),
       el('div', { class: 'small muted', text: `R$ ${fmtFull(u.robits)} · ${u.items} items · ${u.games} games · joined ${timeAgo(u.created)}` })),
     el('div', { class: 'admin-actions' },

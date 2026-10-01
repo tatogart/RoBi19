@@ -464,3 +464,37 @@ test('admins take items away', async () => {
   assert.equal((await call('POST', `/admin/users/${pid}/items/remove`, { all: true }, admin)).data.removed, inv.length - 1);
   assert.equal((await call('GET', `/users/${pid}/inventory`)).data.items.length, 0);
 });
+
+test('Limited Creators make Limited items with a stock', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const maker = (await call('POST', '/auth/signup', { username: 'LimMaker', password: 'secret123' })).cookie;
+  const buyer = (await call('POST', '/auth/signup', { username: 'LimBuyer', password: 'secret123' })).cookie;
+  const makerId = (await call('GET', '/auth/me', null, maker)).data.user.id;
+  const buyerId = (await call('GET', '/auth/me', null, buyer)).data.user.id;
+  const hat = { type: 'Hat', name: 'Golden Lid', price: 10, data: { model: 'beanie', color: '#ffcc00' }, limited: true, stock: 1 };
+  assert.equal((await call('POST', '/catalog/create', hat, maker)).status, 403);
+  // the Item Creator right alone isn't enough for Limiteds
+  await call('POST', `/admin/users/${makerId}/perms`, { perms: ['items'] }, admin);
+  assert.equal((await call('POST', '/catalog/create', hat, maker)).status, 403);
+  // Limited Creator alone can only make Limiteds
+  await call('POST', `/admin/users/${makerId}/perms`, { perms: ['limiteds'] }, admin);
+  assert.equal((await call('POST', '/catalog/create', { ...hat, limited: false }, maker)).status, 403);
+  assert.equal((await call('POST', '/catalog/create', { ...hat, stock: 0 }, maker)).status, 400);
+  const r = await call('POST', '/catalog/create', hat, maker);
+  assert.equal(r.status, 200);
+  assert.equal(r.data.item.limited, true);
+  assert.equal(r.data.item.remaining, 1);
+  assert.equal(r.data.item.owned, false); // the whole stock is for sale
+  await call('POST', `/admin/users/${buyerId}/robits`, { amount: 100 }, admin);
+  assert.equal((await call('POST', `/catalog/${r.data.item.id}/buy`, {}, buyer)).status, 200);
+  assert.equal((await call('GET', `/catalog/${r.data.item.id}`)).data.item.remaining, 0);
+  assert.equal((await call('POST', `/catalog/${r.data.item.id}/buy`, {}, admin)).status, 400); // sold out
+  assert.equal((await call('DELETE', `/catalog/${r.data.item.id}`, null, maker)).status, 400); // already owned by a player
+  // turning an existing item into a Limited
+  const plain = (await call('GET', '/catalog')).data.items.find((i) => !i.limited && i.price > 0);
+  assert.equal((await call('POST', `/catalog/${plain.id}/limited`, { stock: 5 }, buyer)).status, 403);
+  const l = await call('POST', `/catalog/${plain.id}/limited`, { stock: 5 }, maker);
+  assert.equal(l.data.item.limited, true);
+  assert.equal(l.data.item.remaining, 5);
+  assert.equal((await call('POST', `/catalog/${plain.id}/limited`, { limited: false }, maker)).data.item.limited, false);
+});

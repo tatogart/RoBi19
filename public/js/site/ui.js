@@ -137,7 +137,7 @@ export function itemCard(it, opts = {}) {
   const thumb = el('div', { class: 'thumb' });
   itemThumbnail(it).then((u) => thumb.append(el('img', { src: u, alt: it.name })));
   const card = el(opts.onClick ? 'div' : 'a', { class: 'item-card', href: opts.onClick ? null : `/item?id=${it.id}`, title: it.name, onclick: opts.onClick },
-    it.limited ? el('span', { class: 'limited-tag', text: 'LIMITED' }) : null,
+    it.limited ? el('span', { class: 'limited-tag', text: it.stock ? 'LIMITED U' : 'LIMITED' }) : null,
     it.custom ? el('span', { class: 'limited-tag beta-tag', text: 'BETA' }) : null,
     it.owned && !opts.onClick ? el('span', { class: 'owned-tag', text: 'Owned' }) : null,
     thumb,

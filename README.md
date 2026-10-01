@@ -58,6 +58,7 @@
 - **Name badges** like on Roblox: a blue **verified check**, the **Robis icon** (official / staff) and a **Star Creator** star, shown next to the name on profiles, game and item pages, in chat and on the in-game player list. Nobody gets them automatically (only the official *Robis* account has the check and icon) — admins hand them out in **Admin Panel → Badges**.
 - **Trading** like in 2019: open a player's profile → **Trade Items**, pick up to 4 items and some Robits on each side and send the offer. Trades live in **Trade** (Inbound / Outbound / Completed / Inactive); nothing changes hands until the other player accepts. Only paid or Limited items can be traded, Robits received in a trade have a 30% fee, and *Settings → Trading* chooses who may send you trades.
 - **Taking items away**: in the Admin Panel, **Take items** shows a player's inventory — click an item to remove it (it's also taken off their avatar), or take everything at once.
+- **Limiteds**: the *Limited Creator* right (Admin Panel → Permissions) lets a player tick **Make it a Limited** on the Create page and set a stock, or press **Make Limited** on any item page. When the stock sells out, the item can only be had through trades. A Limited that players already own can't be deleted by its creator.
 
 ### 🎮 Game client
 - Multiplayer over WebSocket with a server-authoritative world and client-side character movement.

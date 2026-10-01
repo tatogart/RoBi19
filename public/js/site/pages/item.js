@@ -18,7 +18,7 @@ function renderBuy() {
     item.owned
       ? el('div', { class: 'row' }, el('span', { class: 'pill', text: '✓ You own this item' }), el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
       : el('button', { class: 'btn btn-green btn-large', text: item.price ? 'Buy' : 'Get', disabled: item.limited && item.remaining === 0, onclick: buy }),
-    item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: `Limited — ${item.remaining} remaining` }) : null].filter(Boolean));
+    item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: item.remaining === 0 ? 'Sold out — you can still get it in a trade.' : item.stock ? `${fmtFull(item.remaining)} of ${fmtFull(item.stock)} remaining` : `${fmtFull(item.remaining)} remaining` }) : null].filter(Boolean));
 }
 async function buy() {
   if (!me) { location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search); return; }
@@ -39,12 +39,33 @@ async function buy() {
     ],
   });
 }
+// Limited Creator right: turn this item into a Limited with a stock, or back.
+function limitedDialog() {
+  const stock = el('input', { class: 'input', type: 'number', min: 0, max: 100000, value: item.limited ? item.remaining ?? 0 : 100 });
+  const save = async (body, msg) => {
+    try { ({ item } = await api.post(`/catalog/${item.id}/limited`, body)); toast(msg, 'success'); setTimeout(() => location.reload(), 500); } catch (e) { toast(e.message, 'error'); return false; }
+  };
+  modal({
+    title: item.limited ? 'Limited settings' : 'Make Limited',
+    body: el('div', {},
+      el('p', { class: 'small muted', text: 'A Limited has a set stock. When it sells out, players can only get it in a trade. Stock 0 takes it off sale right away.' }),
+      el('label', { class: 'field' }, 'Copies left for sale', stock)),
+    buttons: [
+      { text: 'Save', cls: 'btn-green', onClick: () => save({ limited: true, stock: +stock.value }, 'Limited saved') },
+      ...(item.limited ? [{ text: 'Make normal item', onClick: () => save({ limited: false }, 'No longer Limited') }] : []),
+      { text: 'Cancel' },
+    ],
+  });
+}
+
 renderBuy();
 app.append(el('div', { class: 'panel item-page' }, thumb,
   el('div', { class: 'item-info' },
     el('h1', { text: item.name }),
     el('div', { class: 'muted' }, 'By ', item.creator ? userLink(item.creator) : 'Robis'),
-    item.limited ? el('span', { class: 'pill', style: { background: '#02b757', color: '#fff', marginTop: '8px' }, text: 'LIMITED' }) : null,
+    item.limited ? el('span', { class: 'pill', style: { background: '#02b757', color: '#fff', marginTop: '8px' }, text: item.stock ? 'LIMITED U' : 'LIMITED' }) : null,
+    me && (me.perms || []).includes('limiteds')
+      ? el('button', { class: 'btn btn-small', style: { marginTop: '10px', marginLeft: '8px' }, text: item.limited ? 'Limited settings' : 'Make Limited', onclick: limitedDialog }) : null,
     item.custom ? el('span', { class: 'pill', style: { background: '#6b327c', color: '#fff', marginTop: '8px' }, text: 'BETA · made by a player' }) : null,
     item.custom && me && (item.creator?.id === me.id || me.isAdmin || (me.perms || []).includes('moderator'))
       ? el('button', { class: 'btn btn-small btn-red', style: { marginTop: '10px', marginLeft: '8px' }, text: item.creator?.id === me.id ? 'Delete my item' : 'Delete (moderation)', onclick: async () => {

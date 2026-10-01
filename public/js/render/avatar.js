@@ -288,10 +288,20 @@ function limbMaterials(kind, skin, look) {
 
 // ------------------------------------------------------------ head
 let HEAD_GEO = null;
+const HEAD_PROFILE = [[0, -0.6], [0.42, -0.6], [0.56, -0.55], [0.62, -0.42], [0.625, 0], [0.62, 0.42], [0.56, 0.55], [0.42, 0.6], [0, 0.6]];
+// Head radius at height y (between the points of the profile above).
+function headRadius(y) {
+  const p = HEAD_PROFILE.slice(1, -1);
+  if (y <= p[0][1]) return p[0][0];
+  for (let i = 1; i < p.length; i++) {
+    if (y <= p[i][1]) { const t = (y - p[i - 1][1]) / (p[i][1] - p[i - 1][1]); return p[i - 1][0] + (p[i][0] - p[i - 1][0]) * t; }
+  }
+  return p[p.length - 1][0];
+}
+
 function headGeometry() {
   if (HEAD_GEO) return HEAD_GEO;
-  const pts = [[0, -0.6], [0.42, -0.6], [0.56, -0.55], [0.62, -0.42], [0.625, 0], [0.62, 0.42], [0.56, 0.55], [0.42, 0.6], [0, 0.6]]
-    .map(([x, y]) => new THREE.Vector2(x, y));
+  const pts = HEAD_PROFILE.map(([x, y]) => new THREE.Vector2(x, y));
   HEAD_GEO = new THREE.LatheGeometry(pts, 32);
   return HEAD_GEO;
 }
@@ -476,22 +486,100 @@ const HATS = {
     return g;
   },
   pal(d) {
+    // The other 2019 default: short, dark, a fringe swept to one side.
     const g = new THREE.Group();
     const m = mat(d.color, { roughness: 0.9 });
-    g.add(M(new THREE.SphereGeometry(0.665, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2.1), m, 0, 0.1, 0));
-    for (const s of [-1, 1]) g.add(M(new THREE.BoxGeometry(0.12, 0.45, 0.3), m, s * 0.6, 0.02, -0.05));
-    g.add(M(new THREE.BoxGeometry(1.2, 0.18, 0.3), m, 0, 0.52, -0.45, -0.3, 0, 0));
+    g.add(hairShell(m, { front: 0.36, back: -0.3, sides: 0.05 }));
+    // the side-swept fringe
+    const fringe = M(new THREE.BoxGeometry(0.95, 0.2, 0.22), m, -0.1, 0.42, -0.56, -0.25, 0, 0.22);
+    g.add(fringe);
+    g.add(M(new THREE.BoxGeometry(0.5, 0.16, 0.2), m, 0.3, 0.5, -0.52, -0.3, 0, -0.1));
+    // sideburns
+    for (const s of [-1, 1]) g.add(M(new THREE.BoxGeometry(0.1, 0.3, 0.2), m, s * 0.62, 0.0, 0.05));
+    return g;
+  },
+  charmer(d) {
+    // Brown Charmer Hair: a big swoop over the forehead, longer at the back.
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.85 });
+    g.add(hairShell(m, { front: 0.34, back: -0.42, sides: -0.05, thick: 0.08 }));
+    const swoop = M(new THREE.SphereGeometry(0.42, 18, 10), m, -0.18, 0.5, -0.38);
+    swoop.scale.set(1.35, 0.55, 0.9);
+    swoop.rotation.z = 0.25;
+    g.add(swoop);
+    const tip = M(new THREE.SphereGeometry(0.22, 14, 8), m, 0.32, 0.36, -0.55);
+    tip.scale.set(1.2, 0.6, 0.7);
+    g.add(tip);
+    return g;
+  },
+  spiky(d) {
+    // Blonde Spiked Hair: spikes that grow out of the scalp in every direction.
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.7 });
+    g.add(hairShell(m, { front: 0.36, back: -0.15, sides: 0.1 }));
+    const up = new THREE.Vector3(0, 1, 0);
+    const spike = (x, y, z, len, w) => {
+      const dir = new THREE.Vector3(x, y - 0.05, z).normalize();
+      const c = M(new THREE.ConeGeometry(w, len, 6), m);
+      c.quaternion.setFromUnitVectors(up, dir);
+      c.position.copy(dir.clone().multiplyScalar(0.55 + len / 2 - 0.1)).add(new THREE.Vector3(0, 0.05, 0));
+      g.add(c);
+    };
+    spike(0, 1, 0, 0.75, 0.2);
+    for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; spike(Math.sin(a) * 0.55, 0.85, Math.cos(a) * 0.55, 0.6, 0.17); }
+    // a lower ring around the sides and back only, so nothing pokes into the face
+    for (let i = 0; i < 7; i++) { const a = -1.9 + (i / 6) * 3.8; spike(Math.sin(a), 0.45, Math.cos(a), 0.5, 0.15); }
     return g;
   },
   long(d) {
+    // Long hair: covers the back of the head and falls over the shoulders.
     const g = new THREE.Group();
     const m = mat(d.color, { roughness: 0.85 });
-    g.add(M(new THREE.SphereGeometry(0.68, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2.1), m, 0, 0.1, 0.03));
-    g.add(M(new THREE.BoxGeometry(1.35, 1.9, 0.35), m, 0, -0.45, 0.45));
-    for (const s of [-1, 1]) g.add(M(new THREE.BoxGeometry(0.2, 1.3, 0.5), m, s * 0.62, -0.25, 0.15));
+    g.add(hairShell(m, { front: 0.3, back: -0.6, sides: -0.5, thick: 0.08 }));
+    // the long part behind the back (the torso top is 0.5 below the head)
+    const fall = M(new THREE.BoxGeometry(1.2, 1.3, 0.2), m, 0, -0.95, 0.6);
+    g.add(fall);
+    g.add(M(new THREE.CylinderGeometry(0.6, 0.6, 0.2, 20, 1, false, 0, Math.PI), m, 0, -0.32, 0.6, Math.PI / 2, 0, 0));
     return g;
   },
 };
+
+// A hair "shell" that hugs the head, so no skin pokes through at the edges.
+// front / back / sides: how low the hair reaches there (head goes -0.6..0.6;
+// the face is between -0.42 and 0.42 at the front). The edge blends smoothly.
+function hairShell(material, { front = 0.35, back = -0.3, sides = 0, thick = 0.06 } = {}) {
+  const SEG = 48, ROWS = 14;
+  const pos = [], idx = [];
+  for (let j = 0; j <= SEG; j++) {
+    const phi = (j / SEG) * Math.PI * 2; // 0 = back (+z), PI = face (-z)
+    const c = Math.cos(phi);
+    const bottom = c >= 0 ? sides + (back - sides) * c ** 1.5 : sides + (front - sides) * (-c) ** 1.5;
+    const sx = Math.sin(phi), sz = Math.cos(phi);
+    for (let i = 0; i <= ROWS; i++) {
+      const t = i / ROWS;
+      const y = bottom + (0.6 - bottom) * t;
+      // round over the top edge of the head
+      const r = i === ROWS ? 0.42 + thick : headRadius(y) + thick;
+      pos.push(sx * r, i === ROWS ? 0.6 + thick : y, sz * r);
+    }
+    pos.push(0, 0.6 + thick, 0); // the crown
+  }
+  const col = ROWS + 2;
+  for (let j = 0; j < SEG; j++) {
+    for (let i = 0; i <= ROWS; i++) {
+      const a = j * col + i, b = (j + 1) * col + i;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  material.side = THREE.DoubleSide;
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.castShadow = true;
+  return mesh;
+}
 
 const GEARS = {
   sword(d) {
