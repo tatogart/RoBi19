@@ -4,6 +4,7 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
 import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner, nameBadges, itemCard, presenceText } from '../ui.js';
+import { BADGE_SVG, BADGE_TITLE } from '../../badges.js';
 
 const me = await initPage({ active: 'admin' });
 const app = document.getElementById('app');
@@ -53,11 +54,13 @@ function drawAnnouncement() {
 // ---------------------------------------------------------------- tabs
 const TABS = {
   players: { label: 'Players', draw: drawPlayers },
+  badges: { label: 'Badges', draw: drawBadges, admin: true },
   games: { label: 'Games', draw: drawGames },
   items: { label: 'Items', draw: drawItems },
   log: { label: 'Admin Log', draw: drawLog },
 };
-let current = ['players', 'games', 'items', 'log'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'players';
+if (!me.isAdmin) for (const [id, t] of Object.entries(TABS)) if (t.admin) delete TABS[id];
+let current = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'players';
 function openTab(id) {
   current = id;
   [...tabs.children].forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
@@ -73,7 +76,7 @@ addEventListener('hashchange', () => { const id = location.hash.slice(1); if (TA
 // ---------------------------------------------------------------- players
 const search = el('input', { class: 'input', placeholder: 'Search players' });
 const filter = el('select', { class: 'input', style: { width: 'auto', flex: 'none', minWidth: 0 } },
-  [['all', 'Everyone'], ['online', 'Online'], ['banned', 'Banned'], ['staff', 'Staff'], ['new', 'New today']].map(([v, t]) => el('option', { value: v, text: t })));
+  [['all', 'Everyone'], ['online', 'Online'], ['banned', 'Banned'], ['staff', 'Staff'], ['badges', 'With badges'], ['new', 'New today']].map(([v, t]) => el('option', { value: v, text: t })));
 const list = el('div');
 search.addEventListener('input', () => drawList());
 filter.addEventListener('change', () => drawList());
@@ -87,6 +90,7 @@ const FILTERS = {
   online: (u) => u.presence && u.presence.status !== 'offline',
   banned: (u) => u.banned,
   staff: (u) => u.isAdmin || (u.perms || []).length,
+  badges: (u) => (u.flags || []).length > 0,
   new: (u) => Date.now() - u.created < 24 * 3600e3,
 };
 function drawList() {
@@ -177,8 +181,13 @@ async function manage(u0) {
       perm('economy') ? tier : null),
     me.isAdmin ? section('Rights',
       self ? null : el('button', { class: 'btn btn-small', text: u.isAdmin ? 'Remove admin' : 'Make admin', onclick: () => { m.close(); act(`/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin }, u.isAdmin ? 'Admin removed' : `${u.username} is now an admin`); } }),
-      self || u.isAdmin ? null : el('button', { class: 'btn btn-small', text: 'Permissions', onclick: go(permsDialog) }),
-      el('button', { class: 'btn btn-small', text: 'Badges', onclick: go(flagsDialog) })) : null,
+      self || u.isAdmin ? null : el('button', { class: 'btn btn-small', text: 'Permissions', onclick: go(permsDialog) })) : null,
+    me.isAdmin ? el('div', { class: 'manage-section' }, el('h4', { text: 'Badges' }), badgePicker(u, (nu) => {
+      Object.assign(u, { flags: nu.flags });
+      box.querySelector('.manage-top .name-badges')?.remove();
+      const nb = nameBadges(nu);
+      if (nb) box.querySelector('.manage-top b').after(nb);
+    })) : null,
     section('Moderation',
       canMod ? el('button', { class: 'btn btn-small' + (u.banned ? '' : ' btn-red'), text: u.banned ? 'Unban' : 'Ban', onclick: go(ban) }) : null,
       canMod ? el('button', { class: 'btn btn-small btn-red', text: 'Delete account', onclick: go(deleteAccount) }) : null),
@@ -251,22 +260,64 @@ function deleteAccount(u) {
   });
 }
 
-// Admins decide who gets the check, the Robis icon and the star (see FLAGS in server/api.js).
-function flagsDialog(u) {
-  const boxes = data.flags.map((f) => {
-    const cb = el('input', { type: 'checkbox', checked: (u.flags || []).includes(f.id) });
-    cb.dataset.flag = f.id;
-    return el('label', { class: 'perm-row' }, cb, nameBadges({ flags: [f.id] }), el('span', { text: f.label }));
+// ---------------------------------------------------------------- badges
+// Admins decide who gets the checks, the Robis icon, the crown and the rest
+// (FLAGS in server/api.js, pictures in public/js/badges.js).
+async function setBadge(u, flag, on) {
+  const r = await act(`/admin/users/${u.id}/flags`, { flag, on }, `${BADGE_TITLE[flag]} ${on ? 'given to' : 'taken from'} ${u.username}`);
+  return r && r.user;
+}
+
+// A row of every badge; click one to give or take it.
+function badgePicker(u, onChange) {
+  const wrap = el('div', { class: 'badge-picker' });
+  const draw = () => wrap.replaceChildren(...data.flags.map((f) => {
+    const on = (u.flags || []).includes(f.id);
+    return el('button', {
+      class: 'badge-toggle' + (on ? ' on' : ''), title: f.label,
+      onclick: async () => { const nu = await setBadge(u, f.id, !on); if (nu) { u.flags = nu.flags; draw(); onChange?.(nu); } },
+    }, el('span', { class: 'badge-icon', html: BADGE_SVG[f.id] || '' }), el('span', { text: BADGE_TITLE[f.id] || f.id }));
+  }));
+  draw();
+  return wrap;
+}
+
+function drawBadges() {
+  const names = el('datalist', { id: 'admin-usernames' }, data.users.map((u) => el('option', { value: u.username })));
+  const who = el('input', { class: 'input', placeholder: 'Player name', list: 'admin-usernames', autocomplete: 'off' });
+  let chosen = data.flags[0]?.id;
+  const choice = el('div', { class: 'badge-picker' });
+  const drawChoice = () => choice.replaceChildren(...data.flags.map((f) => el('button', {
+    class: 'badge-toggle' + (f.id === chosen ? ' on' : ''), title: f.label, onclick: () => { chosen = f.id; drawChoice(); },
+  }, el('span', { class: 'badge-icon', html: BADGE_SVG[f.id] || '' }), el('span', { text: BADGE_TITLE[f.id] || f.id }))));
+  drawChoice();
+  const give = async () => {
+    const u = data.users.find((x) => x.username.toLowerCase() === who.value.trim().toLowerCase());
+    if (!u) { toast('No player with that name.', 'error'); return; }
+    if ((u.flags || []).includes(chosen)) { toast(`${u.username} already has this badge.`, 'error'); return; }
+    if (await setBadge(u, chosen, true)) { who.value = ''; drawBadges(); }
+  };
+  who.addEventListener('keydown', (e) => { if (e.key === 'Enter') give(); });
+  const cards = data.flags.map((f) => {
+    const holders = data.users.filter((u) => (u.flags || []).includes(f.id));
+    return el('div', { class: 'badge-card' },
+      el('div', { class: 'badge-card-head' },
+        el('span', { class: 'badge-big', html: BADGE_SVG[f.id] || '' }),
+        el('div', {}, el('b', { text: BADGE_TITLE[f.id] || f.id })),
+        el('span', { class: 'badge-count', text: String(holders.length) })),
+      holders.length ? el('div', { class: 'badge-holders' }, holders.map((u) => el('span', { class: 'holder-chip' },
+        headshotImg(u, 48),
+        el('a', { class: 'no-i18n', href: `/profile?id=${u.id}`, text: u.username }),
+        el('button', { title: 'Take away', text: '×', onclick: async () => { if (await setBadge(u, f.id, false)) drawBadges(); } }))))
+        : el('div', { class: 'small muted', text: 'Nobody has it yet.' }));
   });
-  modal({
-    title: `Badges for ${u.username}`,
-    body: el('div', {}, el('p', { class: 'small muted', text: 'Badges are shown next to the name everywhere: profile, games, chat and the player list.' }), boxes),
-    buttons: [{ text: 'Save', cls: 'btn-primary', onClick: () => {
-      const b = {};
-      for (const x of boxes) { const cb = x.firstChild; b[cb.dataset.flag] = cb.checked; }
-      return act(`/admin/users/${u.id}/flags`, b, 'Badges saved');
-    } }, { text: 'Cancel' }],
-  });
+  body.replaceChildren(
+    el('div', { class: 'badge-give' },
+      el('h3', { text: 'Give a badge' }),
+      el('p', { class: 'small muted', text: 'Badges show next to the name everywhere: profile, games, chat and the player list. Pick a badge, type a name and press Give.' }),
+      choice,
+      el('div', { class: 'row wrap', style: { marginTop: '10px' } }, who, names, el('button', { class: 'btn btn-primary', text: 'Give', onclick: give }))),
+    el('div', { class: 'badge-cards' }, cards));
 }
 
 // Admins give other players rights (see PERMISSIONS in server/api.js).

@@ -32,9 +32,18 @@ export const PERMISSIONS = {
 };
 // Name badges shown next to a username. Only admins hand them out (Admin Panel).
 export const FLAGS = {
-  verified: 'Verified (blue check)',
   staff: 'Robis icon (official / staff)',
+  verified: 'Verified (blue check)',
+  partner: 'Partner (gold check)',
+  moderator: 'Moderator (green shield)',
+  developer: 'Developer (code)',
   star: 'Star Creator',
+  vip: 'VIP (crown)',
+  creator: 'Video Creator',
+  champion: 'Champion (trophy)',
+  bughunter: 'Bug Hunter',
+  supporter: 'Supporter (heart)',
+  og: 'OG Player',
 };
 export const userFlags = (u) => Object.keys(FLAGS).filter((f) => u && u.flags && u.flags[f]);
 export const can = (u, perm) => !!u && (u.isAdmin || (u.perms || []).includes(perm));
@@ -1507,7 +1516,7 @@ export function createApi(db, manager, opts = {}) {
     items: (b) => (b.all ? 'Gave all items' : `Gave item: ${D.items[toInt(b.itemId)]?.name || '?'}`),
     remove: (b) => (b.all ? 'Took all items' : `Took item: ${D.items[toInt(b.itemId)]?.name || '?'}`),
     admin: (b) => (b.isAdmin ? 'Made admin' : 'Removed admin'),
-    flags: (b) => `Badges: ${Object.keys(FLAGS).filter((f) => b[f]).join(', ') || 'none'}`,
+    flags: (b) => (b.flag ? `Badge ${b.flag} ${b.on ? 'given' : 'taken away'}` : `Badges: ${Object.keys(FLAGS).filter((f) => b[f]).join(', ') || 'none'}`),
     perms: (b) => `Permissions: ${(Array.isArray(b.perms) ? b.perms : []).join(', ') || 'none'}`,
     delete: () => 'Deleted account',
     ban: (b) => (b.banned ? `Banned (${b.duration || 'forever'}${b.device ? ', device + IP' : ''})${b.reason ? ': ' + String(b.reason).slice(0, 100) : ''}` : 'Unbanned'),
@@ -1631,8 +1640,15 @@ export function createApi(db, manager, opts = {}) {
   api.post('/admin/users/:id/flags', requireAdmin, (req, res) => {
     const u = D.users[toInt(req.params.id)];
     if (!u) return bad(res, 'User not found', 404);
-    u.flags = {};
-    for (const f of Object.keys(FLAGS)) if (req.body?.[f]) u.flags[f] = true;
+    // Either one badge ({ flag, on }) or the whole set ({ verified: true, ... }).
+    if (req.body?.flag) {
+      if (!FLAGS[req.body.flag]) return bad(res, 'Unknown badge.');
+      u.flags = { ...(u.flags || {}) };
+      if (req.body.on) u.flags[req.body.flag] = true; else delete u.flags[req.body.flag];
+    } else {
+      u.flags = {};
+      for (const f of Object.keys(FLAGS)) if (req.body?.[f]) u.flags[f] = true;
+    }
     log(u.id, 0, `Badges set by ${req.user.username}: ${userFlags(u).join(', ') || 'none'}`);
     db.save();
     res.json({ user: adminUser(u) });

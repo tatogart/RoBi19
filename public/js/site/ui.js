@@ -1,6 +1,6 @@
 // Shared UI helpers: DOM builder, icons, cards, modals, formatting.
 import { LANG } from '../i18n.js';
-import { BADGE_SVG, BADGE_TITLE } from '../badges.js';
+import { BADGE_SVG, BADGE_TITLE, sortBadges } from '../badges.js';
 import { avatarHeadshot, gameThumbnail, itemThumbnail } from '../render/thumbs.js';
 
 export function el(tag, attrs = {}, ...children) {
@@ -89,11 +89,11 @@ export function presenceText(p) {
 }
 
 // ------------------------------------------------------------ name badges
-// Verified check, Robis icon and Star Creator next to names. Only admins give them out.
+// Checks, Robis icon, crown and the rest next to names (public/js/badges.js). Only admins give them out.
 export function nameBadges(user) {
   const flags = (user && user.flags) || [];
   if (!flags.length) return null;
-  return el('span', { class: 'name-badges' }, flags.filter((f) => BADGE_SVG[f]).map((f) => el('span', { class: 'name-badge ' + f, title: BADGE_TITLE[f], html: BADGE_SVG[f] })));
+  return el('span', { class: 'name-badges' }, sortBadges(flags).map((f) => el('span', { class: 'name-badge ' + f, title: BADGE_TITLE[f], html: BADGE_SVG[f] })));
 }
 // "Name ✓" as a link to the profile.
 // A group's emblem: a coloured tile with a symbol.

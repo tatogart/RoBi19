@@ -402,13 +402,20 @@ test('name badges are only given by admins', async () => {
   assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, []); // nobody gets badges by default
   // the official Robis account made the seeded games and has the check + Robis icon
   const game = (await call('GET', '/games?sort=popular')).data.games[0];
-  assert.deepEqual(game.creator.flags, ['verified', 'staff']);
+  assert.deepEqual(game.creator.flags, ['staff', 'verified']);
   assert.equal((await call('POST', `/admin/users/${starId}/flags`, { staff: true }, star)).status, 403);
   const r = await call('POST', `/admin/users/${starId}/flags`, { verified: true, bogus: true }, admin);
   assert.equal(r.status, 200);
   assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, ['verified']);
   await call('POST', `/admin/users/${starId}/flags`, {}, admin);
   assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, []);
+  // one badge at a time (Badges tab)
+  await call('POST', `/admin/users/${starId}/flags`, { flag: 'vip', on: true }, admin);
+  await call('POST', `/admin/users/${starId}/flags`, { flag: 'partner', on: true }, admin);
+  assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, ['partner', 'vip']);
+  await call('POST', `/admin/users/${starId}/flags`, { flag: 'vip', on: false }, admin);
+  assert.deepEqual((await call('GET', `/users/${starId}`)).data.user.flags, ['partner']);
+  assert.equal((await call('POST', `/admin/users/${starId}/flags`, { flag: 'bogus', on: true }, admin)).status, 400);
 });
 
 test('players trade items and Robits', async () => {
