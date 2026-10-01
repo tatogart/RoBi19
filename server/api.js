@@ -1029,12 +1029,13 @@ export function createApi(db, manager, opts = {}) {
   // ------------------------------------------------------------ custom items (BETA)
   // Players with the "items" right (and admins) make their own catalog items:
   // T-shirts and faces from a picture, shirts and pants from a pattern and
-  // colours, hats and hair from the classic models in their own colours.
+  // colours, hats, hair and pets from the classic models in their own colours.
   const HEX6 = /^#[0-9a-f]{6}$/i;
   const IMG = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
   const MODELS = {
     Hat: [...new Set(CATALOG.filter((i) => i.type === 'Hat').map((i) => i.data.model))],
     Hair: [...new Set(CATALOG.filter((i) => i.type === 'Hair').map((i) => i.data.model))],
+    Pet: [...new Set(CATALOG.filter((i) => i.type === 'Pet').map((i) => i.data.model))],
   };
   const PATTERNS = ['plain', 'stripes', 'plaid', 'camo', 'hoodie', 'jeans', 'suit', 'bc'];
   const cleanItemData = (type, d = {}) => {
@@ -1046,7 +1047,7 @@ export function createApi(db, manager, opts = {}) {
       return type === 'Face' ? { face: 'custom', image } : { graphic: 'custom', image };
     }
     if (type === 'Shirt' || type === 'Pants') return { color, accent, pattern: PATTERNS.includes(d.pattern) ? d.pattern : 'plain' };
-    if (type === 'Hat' || type === 'Hair') {
+    if (type === 'Hat' || type === 'Hair' || type === 'Pet') {
       if (!MODELS[type].includes(d.model)) throw new Error('Pick a model.');
       return { model: d.model, color, accent };
     }
@@ -1054,7 +1055,7 @@ export function createApi(db, manager, opts = {}) {
   };
 
   api.get('/create/options', requireUser, (req, res) => {
-    res.json({ types: ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair'], models: MODELS, patterns: PATTERNS, allowed: can(req.user, 'items') || can(req.user, 'limiteds'), limiteds: can(req.user, 'limiteds'), onlyLimiteds: !can(req.user, 'items') });
+    res.json({ types: ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair', 'Pet'], models: MODELS, patterns: PATTERNS, allowed: can(req.user, 'items') || can(req.user, 'limiteds'), limiteds: can(req.user, 'limiteds'), onlyLimiteds: !can(req.user, 'items') });
   });
 
   // Limited items: a fixed stock; once it sells out the item can only be traded.

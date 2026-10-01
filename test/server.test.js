@@ -385,6 +385,10 @@ test('item creators make custom catalog items (BETA)', async () => {
   assert.equal(made.data.image, png);
   const hat = (await call('POST', '/catalog/create', { type: 'Hat', name: 'Green Crown', price: 0, data: { model: 'crown', color: '#00ff00', accent: '#<script>' } }, maker)).data.item;
   assert.deepEqual(hat.data, { model: 'crown', color: '#00ff00', accent: '#f8f8f8' });
+  // pets: one of the pet models in your own colours
+  const pet = (await call('POST', '/catalog/create', { type: 'Pet', name: 'Purple Dragon', price: 5, data: { model: 'dragon', color: '#7a3cff', accent: '#00e5ff' } }, maker)).data.item;
+  assert.deepEqual([pet.type, pet.data], ['Pet', { model: 'dragon', color: '#7a3cff', accent: '#00e5ff' }]);
+  assert.equal((await call('POST', '/catalog/create', { type: 'Pet', name: 'Bad Pet', data: { model: 'crown' } }, maker)).status, 400);
   // sold in the catalog; the creator gets 70%
   assert.ok((await call('GET', '/catalog?q=Cool')).data.items.some((i) => i.id === made.id));
   assert.equal((await call('POST', `/catalog/${made.id}/buy`, {}, buyer)).status, 200);

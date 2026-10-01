@@ -1,7 +1,7 @@
 // Create Item (BETA): players with the Item Creator right design their own
 // catalog items. T-shirts and faces are pictures (draw them in the pixel
 // editor or upload one), shirts and pants are a pattern with two colours,
-// hats and hair are the classic models in your own colours.
+// hats, hair and pets are the classic models in your own colours.
 import { initPage } from '../layout.js';
 import { api } from '../api.js';
 import { el, toast, itemCard, spinner } from '../ui.js';
@@ -20,7 +20,8 @@ if (!opts.allowed) {
   await new Promise(() => {});
 }
 
-const TYPE_NAMES = { TShirt: 'T-Shirt', Shirt: 'Shirt', Pants: 'Pants', Face: 'Face', Hat: 'Hat', Hair: 'Hair' };
+const TYPE_NAMES = { TShirt: 'T-Shirt', Shirt: 'Shirt', Pants: 'Pants', Face: 'Face', Hat: 'Hat', Hair: 'Hair', Pet: 'Pet' };
+const PET_NAMES = { dog: 'Puppy', cat: 'Kitty', bunny: 'Bunny', penguin: 'Penguin', robot: 'Robot', ghost: 'Ghost', dragon: 'Dragon' };
 let type = 'TShirt';
 const state = { color: '#c4281c', accent: '#f8f8f8', pattern: 'stripes', model: opts.models.Hat[0] };
 
@@ -125,8 +126,9 @@ function drawEditor() {
     parts.push(el('label', { class: 'field' }, 'Pattern', el('select', { class: 'input', onchange: (e) => { state.pattern = e.target.value; changed(); } },
       opts.patterns.map((p) => el('option', { value: p, text: p[0].toUpperCase() + p.slice(1), selected: p === state.pattern })))), colorRow());
   } else {
+    if (type === 'Pet') parts.push(el('p', { class: 'small muted', text: 'Pick an animal and paint it. Pets follow their owner in every game.' }));
     parts.push(el('label', { class: 'field' }, 'Model', el('select', { class: 'input', onchange: (e) => { state.model = e.target.value; changed(); } },
-      MODELS().map((m) => el('option', { value: m, text: m[0].toUpperCase() + m.slice(1), selected: m === state.model })))), colorRow());
+      MODELS().map((m) => el('option', { value: m, text: (type === 'Pet' && PET_NAMES[m]) || m[0].toUpperCase() + m.slice(1), selected: m === state.model })))), colorRow());
   }
   editor.replaceChildren(...parts);
 }
@@ -165,7 +167,7 @@ const create = el('button', { class: 'btn btn-green btn-large', text: 'Create', 
 } });
 
 app.append(
-  el('p', { class: 'muted', text: 'Make your own clothes, faces and hats. They go on sale in the Catalog, and you get 70% of every sale.' }),
+  el('p', { class: 'muted', text: 'Make your own clothes, faces, hats and pets. They go on sale in the Catalog, and you get 70% of every sale.' }),
   typeTabs,
   el('div', { class: 'create-grid' },
     editor,
