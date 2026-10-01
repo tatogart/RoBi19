@@ -499,7 +499,9 @@ export class GameClient {
   aimPoint(clientX, clientY) {
     const r = this.canvas.getBoundingClientRect();
     const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
-    if (document.pointerLockElement || clientX === undefined) ndc.set(0, 0);
+    if (document.pointerLockElement) ndc.set(0, 0);
+    // Phone use button: aim at the crosshair, a little above the middle (over your own head).
+    else if (clientX === undefined) ndc.set(0, this.isTouch ? 0.14 : 0);
     this.raycaster.setFromCamera(ndc, this.camera);
     const targets = [...this.sync.root.children];
     for (const v of this.views.values()) if (!v.isLocal && v.group.visible) targets.push(v.group);
@@ -650,8 +652,10 @@ export class GameClient {
         }
       }
       this._lmbWas = !!this.input.lmb;
-      this.hud.crosshair.style.display = this.cam.shiftLock || this.cam.firstPerson ? 'block' : 'none';
+      // On phones the use button aims at the crosshair in the middle of the screen.
+      this.hud.crosshair.style.display = this.cam.shiftLock || this.cam.firstPerson || (this.isTouch && tool) ? 'block' : 'none';
       this.root.classList.toggle('tool-cursor', !!tool);
+      this.hud.crosshair.classList.toggle('touch-aim', !!(this.isTouch && tool && !this.cam.shiftLock && !this.cam.firstPerson));
       this.sync.update(dt);
       this.boardTimer -= dt;
       if (this.boardTimer <= 0) {

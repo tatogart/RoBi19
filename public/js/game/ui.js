@@ -99,7 +99,22 @@ export class HUD {
     this.stick = h('div', 'touch-stick', '<div class="knob"></div>');
     this.jump = h('button', 'jump-btn', ICON.jump);
     this.jump.setAttribute('aria-label', 'Jump');
-    this.el.append(this.stick, this.jump);
+    // Phones: a "use" button for the equipped tool (aims at the crosshair; hold for automatic tools).
+    this.useBtn = h('button', 'use-btn hidden', '🔫');
+    this.useBtn.setAttribute('aria-label', 'Use tool');
+    let useTimer = null;
+    const useDown = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      this.useBtn.classList.add('down');
+      client.useTool();
+      const t = client.equippedTool();
+      if (t && t._p.Automatic) useTimer = setInterval(() => client.useTool(), 110);
+    };
+    const useUp = (e) => { e.preventDefault(); this.useBtn.classList.remove('down'); clearInterval(useTimer); useTimer = null; };
+    this.useBtn.addEventListener('touchstart', useDown, { passive: false });
+    this.useBtn.addEventListener('touchend', useUp);
+    this.useBtn.addEventListener('touchcancel', useUp);
+    this.el.append(this.stick, this.jump, this.useBtn);
     client.input.stickEl = this.stick;
     client.input.knobEl = this.stick.firstChild;
     const press = (on) => (e) => { client.input.touchJump = on; this.jump.classList.toggle('down', on); e.preventDefault(); e.stopPropagation(); };
@@ -124,6 +139,8 @@ export class HUD {
     if (key === this._toolsKey) return;
     this._toolsKey = key;
     const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨' };
+    this.useBtn.classList.toggle('hidden', !equipped);
+    if (equipped) this.useBtn.textContent = ICONS[equipped._p.ToolModel] || '🧰';
     this.hotbar.replaceChildren(...tools.slice(0, 9).map((t, i) => {
       const b = h('button', 'slot' + (equipped && equipped.id === t.id ? ' on' : ''),
         `<span class="num">${i + 1}</span><span class="ico">${ICONS[t._p.ToolModel] || '🧰'}</span><span class="nm">${esc(t._p.Name)}</span>`);

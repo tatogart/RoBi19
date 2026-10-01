@@ -197,5 +197,16 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .hotbar .slot .ico { font-size: 24px; line-height: 1; }
 .hotbar .slot .nm { max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .game-root.tool-cursor canvas { cursor: crosshair; }
-.game-root.touch .hotbar { bottom: calc(130px + env(safe-area-inset-bottom)); }
-.game-root.touch .hotbar .slot { width: 54px; height: 54px; }
+.game-root.touch .hotbar { gap: 4px; }
+.game-root.touch .hotbar .slot { width: 46px; height: 46px; border-radius: 8px; }
+.game-root.touch .hotbar .slot .nm { display: none; }
+.game-root.touch .hotbar .slot .ico { font-size: 22px; }
+/* Landscape phones: the bottom middle is free (stick left, jump right). */
+@media (orientation: landscape) { .game-root.touch .hotbar { bottom: calc(10px + env(safe-area-inset-bottom)); } }
+/* Portrait: above the thumbstick and jump button. */
+@media (orientation: portrait) { .game-root.touch .hotbar { bottom: calc(200px + env(safe-area-inset-bottom)); } }
+.crosshair.touch-aim { top: 43%; }
+.use-btn { display: none; position: absolute; right: calc(36px + env(safe-area-inset-right)); bottom: calc(140px + env(safe-area-inset-bottom)); width: 70px; height: 70px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(196,40,28,.45); color: #fff; font-size: 30px; touch-action: none; }
+.use-btn.down { background: rgba(255,255,255,.4); transform: scale(.94); }
+.game-root.touch .use-btn:not(.hidden) { display: block; }
+@media (orientation: landscape) and (max-height: 500px) { .use-btn { right: calc(130px + env(safe-area-inset-right)); bottom: calc(28px + env(safe-area-inset-bottom)); } }
