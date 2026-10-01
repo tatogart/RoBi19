@@ -7,7 +7,7 @@ const app = document.getElementById('app');
 const uid = +qs('id') || me.id;
 const { user } = await api.get(`/users/${uid}`);
 app.append(el('h1', { text: uid === me.id ? 'My Inventory' : `${user.username}'s Inventory` }));
-const types = [['', 'All'], ['Hat', 'Hats'], ['Hair', 'Hair'], ['Face', 'Faces'], ['Shirt', 'Shirts'], ['Pants', 'Pants'], ['TShirt', 'T-Shirts'], ['Gear', 'Gear']];
+const types = [['', 'All'], ['Hat', 'Hats'], ['Hair', 'Hair'], ['Face', 'Faces'], ['Shirt', 'Shirts'], ['Pants', 'Pants'], ['TShirt', 'T-Shirts'], ['Gear', 'Gear'], ['Pet', 'Pets']];
 const tabs = el('div', { class: 'tabs' });
 const body = el('div', { class: 'panel' });
 app.append(tabs, body);

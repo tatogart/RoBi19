@@ -1,7 +1,7 @@
 // Client-side thumbnail renderer: avatar headshots, full bodies, catalog items
 // and game thumbnails, all drawn with one shared offscreen WebGL renderer.
 import * as THREE from 'three';
-import { buildAvatar, preloadAvatar } from './avatar.js';
+import { buildAvatar, preloadAvatar, buildPet } from './avatar.js';
 
 let renderer = null;
 let queue = Promise.resolve();
@@ -20,7 +20,7 @@ function getRenderer() {
 
 // Rendered avatar/item pictures are kept in IndexedDB, so pages don't draw
 // the same headshot again on every visit. Bump THUMB_VERSION when the look changes.
-const THUMB_VERSION = 4;
+const THUMB_VERSION = 5;
 const PERSIST = /^(head|body|item):/;
 let dbPromise = null;
 function thumbDb() {
@@ -137,6 +137,17 @@ export function avatarFullBody(avatar, size = 420, opts = {}) {
 // Catalog item preview: the item on a neutral grey mannequin.
 export function itemThumbnail(item, size = 200) {
   return schedule('item:' + size + item.id + JSON.stringify(item.data), async () => {
+    if (item.type === 'Pet') {
+      const scene = new THREE.Scene();
+      studioLights(scene);
+      const pet = buildPet(item.data);
+      if (pet) { pet.rotation.y = Math.PI + 0.7; scene.add(pet); }
+      const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+      cam.position.set(0, 1.9, 6.4); cam.lookAt(0, 0.95, 0);
+      const url = render(scene, cam, size, size);
+      pet?.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+      return url;
+    }
     const grey = { head: '#c8c8c8', torso: '#c8c8c8', leftArm: '#c8c8c8', rightArm: '#c8c8c8', leftLeg: '#c8c8c8', rightLeg: '#c8c8c8' };
     const avatar = { bodyColors: grey, items: [{ id: item.id, type: item.type, data: item.data }] };
     const scene = new THREE.Scene();

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 
 // ------------------------------------------------------------ resolve
 export function resolveItems(avatar) {
-  const r = { bodyColors: avatar?.bodyColors || {}, hats: [], face: { face: 'smile' }, shirt: null, pants: null, tshirt: null, gear: null };
+  const r = { bodyColors: avatar?.bodyColors || {}, hats: [], face: { face: 'smile' }, shirt: null, pants: null, tshirt: null, gear: null, pet: null };
   for (const it of avatar?.items || []) {
     if (it.type === 'Hat' || it.type === 'Hair') r.hats.push(it.data);
     else if (it.type === 'Face') r.face = it.data;
@@ -11,6 +11,7 @@ export function resolveItems(avatar) {
     else if (it.type === 'Pants') r.pants = it.data;
     else if (it.type === 'TShirt') r.tshirt = it.data;
     else if (it.type === 'Gear') r.gear = it.data;
+    else if (it.type === 'Pet') r.pet = it.data;
   }
   return r;
 }
@@ -679,6 +680,16 @@ export function buildAvatar(avatar, opts = {}) {
     if (look.gear.model === 'rocket') { gear.position.set(0.3, 1.3, 0); rArm.add(gear); } else { gear.position.set(0, -1, -0.1); gear.rotation.x = -Math.PI / 2; rArm.add(gear); }
   }
 
+  // Pet next to the avatar (pictures only; in games it follows on its own, see characters.js).
+  if (look.pet && opts.pet !== false) {
+    const pet = buildPet(look.pet);
+    if (pet) {
+      pet.position.set(1.9, -3 + (pet.userData.fly ? 1.4 : 0), -1.4);
+      pet.scale.setScalar(0.85);
+      pet.rotation.y = -0.6;
+      root.add(pet);
+    }
+  }
   root.traverse((o) => { if (o.isMesh) { o.castShadow = shadow; o.receiveShadow = shadow; } });
   const limbs = { Torso: torso, Head: head, 'Left Arm': lArm, 'Right Arm': rArm, 'Left Leg': lLeg, 'Right Leg': rLeg };
   const pivots = { head: headPivot, lArm: lArmP, rArm: rArmP, lLeg: lLegP, rLeg: rLegP };
@@ -747,6 +758,170 @@ function buildKart(color) {
   }
   g.add(M(new THREE.TorusGeometry(0.45, 0.08, 6, 16), dark, 0, -0.9, -1.2, -0.9, 0, 0));
   return g;
+}
+
+// ------------------------------------------------------------ pets
+// Small blocky companions. They face -Z like avatars; the feet are at y = 0.
+// userData: fly (hovers), parts to animate (tail, wings, ears).
+const PETS = {
+  dog(d) {
+    const g = new THREE.Group();
+    const fur = mat(d.color, { roughness: 0.9 }), white = mat(d.accent || '#f8f8f8', { roughness: 0.9 }), black = mat('#1b1b1b');
+    g.add(M(new THREE.BoxGeometry(1, 0.8, 1.6), fur, 0, 0.9, 0));
+    const head = M(new THREE.BoxGeometry(0.9, 0.85, 0.85), fur, 0, 1.45, -0.9);
+    head.add(M(new THREE.BoxGeometry(0.5, 0.35, 0.4), white, 0, -0.15, -0.55));
+    head.add(M(new THREE.BoxGeometry(0.18, 0.14, 0.1), black, 0, -0.02, -0.76));
+    for (const s of [-1, 1]) {
+      head.add(M(new THREE.BoxGeometry(0.12, 0.12, 0.05), black, s * 0.22, 0.12, -0.44));
+      head.add(M(new THREE.BoxGeometry(0.2, 0.5, 0.3), mat(shade(d.color, 0.7)), s * 0.5, 0.05, 0.05));
+    }
+    g.add(head);
+    for (const [x, z] of [[-0.3, -0.55], [0.3, -0.55], [-0.3, 0.55], [0.3, 0.55]]) g.add(M(new THREE.BoxGeometry(0.28, 0.55, 0.28), fur, x, 0.28, z));
+    const tail = M(new THREE.BoxGeometry(0.16, 0.16, 0.6), fur, 0, 1.15, 0.95, -0.7, 0, 0);
+    g.add(tail);
+    g.userData = { tail, head };
+    return g;
+  },
+  cat(d) {
+    const g = new THREE.Group();
+    const fur = mat(d.color, { roughness: 0.9 }), white = mat(d.accent || '#f8f8f8'), black = mat('#1b1b1b');
+    g.add(M(new THREE.BoxGeometry(0.8, 0.65, 1.3), fur, 0, 0.75, 0));
+    const head = M(new THREE.BoxGeometry(0.8, 0.7, 0.7), fur, 0, 1.25, -0.75);
+    head.add(M(new THREE.BoxGeometry(0.4, 0.2, 0.1), white, 0, -0.18, -0.36));
+    for (const s of [-1, 1]) {
+      head.add(M(new THREE.ConeGeometry(0.16, 0.35, 4), fur, s * 0.24, 0.48, 0, 0, Math.PI / 4, 0));
+      head.add(M(new THREE.BoxGeometry(0.12, 0.14, 0.05), mat('#3fb950'), s * 0.18, 0.08, -0.36));
+    }
+    head.add(M(new THREE.BoxGeometry(0.1, 0.08, 0.05), black, 0, -0.06, -0.38));
+    g.add(head);
+    for (const [x, z] of [[-0.25, -0.45], [0.25, -0.45], [-0.25, 0.45], [0.25, 0.45]]) g.add(M(new THREE.BoxGeometry(0.22, 0.45, 0.22), fur, x, 0.23, z));
+    const tail = M(new THREE.BoxGeometry(0.14, 0.9, 0.14), fur, 0, 1.3, 0.7, 0.3, 0, 0);
+    g.add(tail);
+    g.userData = { tail, head };
+    return g;
+  },
+  bunny(d) {
+    const g = new THREE.Group();
+    const fur = mat(d.color, { roughness: 1 }), pink = mat(d.accent || '#ff9cc8');
+    const body = M(new THREE.SphereGeometry(0.55, 14, 10), fur, 0, 0.6, 0.1);
+    body.scale.set(1, 0.95, 1.2);
+    g.add(body);
+    const head = M(new THREE.SphereGeometry(0.42, 14, 10), fur, 0, 1.15, -0.45);
+    for (const s of [-1, 1]) {
+      const ear = M(new THREE.BoxGeometry(0.16, 0.7, 0.1), fur, s * 0.15, 0.6, 0.05, 0, 0, s * 0.15);
+      ear.add(M(new THREE.BoxGeometry(0.08, 0.5, 0.02), pink, 0, 0, -0.05));
+      head.add(ear);
+      head.add(M(new THREE.SphereGeometry(0.06, 8, 6), mat('#1b1b1b'), s * 0.16, 0.08, -0.36));
+    }
+    head.add(M(new THREE.SphereGeometry(0.06, 8, 6), pink, 0, -0.06, -0.42));
+    g.add(head);
+    g.add(M(new THREE.SphereGeometry(0.18, 8, 6), fur, 0, 0.55, 0.78));
+    g.userData = { head, hop: true };
+    return g;
+  },
+  penguin(d) {
+    const g = new THREE.Group();
+    const body = M(new THREE.SphereGeometry(0.6, 16, 12), mat(d.color), 0, 0.85, 0);
+    body.scale.set(0.9, 1.35, 0.85);
+    g.add(body);
+    const belly = M(new THREE.SphereGeometry(0.5, 16, 12), mat('#f8f8f8'), 0, 0.8, -0.13);
+    belly.scale.set(0.8, 1.15, 0.7);
+    g.add(belly);
+    const head = new THREE.Group();
+    head.position.set(0, 1.55, 0);
+    head.add(M(new THREE.ConeGeometry(0.12, 0.3, 8), mat(d.accent || '#ff9f1c'), 0, -0.05, -0.5, -Math.PI / 2, 0, 0));
+    for (const s of [-1, 1]) head.add(M(new THREE.SphereGeometry(0.07, 8, 6), mat('#f8f8f8'), s * 0.18, 0.08, -0.42));
+    g.add(head);
+    for (const s of [-1, 1]) g.add(M(new THREE.BoxGeometry(0.28, 0.08, 0.38), mat(d.accent || '#ff9f1c'), s * 0.2, 0.04, -0.1));
+    const wings = [-1, 1].map((s) => { const w = M(new THREE.BoxGeometry(0.1, 0.8, 0.4), mat(d.color), s * 0.55, 0.9, 0, 0, 0, s * 0.2); g.add(w); return w; });
+    g.userData = { head, flippers: wings, waddle: true };
+    return g;
+  },
+  robot(d) {
+    const g = new THREE.Group();
+    const metal = mat(d.color, { metalness: 0.6, roughness: 0.35 });
+    const glow = new THREE.MeshBasicMaterial({ color: d.accent || '#00e5ff' }); glow.toneMapped = false;
+    g.add(M(new THREE.BoxGeometry(0.9, 0.7, 0.7), metal, 0, 0.5, 0));
+    const head = M(new THREE.BoxGeometry(0.85, 0.65, 0.75), metal, 0, 1.25, 0);
+    for (const s of [-1, 1]) head.add(M(new THREE.BoxGeometry(0.18, 0.12, 0.05), glow, s * 0.2, 0.05, -0.39));
+    head.add(M(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 6), metal, 0, 0.5, 0));
+    head.add(M(new THREE.SphereGeometry(0.08, 8, 6), glow, 0, 0.72, 0));
+    g.add(head);
+    const jet = M(new THREE.ConeGeometry(0.18, 0.4, 8), glow, 0, 0.0, 0, Math.PI, 0, 0);
+    g.add(jet);
+    g.userData = { fly: true, head, jet };
+    return g;
+  },
+  ghost(d) {
+    const g = new THREE.Group();
+    const body = new THREE.MeshStandardMaterial({ color: d.color, transparent: true, opacity: 0.82, roughness: 0.4, emissive: new THREE.Color(d.color).multiplyScalar(0.25) });
+    const top = M(new THREE.SphereGeometry(0.6, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), body, 0, 1.1, 0);
+    g.add(top);
+    g.add(M(new THREE.CylinderGeometry(0.6, 0.68, 0.9, 16, 1, true), body, 0, 0.65, 0));
+    for (const s of [-1, 1]) g.add(M(new THREE.SphereGeometry(0.1, 8, 6), mat(d.accent || '#1b1b1b'), s * 0.2, 1.15, -0.55));
+    g.add(M(new THREE.SphereGeometry(0.09, 8, 6), mat(d.accent || '#1b1b1b'), 0, 0.88, -0.6));
+    g.userData = { fly: true, sway: true };
+    return g;
+  },
+  dragon(d) {
+    const g = new THREE.Group();
+    const scale = mat(d.color, { roughness: 0.6, metalness: d.color === '#ffc400' ? 0.6 : 0.1 });
+    const acc = mat(d.accent || '#ffcf33', { roughness: 0.5 });
+    g.add(M(new THREE.BoxGeometry(0.9, 0.8, 1.4), scale, 0, 0.8, 0));
+    const head = M(new THREE.BoxGeometry(0.75, 0.65, 0.8), scale, 0, 1.35, -0.85);
+    head.add(M(new THREE.BoxGeometry(0.5, 0.3, 0.45), scale, 0, -0.12, -0.55));
+    for (const s of [-1, 1]) {
+      head.add(M(new THREE.ConeGeometry(0.08, 0.35, 6), acc, s * 0.22, 0.45, 0.15, -0.4, 0, 0));
+      head.add(M(new THREE.BoxGeometry(0.12, 0.12, 0.05), mat('#1b1b1b'), s * 0.2, 0.1, -0.41));
+    }
+    g.add(head);
+    for (let i = 0; i < 3; i++) g.add(M(new THREE.ConeGeometry(0.1, 0.3, 4), acc, 0, 1.3 - i * 0.05, -0.3 + i * 0.4));
+    const wings = [-1, 1].map((s) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(s * 0.45, 1.05, 0);
+      const w = M(new THREE.BoxGeometry(1.1, 0.06, 0.8), acc, s * 0.55, 0, 0);
+      pivot.add(w);
+      g.add(pivot);
+      return pivot;
+    });
+    const tail = M(new THREE.BoxGeometry(0.3, 0.3, 1.1), scale, 0, 0.7, 1.15, 0.3, 0, 0);
+    tail.add(M(new THREE.ConeGeometry(0.2, 0.35, 4), acc, 0, 0, 0.6, Math.PI / 2, 0, 0));
+    g.add(tail);
+    g.userData = { fly: true, wings, tail, head };
+    return g;
+  },
+};
+
+export function buildPet(data) {
+  const fn = PETS[data && data.model];
+  if (!fn) return null;
+  const pet = fn(data);
+  pet.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  pet.userData.t = Math.random() * 10;
+  return pet;
+}
+
+// Idle/move animation. moving: 0..1.
+export function animatePet(pet, dt, moving) {
+  const u = pet.userData;
+  u.t = (u.t || 0) + dt;
+  const t = u.t;
+  const body = pet.children[0];
+  if (u.fly) {
+    u.offsetY = 1.6 + Math.sin(t * 2.2) * 0.25;
+  } else if (u.hop) {
+    u.offsetY = moving > 0.2 ? Math.abs(Math.sin(t * 9)) * 0.45 : 0;
+  } else {
+    u.offsetY = moving > 0.2 ? Math.abs(Math.sin(t * 12)) * 0.12 : 0;
+  }
+  if (u.tail) u.tail.rotation.y = Math.sin(t * (moving > 0.2 ? 14 : 5)) * 0.5;
+  if (u.wings) u.wings.forEach((w, i) => { w.rotation.z = (i ? -1 : 1) * (Math.sin(t * 10) * 0.6 + 0.2); });
+  if (u.flippers) u.flippers.forEach((w, i) => { w.rotation.z = (i ? -1 : 1) * (0.2 + Math.max(0, Math.sin(t * 8)) * 0.4 * moving); });
+  if (u.waddle) pet.rotation.z = Math.sin(t * 10) * 0.12 * moving;
+  if (u.sway) pet.rotation.z = Math.sin(t * 1.5) * 0.08;
+  if (u.head) u.head.rotation.x = Math.sin(t * 1.3) * 0.06;
+  if (u.jet) u.jet.scale.y = 0.8 + Math.sin(t * 30) * 0.2;
+  return body;
 }
 
 // ------------------------------------------------------------ animation

@@ -140,6 +140,7 @@ const RU = {
   'They will be logged out and kicked from any game.': 'Игрок выйдет из аккаунта и будет выкинут из игр.', 'Catalog items': 'Предметы каталога',
   'Robits in circulation': 'Robits в обороте', 'Playing now': 'Играют сейчас', 'Only admins can open this page.': 'Эту страницу могут открыть только админы.',
   'Edit together': 'Редактировать вместе', 'Team Create': 'Совместное создание', "It's dark in here... use your Flashlight (press 1).": 'Здесь темно... включи фонарик (клавиша 1).',
+  'Pets': 'Питомцы', 'Pet': 'Питомец',
   'Groups': 'Группы', 'Group': 'Группа', 'Create Group': 'Создать группу', 'My Groups': 'Мои группы', 'Popular Groups': 'Популярные группы', 'Search groups': 'Поиск групп', 'Find Groups': 'Найти группы',
   'You are not in any groups yet. Join one below or create your own!': 'Ты пока не состоишь в группах. Вступи в группу ниже или создай свою!', 'No groups found.': 'Группы не найдены.',
   'Name': 'Название', 'What is your group about?': 'О чём твоя группа?', 'Emblem colour': 'Цвет эмблемы', 'Emblem symbol': 'Символ эмблемы', 'New members need approval': 'Новых участников нужно одобрять', 'Create': 'Создать', 'Free for admins.': 'Для админов бесплатно.',

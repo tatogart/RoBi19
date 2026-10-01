@@ -762,3 +762,20 @@ test('Team Create: collaborators edit the same place together', async () => {
   await c.until((m) => m.t === 'tc.error');
   a.w.close(); b.w.close(); c.w.close();
 });
+
+test('pets: buy one, wear one at a time, it shows in the game avatar', async () => {
+  const p = (await call('POST', '/auth/signup', { username: 'PetOwner', password: 'secret123' })).cookie;
+  const pets = (await call('GET', '/catalog?type=Pet')).data.items;
+  assert.ok(pets.length >= 8);
+  const kitty = pets.find((i) => i.name === 'Kitty');
+  const puppy = pets.find((i) => i.name === 'Puppy');
+  assert.equal((await call('POST', `/catalog/${kitty.id}/buy`, {}, p)).status, 200); // a new player can afford it
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const pid = (await call('GET', '/auth/me', null, p)).data.user.id;
+  await call('POST', `/admin/users/${pid}/items`, { itemId: puppy.id }, admin);
+  const { avatar } = (await call('GET', '/avatar', null, p)).data;
+  const r = await call('PUT', '/avatar', { ...avatar, wearing: [...avatar.wearing, kitty.id, puppy.id] }, p);
+  const worn = r.data.resolved.items.filter((i) => i.type === 'Pet');
+  assert.equal(worn.length, 1); // one pet at a time
+  assert.equal(worn[0].data.model, 'cat');
+});

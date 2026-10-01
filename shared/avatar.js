@@ -16,8 +16,8 @@ export const DEFAULT_AVATAR = {
   wearing: [],
 };
 
-export const ITEM_TYPES = ['Hat', 'Hair', 'Face', 'Shirt', 'Pants', 'TShirt', 'Gear'];
-export const WEAR_LIMITS = { Hat: 3, Hair: 1, Face: 1, Shirt: 1, Pants: 1, TShirt: 1, Gear: 1 };
+export const ITEM_TYPES = ['Hat', 'Hair', 'Face', 'Shirt', 'Pants', 'TShirt', 'Gear', 'Pet'];
+export const WEAR_LIMITS = { Hat: 3, Hair: 1, Face: 1, Shirt: 1, Pants: 1, TShirt: 1, Gear: 1, Pet: 1 };
 
 // Built-in catalog. `data` tells the renderer how to draw the item.
 export const CATALOG = [
@@ -76,6 +76,15 @@ export const CATALOG = [
   // Gear
   { name: 'Classic Sword', type: 'Gear', price: 100, data: { model: 'sword', color: '#b4b4b4' }, desc: 'The linked sword. Cosmetic.' },
   { name: 'Rocket Launcher', type: 'Gear', price: 250, data: { model: 'rocket', color: '#4b974b' }, desc: 'Cosmetic rocket launcher.' },
+  // Pets: they follow you around in every game (see public/js/render/avatar.js PETS).
+  { name: 'Puppy', type: 'Pet', price: 100, data: { model: 'dog', color: '#a0703c', accent: '#f8f8f8' }, desc: 'A loyal little friend that follows you everywhere.' },
+  { name: 'Kitty', type: 'Pet', price: 100, data: { model: 'cat', color: '#e8913a', accent: '#f8f8f8' }, desc: 'Purrs when you stand still.' },
+  { name: 'Bunny', type: 'Pet', price: 200, data: { model: 'bunny', color: '#f8f8f8', accent: '#ff9cc8' }, desc: 'Hops after you.' },
+  { name: 'Penguin', type: 'Pet', price: 250, data: { model: 'penguin', color: '#1b1b1b', accent: '#ff9f1c' }, desc: 'Waddles everywhere you go.' },
+  { name: 'Robot Buddy', type: 'Pet', price: 400, data: { model: 'robot', color: '#a3a2a5', accent: '#00e5ff' }, desc: 'A hovering helper bot with glowing eyes.' },
+  { name: 'Friendly Ghost', type: 'Pet', price: 500, data: { model: 'ghost', color: '#f4f8ff', accent: '#1b1b1b' }, desc: 'Boo! It floats along beside you.' },
+  { name: 'Baby Dragon', type: 'Pet', price: 2500, limited: true, data: { model: 'dragon', color: '#3fb950', accent: '#ffcf33' }, desc: 'Limited. A tiny dragon that flaps along with you.' },
+  { name: 'Golden Dragon', type: 'Pet', price: 15000, limited: true, data: { model: 'dragon', color: '#ffc400', accent: '#e8002a' }, desc: 'Limited. The rarest pet in Robis.' },
 ];
 
 export function normalizeAvatar(a) {
@@ -102,6 +111,7 @@ export function resolveAvatar(avatar, getItem) {
     else if (it.type === 'Pants') r.pants = it.data;
     else if (it.type === 'TShirt') r.tshirt = it.data;
     else if (it.type === 'Gear') r.gear = it.data;
+    else if (it.type === 'Pet') r.pet = it.data;
   }
   return r;
 }

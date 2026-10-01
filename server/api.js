@@ -4,7 +4,7 @@ import express from 'express';
 import {
   checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies, bannedClient, noteClient, isBanned, banDetails,
 } from './auth.js';
-import { createUser, addSeedGames, ensureOwner, officialAccount, OWNER_NAME } from './seed/seed.js';
+import { createUser, addSeedGames, addCatalogItems, ensureOwner, officialAccount, OWNER_NAME } from './seed/seed.js';
 import { hashPassword } from './auth.js';
 import { TEMPLATES } from './seed/places.js';
 import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES, CATALOG } from '../shared/avatar.js';
@@ -111,6 +111,12 @@ export function createApi(db, manager, opts = {}) {
 
   // New showcase places reach existing worlds too.
   addSeedGames(db);
+  addCatalogItems(db);
+  // Admins own every catalog item, new ones too.
+  for (const u of Object.values(D.users)) {
+    if (!u.isAdmin || !u.adminPerks || u.system) continue;
+    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...Object.keys(D.items).filter((k) => !D.items[k].custom).map(Number)])];
+  }
   if (syncSerials()) db.save();
 
   // The free Robits packs and self-service Builders Club are gone: take back

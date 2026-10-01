@@ -71,7 +71,7 @@ function save() {
 }
 
 // ---------------------------------------------------------------- editor tabs
-const TABS = [['Recent', null], ['Hats', ['Hat']], ['Hair', ['Hair']], ['Faces', ['Face']], ['Shirts', ['Shirt']], ['Pants', ['Pants']], ['T-Shirts', ['TShirt']], ['Gear', ['Gear']], ['Body Colors', 'body']];
+const TABS = [['Recent', null], ['Hats', ['Hat']], ['Hair', ['Hair']], ['Faces', ['Face']], ['Shirts', ['Shirt']], ['Pants', ['Pants']], ['T-Shirts', ['TShirt']], ['Gear', ['Gear']], ['Pets', ['Pet']], ['Body Colors', 'body']];
 const tabs = el('div', { class: 'tabs' });
 const body = el('div', { class: 'panel', style: { minHeight: '360px' } });
 function toggleWear(it) {

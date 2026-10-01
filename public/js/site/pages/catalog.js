@@ -5,7 +5,7 @@ import { el, qs, spinner, itemCard } from '../ui.js';
 await initPage({ active: 'catalog', requireAuth: false });
 const app = document.getElementById('app');
 
-const CATS = [['All', 'All Categories'], ['Featured', 'Featured'], ['Accessories', 'Accessories'], ['Hat', '— Hats'], ['Hair', '— Hair'], ['Face', 'Faces'], ['Clothing', 'Clothing'], ['Shirt', '— Shirts'], ['Pants', '— Pants'], ['TShirt', '— T-Shirts'], ['Gear', 'Gear'], ['Collectibles', 'Collectibles']];
+const CATS = [['All', 'All Categories'], ['Featured', 'Featured'], ['Accessories', 'Accessories'], ['Hat', '— Hats'], ['Hair', '— Hair'], ['Face', 'Faces'], ['Clothing', 'Clothing'], ['Shirt', '— Shirts'], ['Pants', '— Pants'], ['TShirt', '— T-Shirts'], ['Gear', 'Gear'], ['Pet', 'Pets'], ['Collectibles', 'Collectibles']];
 let cat = qs('type') || 'All';
 const side = el('div', { class: 'panel cat-side' }, el('h3', { text: 'Category' }));
 const catBtns = CATS.map(([k, label]) => {

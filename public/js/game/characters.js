@@ -1,7 +1,7 @@
 // Rendered characters: avatar mesh, interpolation, name tags, health bars,
 // chat bubbles and the classic "fall apart" death.
 import * as THREE from 'three';
-import { buildAvatar } from '../render/avatar.js';
+import { buildAvatar, buildPet, animatePet } from '../render/avatar.js';
 
 const NAME_COLORS = ['#fd2943', '#01a2ff', '#02b857', '#6b327c', '#da8541', '#f5cd30', '#e8baC8', '#d7c59a'];
 export function nameColor(name) {
@@ -22,10 +22,13 @@ export class CharacterView {
     this.info = info;
     this.userId = info.userId;
     this.isLocal = isLocal;
-    this.av = buildAvatar(info.avatar);
+    this.av = buildAvatar(info.avatar, { pet: false });
     this.group = this.av.group;
     this.group.visible = false;
     scene.add(this.group);
+    // The pet is its own object that follows the player around.
+    this.pet = this.av.look.pet ? buildPet(this.av.look.pet) : null;
+    if (this.pet) { this.pet.visible = false; scene.add(this.pet); this.petVel = 0; }
     this.pos = new THREE.Vector3();
     this.target = new THREE.Vector3();
     this.ry = 0;
@@ -122,6 +125,35 @@ export class CharacterView {
     const state = driving ? 'sit' : this.anim === 'walk' && this.speed < 0.5 && !this.isLocal ? 'idle' : this.anim;
     this.av.animate(state, dt, this.isLocal ? this.speed : Math.max(this.speed, state === 'walk' ? 12 : 0));
     if (this.forceField) this.forceField.material.opacity = 0.14 + Math.sin(performance.now() / 150) * 0.06;
+    this.updatePet(dt);
+  }
+
+  // Follows a spot behind and to the side of the player, turns where it walks.
+  updatePet(dt) {
+    const pet = this.pet;
+    if (!pet) return;
+    if (!this.group.visible || this.dead) { pet.visible = this.dead && pet.visible; return; }
+    const side = 2.4, back = 2.2;
+    const tx = this.pos.x + Math.cos(this.ry) * side + Math.sin(this.ry) * back;
+    const tz = this.pos.z - Math.sin(this.ry) * side + Math.cos(this.ry) * back;
+    const groundY = this.pos.y - 3;
+    if (!pet.visible || Math.hypot(pet.position.x - tx, pet.position.z - tz) > 40) {
+      pet.position.set(tx, groundY, tz);
+      pet.visible = true;
+    }
+    const dx = tx - pet.position.x, dz = tz - pet.position.z;
+    const dist = Math.hypot(dx, dz);
+    const k = Math.min(1, dt * (dist > 6 ? 6 : 3.5));
+    pet.position.x += dx * k;
+    pet.position.z += dz * k;
+    const moving = Math.min(1, dist / 1.5);
+    const target = dist > 0.6 ? Math.atan2(-dx, -dz) : this.ry;
+    let d = target - pet.rotation.y;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    pet.rotation.y += d * Math.min(1, dt * 8);
+    animatePet(pet, dt, moving);
+    const baseY = groundY + (pet.userData.offsetY || 0);
+    pet.position.y += (baseY - pet.position.y) * Math.min(1, dt * 12);
   }
 
   // Project the tag above the head.
@@ -205,6 +237,7 @@ export class CharacterView {
   dispose() {
     this.clearDebris();
     this.setForceField(false);
+    if (this.pet) { this.pet.removeFromParent(); this.pet.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); this.pet = null; }
     this.group.removeFromParent();
     this.av.dispose();
     this.tag.remove();

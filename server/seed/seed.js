@@ -116,6 +116,26 @@ export function ensureOwner(db) {
   return off;
 }
 
+// Adds catalog items this world doesn't have yet (new items in updates).
+export function addCatalogItems(db) {
+  const D = db.data;
+  const owner = officialAccount(D);
+  const have = new Set(Object.values(D.items).filter((i) => !i.custom).map((i) => i.name));
+  let added = 0;
+  for (const it of CATALOG) {
+    if (have.has(it.name)) continue;
+    const id = db.nextId('item');
+    D.items[id] = {
+      id, name: it.name, type: it.type, price: it.price, data: it.data, description: it.desc,
+      creatorId: owner ? owner.id : 1, created: Date.now(), sales: 0,
+      limited: !!it.limited, remaining: it.limited ? 100 : null,
+    };
+    added++;
+  }
+  if (added) db.save();
+  return added;
+}
+
 // A quick fingerprint of a place file, to notice when someone edited it.
 function placeHash(place) {
   const str = JSON.stringify(place);
