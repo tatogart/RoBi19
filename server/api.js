@@ -367,7 +367,7 @@ export function createApi(db, manager, opts = {}) {
     ...publicUser(u, true), robits: u.robits, canClaimStipend: Date.now() - (u.lastStipend || 0) > STIPEND_MS,
     stipend: stipendFor(u), rawAvatar: normalizeAvatar(u.avatar),
     perms: u.isAdmin ? Object.keys(PERMISSIONS) : (u.perms || []), tradePrivacy: u.tradePrivacy || 'everyone',
-    hunt: !!D.hunt && (D.hunt.public || u.isAdmin || u.id === officialAccount(D)?.id), // The Hunt event page in the menu
+    hunt: manager.hunt ? manager.hunt.eligible(u.id) : false, // The Hunt event page in the menu (a live event)
   });
 
   // Owners, admins and the people they add to Team Create can edit a place.
@@ -1999,7 +1999,7 @@ export function createApi(db, manager, opts = {}) {
     gamedelete: () => 'Deleted game',
     promocodes: (b) => (b.op ? `Promo code ${String(b.code || '').toUpperCase()}: ${b.op}` : `Made ${b.code ? 'promo code ' + String(b.code).toUpperCase() : (Math.trunc(+b.count || 1)) + ' promo code(s)'}: R$${Math.trunc(+b.robits || 0)}${(b.items || []).length ? ' + ' + b.items.length + ' item(s)' : ''}${MEMBERSHIPS[b.membership] && b.membership !== 'None' ? ' + ' + MEMBERSHIPS[b.membership].name + (+b.membershipDays ? ' ' + Math.trunc(+b.membershipDays) + 'd' : '') : ''}`),
     donate: () => 'Changed donate prices',
-    hunt: (b) => (b.user ? `The Hunt: ${b.take ? 'took' : 'gave'} ${b.all ? 'all tokens' : 'a token'} ${b.take ? 'from' : 'to'} ${String(b.user).slice(0, 30)}` : `The Hunt settings${b.public !== undefined ? (b.public ? ' (open)' : ' (private)') : ''}`),
+    hunt: (b) => (b.action ? `The Hunt: ${b.action}${b.key ? ' ' + b.key : ''}${b.action === 'schedule' ? ' (times)' : ''}` : b.user ? `The Hunt: ${b.take ? 'took' : 'gave'} ${b.all ? 'all tokens' : 'a token'} ${b.take ? 'from' : 'to'} ${String(b.user).slice(0, 30)}` : `The Hunt settings${b.public !== undefined ? (b.public ? ' (open)' : ' (private)') : ''}`),
   };
   api.use('/admin', (req, res, next) => {
     if (req.method !== 'POST' || !req.user) return next();

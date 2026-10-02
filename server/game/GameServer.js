@@ -13,6 +13,7 @@ import { LuaRuntime } from './lua.js';
 import { installServices } from './services.js';
 import { filterChat } from './chatfilter.js';
 import { findHuntSpot } from './huntspot.js';
+import { RUNE_TIME } from '../huntquests.js';
 
 const TICK_HZ = 30;
 const REPLICATED = new Set(['Workspace', 'Players', 'Lighting', 'ReplicatedStorage', 'StarterGui', 'Teams']);
@@ -60,7 +61,8 @@ export class GameServer {
     });
     installServices(game, this.rt, {
       dataStore: this.backend.dataStore || memoryStore(),
-      awardBadge: (uid, name) => this.backend.awardBadge ? this.backend.awardBadge(uid, name) : false,
+      awardBadge: (uid, name) => { this._questBadge(uid, name); return this.backend.awardBadge ? this.backend.awardBadge(uid, name) : false; },
+      questDone: (uid) => this._questScript(uid),
       hasBadge: (uid, name) => this.backend.hasBadge ? this.backend.hasBadge(uid, name) : false,
       passes: this.backend.passes || null,
       hunt: this.backend.hunt || null,
@@ -165,6 +167,7 @@ export class GameServer {
   }
 
   _onChanged(inst, prop) {
+    if (prop === 'Value' && this.questTimer && inst._parent && inst._parent.Name === 'leaderstats') this._questStat(inst);
     if (inst instanceof Script && prop === 'Disabled') {
       if (inst.Disabled) this.rt.stopScript(inst); else this._maybeQueueScript(inst);
     }
@@ -289,7 +292,9 @@ export class GameServer {
   // players taking part (only admins while the event is private).
   _huntJoin(session) {
     const h = this.backend.hunt;
-    if (!h || this.isTest || this.subPlace || !h.inEvent() || !h.eligible(session.user.id)) return;
+    if (!h || this.isTest || !h.eligible(session.user.id)) return;
+    if (h.kind && h.kind() === 'quests') { this._questJoin(session); return; }
+    if (this.subPlace || !h.inEvent()) return;
     this._huntEnsure();
     const p = h.progress(session.user.id);
     const found = p && p.games.some((g) => g.id === this.gameId && g.found);
@@ -338,6 +343,9 @@ export class GameServer {
     this.huntTimer = null;
     clearInterval(this.huntScan);
     this.huntScan = null;
+    clearInterval(this.questTimer);
+    this.questTimer = null;
+    if (this.runes) { for (const r of this.runes) if (!r._destroyed) (r.Parent || r).Destroy(); this.runes = null; }
     if (!this.huntToken || this.huntToken._destroyed) return;
     (this.huntToken.Parent || this.huntToken).Destroy();
     this.huntToken = null;
@@ -408,6 +416,235 @@ export class GameServer {
     light.Parent = t;
     folder.Parent = this.game.Workspace;
     return t;
+  }
+
+  // ------------------------------------------------------------ The Hunt: quests
+  // Quest events give every game its own quest (server/huntquests.js). Most are
+  // checked here from what happens in the game: leaderstats, badges, buttons,
+  // places you reach, rune stones; or the game's scripts call
+  // HuntService:CompleteQuest(player).
+  _questJoin(session) {
+    const h = this.backend.hunt;
+    if (!h.inEvent() || (h.isHub && h.isHub())) return;
+    const def = h.quest && h.quest();
+    if (!def) return;
+    const p = h.progress(session.user.id);
+    const done = !!(p && p.games.some((g) => g.id === this.gameId && g.found));
+    session.quest = { def, done, readyAt: Date.now() + 4000, last: {}, gained: 0, best: 0, visited: new Set(), clicked: new Set(), rune: 0, runeStart: 0, hudAt: 0 };
+    if (def.type === 'runes' && !done) this._runesEnsure();
+    if (!this.questTimer) this.questTimer = setInterval(() => { try { this._questTick(); } catch (e) { this.log('warn', 'The Hunt: ' + e.message); } }, 1000);
+    setTimeout(() => {
+      if (this.sessions.get(session.user.id) !== session) return;
+      this._questHud(session, true);
+      this.send(session, { t: 'sys', text: done
+        ? `The Hunt: you already have the relic of this game (${p.count}/${p.total}).`
+        : `The Hunt quest: ${def.text}` });
+    }, 1500);
+  }
+
+  _questStatValue(session, name) {
+    const ls = session.player && session.player.FindFirstChild('leaderstats');
+    const v = ls && ls.FindFirstChild(name);
+    if (!v) return null;
+    const n = parseFloat(v.Value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // What the quest panel shows: the quest and how far along you are.
+  _questHud(session, force = false) {
+    const q = session.quest;
+    if (!q) return;
+    const now = Date.now();
+    if (!force && now - q.hudAt < 700) { q.hudDirty = true; return; }
+    q.hudAt = now;
+    q.hudDirty = false;
+    const d = q.def;
+    let progress = '', left = 0;
+    if (!q.done) {
+      if (d.type === 'stat') progress = `${Math.min(d.target, Math.floor(this._questStatValue(session, d.stat) || 0))} / ${d.target} ${d.stat}`;
+      else if (d.type === 'gain') progress = `${Math.min(d.target, q.gained)} / ${d.target}`;
+      else if (d.type === 'below') progress = q.best ? `Best this visit: ${q.best}s (need ${d.target}s or less)` : `Need ${d.target}s or less`;
+      else if (d.type === 'badge' && d.stat) { const v = this._questStatValue(session, d.stat); if (v !== null) progress = `${d.stat}: ${v}`; }
+      else if (d.type === 'click') progress = `${q.clicked.size} / ${this._questButtons().length} buttons`;
+      else if (d.type === 'visit') progress = (d.names || d.parts).map((n, i) => (q.visited.has(d.parts[i]) ? '✓ ' : '• ') + n).join('   ');
+      else if (d.type === 'runes') {
+        progress = `Runes lit: ${q.rune} / 3`;
+        if (q.rune > 0) left = Math.max(0, Math.ceil((q.runeStart + RUNE_TIME * 1000 - now) / 1000));
+      }
+    }
+    this.send(session, { t: 'huntQuest', text: d.text, progress, left, done: q.done });
+  }
+
+  _questComplete(session) {
+    const q = session.quest;
+    if (!q || q.done) return;
+    q.done = true;
+    const h = this.backend.hunt;
+    const r = h && h.collect(session.user.id);
+    this._questHud(session, true);
+    if (!r || !r.new) return;
+    this.send(session, { t: 'hunt', kind: 'quests', count: r.count, total: r.total, reward: r.reward || null, robits: r.robits || 0 });
+    this.log('info', `${session.user.username} completed The Hunt quest (${r.count}/${r.total})`);
+  }
+
+  // A leaderstat changed (from _onChanged).
+  _questStat(inst) {
+    const player = inst._parent && inst._parent._parent;
+    const session = player && [...this.sessions.values()].find((x) => x.player === player);
+    const q = session && session.quest;
+    if (!q || q.done || inst.Name !== q.def.stat) return;
+    const d = q.def;
+    const v = parseFloat(inst._p.Value);
+    if (!Number.isFinite(v)) return;
+    const prev = q.last[d.stat];
+    q.last[d.stat] = v;
+    // the first seconds are loading (saved stats): they don't count
+    if (Date.now() < q.readyAt) return;
+    if (d.type === 'stat' && v >= d.target) return this._questComplete(session);
+    if (d.type === 'gain' && prev !== undefined && v > prev) {
+      q.gained += v - prev;
+      if (q.gained >= d.target) return this._questComplete(session);
+    }
+    if (d.type === 'below' && v > 0) {
+      if (!q.best || v < q.best) q.best = v;
+      if (v <= d.target) return this._questComplete(session);
+    }
+    this._questHud(session);
+  }
+
+  _questBadge(uid, name) {
+    const session = this.sessions.get(uid);
+    const q = session && session.quest;
+    if (q && !q.done && q.def.type === 'badge' && q.def.badge === name) this._questComplete(session);
+  }
+
+  // The game's own scripts: HuntService:CompleteQuest(player)
+  _questScript(uid) {
+    const session = this.sessions.get(uid);
+    const q = session && session.quest;
+    if (!q || q.done || q.def.type !== 'script') return false;
+    this._questComplete(session);
+    return true;
+  }
+
+  _questButtons() {
+    const d = [...this.sessions.values()].map((s) => s.quest && s.quest.def).find((x) => x && x.type === 'click');
+    const model = d && this.game.Workspace.FindFirstChild(d.model);
+    if (!model) return [];
+    return model.GetDescendants().filter((p) => p instanceof BasePart && (p.FindFirstChildOfClass('ClickDetector') || (p.Parent && p.Parent !== model && p.Parent.FindFirstChildOfClass && p.Parent.FindFirstChildOfClass('ClickDetector'))));
+  }
+
+  _questClick(session, part) {
+    const q = session.quest;
+    if (!q || q.done || q.def.type !== 'click') return;
+    const buttons = this._questButtons();
+    if (!buttons.includes(part)) return;
+    q.clicked.add(part.id);
+    if (buttons.every((b) => q.clicked.has(b.id))) return this._questComplete(session);
+    this._questHud(session, true);
+  }
+
+  // Every second: places reached, the rune timer, late panel updates.
+  _questTick() {
+    const now = Date.now();
+    let parts = null;
+    for (const s of this.sessions.values()) {
+      const q = s.quest;
+      if (!q) continue;
+      if (q.hudDirty) this._questHud(s);
+      if (q.done) continue;
+      const d = q.def;
+      if (d.type === 'visit' && s.character) {
+        if (!parts) parts = this.game.Workspace.GetDescendants().filter((p) => p instanceof BasePart);
+        const [x, y, z] = s.state.p;
+        let changed = false;
+        for (const name of d.parts) {
+          if (q.visited.has(name)) continue;
+          const near = parts.some((p) => {
+            if (p.Name !== name) return false;
+            const [a, b] = partAABB(p);
+            const dx = Math.max(a.X - x, 0, x - b.X), dy = Math.max(a.Y - y, 0, y - b.Y), dz = Math.max(a.Z - z, 0, z - b.Z);
+            return Math.hypot(dx, dy, dz) < 4.5;
+          });
+          if (near) { q.visited.add(name); changed = true; }
+        }
+        if (changed) {
+          if (q.visited.size >= d.parts.length) { this._questComplete(s); continue; }
+          this._questHud(s, true);
+        }
+      }
+      if (d.type === 'runes' && q.rune > 0 && now - q.runeStart > RUNE_TIME * 1000) {
+        q.rune = 0;
+        this.send(s, { t: 'sys', text: 'The Hunt: too slow! The runes went dark. Start again from rune I.' });
+        this._questHud(s, true);
+      }
+    }
+    if (this.runes) this._runesEnsure();
+  }
+
+  // Three rune stones, far from the spawn and from each other. They move if
+  // what they stand on goes away (maps built while the game runs).
+  _runesEnsure() {
+    const ok = (r) => r && !r._destroyed && this._huntSupported(r.Position.sub(new Vector3(0, 1.8, 0)));
+    if (this.runes && this.runes.every(ok)) return;
+    if (this.runesAt && Date.now() - this.runesAt < 15000 && this.runes) return;
+    this.runesAt = Date.now();
+    const keep = (this.runes || []).map((r) => (ok(r) ? r : (r && !r._destroyed && (r.Parent || r).Destroy(), null)));
+    let folder = this.game.Workspace.FindFirstChild('HuntRunes');
+    if (!folder) { folder = createInstance('Folder'); folder.Name = 'HuntRunes'; folder.Parent = this.game.Workspace; }
+    const taken = keep.filter(Boolean).map((r) => r.Position);
+    const ROMAN = ['I', 'II', 'III'];
+    for (let i = 0; i < 3; i++) {
+      if (keep[i]) continue;
+      let pos = null;
+      for (const [minDist, apart] of [[45, 40], [30, 25], [20, 12], [0, 0]]) {
+        for (let k = 0; k < 12 && !pos; k++) {
+          let p = null;
+          try { p = findHuntSpot(this.game.Workspace, Math.random, { minDist }); } catch { p = null; }
+          if (p && taken.every((t) => t.sub(p).Magnitude >= apart)) pos = p;
+        }
+        if (pos) break;
+      }
+      if (!pos) { try { pos = findHuntSpot(this.game.Workspace, Math.random, { minDist: 0, ground: true }); } catch { pos = null; } }
+      if (!pos) continue;
+      const r = createInstance('Part');
+      r.Name = 'Rune';
+      r.Size = new Vector3(2.4, 3.6, 1);
+      r.Material = 'Neon';
+      r.Color = Color3.fromHex('#5bd6a0');
+      r.Anchored = true;
+      r.CanCollide = false;
+      r.CFrame = CFrame.fromPosition(new Vector3(pos.X, pos.Y + 1.8, pos.Z));
+      const label = createInstance('BillboardText');
+      label.Text = ROMAN[i];
+      label.StudsOffset = new Vector3(0, 3, 0);
+      label.Parent = r;
+      const glow = createInstance('PointLight');
+      glow.Color = Color3.fromHex('#5bd6a0');
+      glow.Range = 10;
+      glow.Brightness = 0.8;
+      glow.Parent = r;
+      r.Parent = folder;
+      keep[i] = r;
+      taken.push(r.Position);
+    }
+    this.runes = keep;
+  }
+
+  _runeTouched(session, idx) {
+    const q = session.quest;
+    if (!q || q.done || q.def.type !== 'runes') return;
+    const ROMAN = ['I', 'II', 'III'];
+    if (idx < q.rune) return;
+    if (idx > q.rune) {
+      if (Date.now() - (q.warnAt || 0) > 3000) { q.warnAt = Date.now(); this.send(session, { t: 'sys', text: `The Hunt: this rune is still dark... light rune ${ROMAN[q.rune]} first.` }); }
+      return;
+    }
+    q.rune++;
+    if (q.rune === 1) q.runeStart = Date.now();
+    if (q.rune >= 3) return this._questComplete(session);
+    this.send(session, { t: 'sys', text: `The Hunt: rune ${ROMAN[idx]} is glowing! Find rune ${ROMAN[q.rune]}.` });
+    this._questHud(session, true);
   }
 
   _huntTouched(session) {
@@ -813,6 +1050,7 @@ export class GameServer {
         const dist = part.Position.sub(new Vector3(x, y, z)).Magnitude;
         if (dist > cd.MaxActivationDistance + Math.max(part.Size.X, part.Size.Y, part.Size.Z)) return;
         cd._fire('MouseClick', session.player);
+        if (session.quest) this._questClick(session, part);
         break;
       }
       case 'equip': {
@@ -1007,6 +1245,12 @@ export class GameServer {
       const [a, b] = pair;
       a._fire('Touched', b);
       b._fire('Touched', a);
+      if (this.runes && (this.runes.includes(a) || this.runes.includes(b))) {
+        const rune = this.runes.includes(a) ? a : b;
+        const limb = rune === a ? b : a;
+        const who = limb._parent && limb._parent._isCharacter && [...this.sessions.values()].find((x) => x.character === limb._parent);
+        if (who) this._runeTouched(who, this.runes.indexOf(rune));
+      }
       if (this.huntToken && (a === this.huntToken || b === this.huntToken)) {
         const limb = a === this.huntToken ? b : a;
         const who = limb._parent && limb._parent._isCharacter && [...this.sessions.values()].find((x) => x.character === limb._parent);

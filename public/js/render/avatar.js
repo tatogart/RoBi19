@@ -333,6 +333,17 @@ function M(geo, material, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
 }
 
 const HATS = {
+  // The Hunt: Lost Relics
+  explorer(d) {
+    const g = new THREE.Group();
+    const felt = mat(d.color, { roughness: 0.85 });
+    const dome = M(new THREE.SphereGeometry(0.66, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), felt, 0, 0.42, 0);
+    dome.scale.set(1, 0.9, 1.08);
+    g.add(dome);
+    g.add(M(new THREE.CylinderGeometry(1.05, 1.1, 0.06, 28), felt, 0, 0.44, 0));
+    g.add(M(new THREE.CylinderGeometry(0.67, 0.67, 0.14, 28), mat(d.accent || '#5a3b1e'), 0, 0.52, 0));
+    return g;
+  },
   // The Hunt: Another Dimension
   astronaut(d) {
     const g = new THREE.Group();
@@ -610,6 +621,14 @@ function hairShell(material, { front = 0.35, back = -0.3, sides = 0, thick = 0.0
 }
 
 const GEARS = {
+  torch(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.CylinderGeometry(0.12, 0.09, 1.8, 8), mat(d.color || '#7a4a22', { roughness: 0.9 }), 0, 0.35, -0.6, Math.PI / 2.6, 0, 0));
+    g.add(M(new THREE.CylinderGeometry(0.2, 0.15, 0.3, 8), mat('#3a3a3a', { metalness: 0.6 }), 0, 0.95, -1.15, Math.PI / 2.6, 0, 0));
+    const flame = new THREE.MeshBasicMaterial({ color: '#ffb347', transparent: true, opacity: 0.9 }); flame.toneMapped = false;
+    g.add(M(new THREE.ConeGeometry(0.2, 0.55, 8), flame, 0, 1.3, -1.28));
+    return g;
+  },
   saber(d) {
     const g = new THREE.Group();
     const glow = new THREE.MeshBasicMaterial({ color: d.color }); glow.toneMapped = false;
@@ -799,6 +818,20 @@ function buildKart(color) {
 // Small blocky companions. They face -Z like avatars; the feet are at y = 0.
 // userData: fly (hovers), parts to animate (tail, wings, ears).
 const PETS = {
+  golem(d) {
+    const g = new THREE.Group();
+    const rock = mat(d.color, { roughness: 1 });
+    const glow = new THREE.MeshBasicMaterial({ color: d.accent || '#5bd6a0' }); glow.toneMapped = false;
+    g.add(M(new THREE.BoxGeometry(1, 0.9, 0.8), rock, 0, 0.85, 0, 0, 0.1, 0));
+    const head = M(new THREE.BoxGeometry(0.7, 0.6, 0.6), rock, 0, 1.55, -0.05);
+    for (const s of [-1, 1]) head.add(M(new THREE.BoxGeometry(0.14, 0.1, 0.05), glow, s * 0.16, 0.05, -0.31));
+    head.add(M(new THREE.BoxGeometry(0.22, 0.22, 0.05), glow, 0, -0.55, -0.42));
+    g.add(head);
+    for (const x of [-0.28, 0.28]) g.add(M(new THREE.BoxGeometry(0.34, 0.45, 0.4), rock, x, 0.22, 0));
+    const arms = [-1, 1].map((s) => { const a = M(new THREE.BoxGeometry(0.32, 0.8, 0.34), rock, s * 0.68, 0.8, 0, 0, 0, s * 0.12); g.add(a); return a; });
+    g.userData = { head, flippers: arms, waddle: true };
+    return g;
+  },
   ufo(d) {
     const g = new THREE.Group();
     const hull = mat(d.color, { metalness: 0.7, roughness: 0.3 });

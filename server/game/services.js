@@ -241,6 +241,17 @@ export function installServices(game, rt, backend) {
     const r = backend.hunt && backend.hunt.fragment ? backend.hunt.fragment(+userId, 0) : null;
     return r ? r.list : [];
   };
+  // Quest events: a game's own quest. Call it when the player has done it, e.g.
+  //   HuntService:SetQuestText("Defeat the dragon")   -- shown on the event page
+  //   HuntService:CompleteQuest(player)
+  const uidOf = (p) => +(p && (p._p ? p._p.UserId : p.UserId) || p) || 0;
+  hunt.CompleteQuest = (player) => !!(backend.questDone && backend.questDone(uidOf(player)));
+  hunt.SetQuestText = () => true; // read from the script when the event starts
+  // The hub's own quest (the rune puzzle in Lost Relics).
+  hunt.CompleteHubQuest = (player) => {
+    const r = backend.hunt && backend.hunt.hubQuest ? backend.hunt.hubQuest(uidOf(player)) : null;
+    return r ? { New: r.new, Prize: r.prize || '' } : { New: false, Prize: '' };
+  };
   // Shards found by everyone together (the rift in the hub fills up).
   hunt.GetGlobal = () => (backend.hunt && backend.hunt.global ? backend.hunt.global() : { Shards: 0, Goal: 1 });
 

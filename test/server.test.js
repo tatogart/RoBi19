@@ -1282,3 +1282,100 @@ test('The Hunt: the Rift goal can be reached and admins can change it', async ()
   assert.ok(h.rewards.find((r) => r.key === 'rift').got);
   await call('POST', '/admin/hunt', { riftGoal: 50 }, admin);
 });
+
+test('The Hunt event manager: launch a quest event, quests in games, end it', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'QuestKid', password: 'secret123' })).cookie;
+  let a = (await call('GET', '/admin/hunt', null, admin)).data;
+  assert.ok(a.events.some((e) => e.key === 'relics' && e.kind === 'quests'));
+  assert.equal(a.current, 'dimension');
+  // a player game with its own quest, and one without (it gets the runes)
+  const maker = (await call('POST', '/auth/signup', { username: 'QuestMaker', password: 'secret123' })).cookie;
+  const own = (await call('POST', '/games', { name: 'Quest Script Game', template: 'baseplate' }, maker)).data.game;
+  const place = (await call('GET', `/games/${own.id}/place`, null, maker)).data.place;
+  place.services.ServerScriptService = place.services.ServerScriptService || { c: 'ServerScriptService', p: {}, ch: [] };
+  place.services.ServerScriptService.ch.push({ c: 'Script', p: { Name: 'Quest', Source: 'local Hunt = game:GetService("HuntService")\nHunt:SetQuestText("Say hello to the dragon")\ngame:GetService("Players").PlayerAdded:Connect(function(p) wait(2) Hunt:CompleteQuest(p) end)' } });
+  await call('PUT', `/games/${own.id}/place`, { place }, maker);
+  await call('PATCH', `/games/${own.id}`, { isPublic: true }, maker);
+  const plain = (await call('POST', '/games', { name: 'Quest Rune Game', template: 'obby' }, maker)).data.game;
+  await call('PATCH', `/games/${plain.id}`, { isPublic: true }, maker);
+  // launch Lost Relics for everyone
+  assert.equal((await call('POST', '/admin/hunt/control', { action: 'launch', key: 'relics', public: true }, kid)).status, 403);
+  a = (await call('POST', '/admin/hunt/control', { action: 'launch', key: 'relics', public: true }, admin)).data;
+  assert.equal(a.current, 'relics');
+  assert.ok(a.past.some((p) => p.key === 'dimension'));
+  const keepGames = a.games;
+  const keepAuto = a.autoPlayers;
+  const bmId = a.official.find((x) => x.name === 'Button Mania').id;
+  await call('POST', '/admin/hunt', { autoPlayers: 0, games: [...a.games, bmId, own.id, plain.id] }, admin);
+  const h = (await call('GET', '/hunt', null, kid)).data;
+  assert.equal(h.name, 'The Hunt: Lost Relics');
+  assert.equal(h.kind, 'quests');
+  assert.equal(h.count, 0);
+  const g = (name) => h.games.find((x) => x.name === name);
+  assert.equal(g('Quest Script Game').quest, 'Say hello to the dragon');
+  assert.match(g('Quest Rune Game').quest, /runes/);
+  assert.match(g('Button Mania').quest, /button/i);
+  // 1) the game's own script completes the quest
+  const c1 = await join(kid, { placeId: own.id });
+  const q1 = await c1.wait((m) => m.t === 'huntQuest');
+  assert.equal(q1.text, 'Say hello to the dragon');
+  const done1 = await c1.wait((m) => m.t === 'hunt', 8000);
+  assert.equal(done1.kind, 'quests');
+  assert.deepEqual(done1.reward.items.map((i) => i.name), ['Relic Hunter Tee']);
+  c1.ws.close();
+  // 2) Button Mania: press every button
+  const bm = g('Button Mania');
+  const c2 = await join(kid, { placeId: bm.id });
+  const w2 = await c2.wait((m) => m.t === 'welcome');
+  await c2.wait((m) => m.t === 'huntQuest');
+  const btns = w2.snapshot.find((s) => s.c === 'Workspace').ch.find((n) => n.p.Name === 'Buttons').ch.filter((n) => (n.ch || []).some((x) => x.c === 'ClickDetector'));
+  assert.ok(btns.length >= 3);
+  for (const b of btns) {
+    c2.ws.send(JSON.stringify({ t: 'move', p: [b.p.CFrame[0], b.p.CFrame[1] + 2, b.p.CFrame[2] - 4], ry: 0, a: 'idle' }));
+    await new Promise((r) => setTimeout(r, 120));
+    c2.ws.send(JSON.stringify({ t: 'click', id: b.id }));
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  assert.equal((await c2.wait((m) => m.t === 'hunt', 5000)).count, 2);
+  c2.ws.close();
+  // 3) the runes, in order
+  const c3 = await join(kid, { placeId: plain.id });
+  await c3.wait((m) => m.t === 'huntQuest');
+  const findRunes = () => {
+    for (const m of c3.inbox) {
+      const nodes = m.t === 'tick' ? m.ops.filter((o) => o[0] === 'add').map((o) => o[2]) : [];
+      for (const n of nodes) if (n.c === 'Folder' && n.p.Name === 'HuntRunes' && (n.ch || []).length === 3) return n.ch;
+    }
+    return null;
+  };
+  await c3.wait((m) => m.t === 'tick' && !!findRunes());
+  await c3.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  const runes = findRunes();
+  const touch = async (r) => {
+    c3.ws.send(JSON.stringify({ t: 'move', p: [r.p.CFrame[0], r.p.CFrame[1], r.p.CFrame[2]], ry: 0, a: 'idle' }));
+    await new Promise((res) => setTimeout(res, 400));
+  };
+  await touch(runes[2]);
+  assert.ok(await c3.wait((m) => m.t === 'sys' && /still dark/.test(m.text)));
+  await touch(runes[0]);
+  await touch(runes[1]);
+  await touch(runes[2]);
+  assert.equal((await c3.wait((m) => m.t === 'hunt', 5000)).count, 3);
+  c3.ws.close();
+  // schedules: no times in the past; end it now
+  assert.equal((await call('POST', '/admin/hunt/control', { action: 'schedule', endsAt: Date.now() - 3600e3 }, admin)).status, 400);
+  a = (await call('POST', '/admin/hunt/control', { action: 'schedule', endsAt: Date.now() + 3600e3, next: { key: 'dimension', startsAt: Date.now() + 7200e3, public: true } }, admin)).data;
+  assert.ok(a.endsAt > Date.now() && a.next.key === 'dimension');
+  a = (await call('POST', '/admin/hunt/control', { action: 'end' }, admin)).data;
+  assert.equal(a.state, 'ended');
+  const after = (await call('GET', '/hunt', null, kid)).data;
+  assert.equal(after.visible, false);
+  assert.equal(after.ended.name, 'The Hunt: Lost Relics');
+  assert.equal(after.next.name, 'The Hunt: Another Dimension');
+  assert.equal((await call('GET', '/auth/me', null, kid)).data.user.hunt, false);
+  // back to the dimension event for the other tests
+  await call('POST', '/admin/hunt/control', { action: 'schedule', next: null }, admin);
+  await call('POST', '/admin/hunt/control', { action: 'launch', key: 'dimension', public: true }, admin);
+  await call('POST', '/admin/hunt', { autoPlayers: keepAuto, games: keepGames }, admin);
+});

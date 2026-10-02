@@ -456,15 +456,80 @@ async function drawPromo() {
 }
 
 // ---------------------------------------------------------------- The Hunt
-// Private (admins only) until it's switched on; pick official games, and how
-// many of the most popular player games join automatically.
+// The event manager: what's live, launch a prepared event, open it for
+// everyone, end it, schedule the end and the next start; then the settings of
+// the live event and finds for a single player.
+const toLocalInput = (ms) => (ms ? new Date(ms - new Date(ms).getTimezoneOffset() * 60e3).toISOString().slice(0, 16) : '');
+const fromLocalInput = (v) => (v ? new Date(v).getTime() : 0);
+const fmtWhen = (ms) => new Date(ms).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const KIND_LABEL = { quests: 'Quests in every game', shards: 'Hidden items in every game' };
+
 async function drawHunt() {
   body.replaceChildren(spinner());
   let h;
   try { h = await api.get('/admin/hunt'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
-  const pub = el('input', { type: 'checkbox', checked: h.public });
+  const control = async (b, msg) => {
+    try { await api.post('/admin/hunt/control', b); toast(msg, 'success'); drawHunt(); } catch (e) { toast(e.message, 'error'); }
+  };
+  const live = h.state === 'live';
+  const quests = h.kind === 'quests';
+  const unit = quests ? 'quests' : 'finds';
+
+  // ---- now
+  const endIn = el('input', { class: 'input', type: 'datetime-local', value: toLocalInput(h.endsAt), style: { width: 'auto' } });
+  const nowCard = el('div', { class: 'hunt-admin-card now' + (live ? ' live' : '') },
+    el('div', { class: 'row wrap', style: { gap: '10px', alignItems: 'center' } },
+      el('span', { class: 'hunt-state ' + (live ? (h.public ? 'live' : 'preview') : 'ended'), text: live ? (h.public ? 'LIVE' : 'PRIVATE PREVIEW') : 'ENDED' }),
+      el('h3', { class: 'no-i18n', style: { margin: 0 }, text: h.name }),
+      el('span', { class: 'small muted', text: KIND_LABEL[h.kind] || '' })),
+    el('div', { class: 'small muted', style: { margin: '6px 0 10px' } },
+      live ? `Started ${h.startedAt ? fmtWhen(h.startedAt) : '-'} · ${h.finders} players took part · ${h.riftShards} ${unit} by everyone` : `Ended ${h.endedAt ? fmtWhen(h.endedAt) : ''}`,
+      live ? (h.endsAt ? ` · ends ${fmtWhen(h.endsAt)}` : ' · no end time') : ''),
+    live ? el('div', { class: 'row wrap', style: { gap: '8px' } },
+      el('button', { class: 'btn ' + (h.public ? '' : 'btn-green'), text: h.public ? 'Make private (admins only)' : 'Open for everyone', onclick: async () => {
+        try { await api.post('/admin/hunt', { public: !h.public }); toast(h.public ? 'Now only admins can see it' : 'The Hunt is open for everyone!', 'success'); drawHunt(); } catch (e) { toast(e.message, 'error'); }
+      } }),
+      el('button', { class: 'btn btn-red', text: 'End now', onclick: () => { if (confirm(`End ${h.name} now? Players keep their prizes, the hub closes.`)) control({ action: 'end' }, 'The event has ended'); } })) : null,
+    live ? el('div', { class: 'row wrap', style: { gap: '8px', marginTop: '10px', alignItems: 'center' } },
+      el('span', { text: 'End automatically at' }), endIn,
+      el('button', { class: 'btn btn-small btn-primary', text: 'Set', onclick: () => { if (!endIn.value) return toast('Pick a date and time.', 'error'); control({ action: 'schedule', endsAt: fromLocalInput(endIn.value) }, 'End time saved'); } }),
+      h.endsAt ? el('button', { class: 'btn btn-small', text: 'No end time', onclick: () => control({ action: 'schedule', endsAt: 0 }, 'End time removed') }) : null) : null);
+
+  // ---- next (scheduled start)
+  const nextSel = el('select', { class: 'input', style: { width: 'auto' } }, h.events.map((e) => el('option', { value: e.key, text: e.name, selected: h.next ? h.next.key === e.key : e.key !== h.current })));
+  const nextAt = el('input', { class: 'input', type: 'datetime-local', value: toLocalInput(h.next?.startsAt || h.endsAt), style: { width: 'auto' } });
+  const nextPub = el('input', { type: 'checkbox', checked: !!h.next?.public });
+  const nextCard = el('div', { class: 'hunt-admin-card' },
+    el('h4', { text: 'Next event' }),
+    h.next ? el('div', { class: 'hunt-next-row' },
+      el('b', { class: 'no-i18n', text: h.events.find((e) => e.key === h.next.key)?.name || h.next.key }),
+      el('span', { text: ` starts ${fmtWhen(h.next.startsAt)}` }),
+      el('span', { class: 'small muted', text: h.next.public ? ' · open for everyone' : ' · as a private preview (open it when you are ready)' }),
+      el('button', { class: 'btn btn-small', style: { marginLeft: '8px' }, text: 'Cancel', onclick: () => control({ action: 'schedule', next: null }, 'Schedule cancelled') }))
+      : el('div', { class: 'small muted', text: 'Nothing scheduled.' }),
+    el('div', { class: 'row wrap', style: { gap: '8px', marginTop: '10px', alignItems: 'center' } },
+      nextSel, el('span', { text: 'starts at' }), nextAt,
+      el('label', { class: 'perm-row', style: { margin: 0 } }, nextPub, el('span', { text: 'Open for everyone' })),
+      el('button', { class: 'btn btn-small btn-primary', text: 'Schedule', onclick: () => {
+        if (!nextAt.value) return toast('Pick a date and time.', 'error');
+        control({ action: 'schedule', next: { key: nextSel.value, startsAt: fromLocalInput(nextAt.value), public: nextPub.checked } }, 'Next event scheduled');
+      } })),
+    el('p', { class: 'small muted', text: 'When the next event starts, the live one ends by itself. A private preview is only for admins: test it, then press Open for everyone.' }));
+
+  // ---- prepared events
+  const evCards = el('div', { class: 'hunt-events' }, h.events.map((e) => el('div', { class: 'hunt-admin-card event' + (e.key === h.current && live ? ' current' : '') },
+    el('b', { class: 'no-i18n', text: e.name }),
+    el('div', { class: 'small', text: `${KIND_LABEL[e.kind]} · ${e.prizes} prizes` }),
+    el('p', { class: 'small muted', text: e.description }),
+    e.key === h.current && live ? el('span', { class: 'hunt-state live', text: 'RUNNING' }) : el('div', { class: 'row wrap', style: { gap: '6px' } },
+      el('button', { class: 'btn btn-small', text: 'Launch (private preview)', onclick: () => { if (confirm(`Launch ${e.name} as a private preview now?${live ? ` ${h.name} ends.` : ''}`)) control({ action: 'launch', key: e.key, public: false }, `${e.name} started (private)`); } }),
+      el('button', { class: 'btn btn-small btn-green', text: 'Launch for everyone', onclick: () => { if (confirm(`Launch ${e.name} for everyone now?${live ? ` ${h.name} ends.` : ''}`)) control({ action: 'launch', key: e.key, public: true }, `${e.name} is live!`); } })))));
+
+  const past = h.past.length ? el('div', { class: 'small muted' }, h.past.slice().reverse().map((p) => el('div', { class: 'no-i18n', text: `${p.name} - ${p.players} players${p.ended ? ' - ended ' + fmtWhen(p.ended) : ''}` }))) : null;
+
+  // ---- settings of the live event
   const auto = el('input', { class: 'input', type: 'number', min: 0, max: 20, value: h.autoPlayers, style: { width: '90px' } });
-  const rift = el('input', { class: 'input', type: 'number', min: 1, max: 100000, value: h.riftGoal, style: { width: '110px' } });
+  const team = el('input', { class: 'input', type: 'number', min: 1, max: 100000, value: h.riftGoal, style: { width: '110px' } });
   const boxes = h.official.map((g) => {
     const cb = el('input', { type: 'checkbox', checked: h.games.includes(g.id) });
     cb.dataset.id = g.id;
@@ -472,32 +537,37 @@ async function drawHunt() {
   });
   const save = async () => {
     try {
-      await api.post('/admin/hunt', { public: pub.checked, autoPlayers: +auto.value, riftGoal: +rift.value, games: boxes.map((b) => b.firstChild).filter((c) => c.checked).map((c) => +c.dataset.id) });
-      toast(pub.checked ? 'The Hunt is open for everyone!' : 'Saved (still private)', 'success');
+      await api.post('/admin/hunt', { autoPlayers: +auto.value, riftGoal: +team.value, games: boxes.map((b) => b.firstChild).filter((c) => c.checked).map((c) => +c.dataset.id) });
+      toast('Saved', 'success');
       drawHunt();
     } catch (e) { toast(e.message, 'error'); }
   };
-  body.replaceChildren(
-    el('div', { class: 'badge-give' },
-      el('h3', { text: 'The Hunt' }),
-      el('p', { class: 'small muted', text: 'The Hunt: Another Dimension (part 2). A space hub with wormholes to every game in the event. A dimension shard is hidden in each game (placed automatically, even in player games) and players follow their scanner to it. Every shard gives 20 R$; 8 prizes up to the Crown of the Cosmos, plus bonus prizes for the 6 star fragments in the hub and for opening the Rift together (all players find the Rift goal of shards together).' }),
-      el('label', { class: 'perm-row' }, pub, el('b', { text: 'Open for everyone' }), el('span', { class: 'small muted', text: ' (off: only admins can see the page, play the hub and find tokens)' })),
-      el('div', { class: 'row wrap', style: { gap: '12px', margin: '10px 0' } },
-        el('a', { class: 'btn', href: '/hunt', text: 'Open the event page' }),
-        h.hubId ? el('a', { class: 'btn', href: `/game?id=${h.hubId}`, text: 'Hub game' }) : null,
-        el('span', { class: 'small muted', text: `${h.finders} players found tokens` }))),
+  const settings = live ? el('div', {},
+    el('h3', { text: 'Settings of the live event' }),
+    el('div', { class: 'row wrap', style: { gap: '12px', margin: '6px 0 12px' } },
+      el('a', { class: 'btn', href: '/hunt', text: 'Open the event page' }),
+      h.hubId ? el('a', { class: 'btn', href: `/game?id=${h.hubId}`, text: 'Hub game' }) : null),
     el('h4', { text: 'Official games' }), el('div', { class: 'hunt-admin-games' }, boxes),
     el('label', { class: 'row', style: { gap: '8px', margin: '12px 0' } }, el('span', { text: 'Most popular player games to add' }), auto),
-    el('label', { class: 'row wrap', style: { gap: '8px', margin: '12px 0' } }, el('span', { text: 'Rift goal (shards found by everyone together)' }), rift,
-      el('span', { class: 'small muted', text: `now ${h.riftShards}${h.riftOpen ? ' · OPEN' : ''} · the most possible is players × shards in the event` })),
+    el('label', { class: 'row wrap', style: { gap: '8px', margin: '12px 0' } }, el('span', { text: quests ? 'Team goal (quests done by everyone together)' : 'Rift goal (shards found by everyone together)' }), team,
+      el('span', { class: 'small muted', text: `now ${h.riftShards}${h.riftOpen ? ' · OPEN' : ''} · the most possible is players × games in the event` })),
     el('h4', { text: `In the event now (${h.event.length})` }),
-    el('div', { class: 'promo-chosen' }, h.event.map((g) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' })))),
+    quests
+      ? el('div', { class: 'hunt-admin-quests' }, h.event.map((g) => el('div', { class: 'hunt-admin-quest' }, el('b', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' }), el('div', { class: 'small', text: g.quest }))))
+      : el('div', { class: 'promo-chosen' }, h.event.map((g) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' })))),
     el('button', { class: 'btn btn-primary', style: { marginTop: '14px' }, text: 'Save', onclick: save }),
-    huntPlayerBox());
+    huntPlayerBox(quests)) : null;
+
+  body.replaceChildren(
+    el('div', { class: 'badge-give' }, el('h3', { text: 'The Hunt' }), nowCard, nextCard),
+    el('h3', { text: 'Prepared events' }), evCards,
+    past ? el('div', { style: { margin: '10px 0 18px' } }, el('h4', { text: 'Past events' }), past) : null,
+    settings);
 }
 
-// Give or take a player's Hunt tokens (prizes and Robits come with them as usual).
-function huntPlayerBox() {
+// Give or take a player's finds (prizes and Robits come with them as usual).
+function huntPlayerBox(quests) {
+  const what = quests ? 'quests' : 'finds';
   const who = el('input', { class: 'input', placeholder: 'Player name', list: 'admin-usernames-hunt', autocomplete: 'off', style: { maxWidth: '260px' } });
   const names = el('datalist', { id: 'admin-usernames-hunt' }, data.users.map((u) => el('option', { value: u.username })));
   const out = el('div');
@@ -505,12 +575,12 @@ function huntPlayerBox() {
     out.replaceChildren(
       el('div', { class: 'row wrap', style: { gap: '10px', margin: '10px 0' } },
         el('b', { class: 'no-i18n', text: p.user.username }),
-        el('span', { text: `${p.count} / ${p.total} tokens` }),
-        el('button', { class: 'btn btn-small btn-green', text: 'Give all tokens', onclick: () => send({ all: true }) }),
-        el('button', { class: 'btn btn-small btn-red', text: 'Take all tokens', onclick: () => { if (confirm('Take all tokens? Prizes stay.')) send({ all: true, take: true }); } })),
-      el('div', { class: 'small muted', style: { marginBottom: '6px' }, text: 'Click a game to give or take its shard.' }),
+        el('span', { text: `${p.count} / ${p.total} ${what}` }),
+        el('button', { class: 'btn btn-small btn-green', text: 'Give all', onclick: () => send({ all: true }) }),
+        el('button', { class: 'btn btn-small btn-red', text: 'Take all', onclick: () => { if (confirm('Take everything? Prizes stay.')) send({ all: true, take: true }); } })),
+      el('div', { class: 'small muted', style: { marginBottom: '6px' }, text: 'Click a game to give or take it.' }),
       el('div', { class: 'badge-picker' }, p.games.map((g) => el('button', {
-        class: 'badge-toggle' + (g.found ? ' on' : ''), title: g.found ? 'Take this shard' : 'Give this shard',
+        class: 'badge-toggle' + (g.found ? ' on' : ''), title: g.found ? 'Take' : 'Give',
         onclick: () => send({ gameId: g.id, take: g.found }),
       }, el('span', { class: 'hunt-dot-mini' + (g.found ? ' got' : '') }), el('span', { class: 'no-i18n', text: g.name })))));
   };
@@ -526,8 +596,8 @@ function huntPlayerBox() {
   };
   who.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
   return el('div', { class: 'badge-give', style: { marginTop: '24px', borderBottom: 0 } },
-    el('h3', { text: 'Tokens for a player' }),
-    el('p', { class: 'small muted', text: 'Give or take tokens by hand. Given tokens bring their 15 R$ and unlock prizes like found ones; taking tokens keeps the prizes.' }),
+    el('h3', { text: quests ? 'Quests for a player' : 'Finds for a player' }),
+    el('p', { class: 'small muted', text: 'Give or take by hand. What you give brings its Robits and unlocks prizes like the real thing; taking keeps the prizes.' }),
     el('div', { class: 'row wrap' }, who, names, el('button', { class: 'btn btn-primary', text: 'Show', onclick: load })),
     out);
 }

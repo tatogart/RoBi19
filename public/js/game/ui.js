@@ -418,8 +418,34 @@ export class HUD {
     this.scanner.dataset.level = level;
   }
 
-  huntBanner(count, total, reward, robits) {
-    const b = h('div', 'hunt-banner', `<div class="hunt-token"></div><div><div class="hunt-title">SHARD FOUND!</div>
+  // The Hunt quest panel (quest events): the quest of this game and how far
+  // along you are; a countdown while the runes are lit.
+  huntQuest(m) {
+    if (!this.quest) {
+      this.quest = h('div', 'hunt-quest', '<div class="hq-title">THE HUNT QUEST</div><div class="hq-text"></div><div class="hq-progress"></div><div class="hq-timer"></div>');
+      this.root.append(this.quest);
+    }
+    const q = this.quest;
+    q.classList.toggle('done', !!m.done);
+    q.querySelector('.hq-text').textContent = m.text;
+    q.querySelector('.hq-progress').textContent = m.done ? '✓ Relic found!' : m.progress || '';
+    clearInterval(this.questTimer);
+    const timer = q.querySelector('.hq-timer');
+    timer.textContent = '';
+    if (m.left > 0 && !m.done) {
+      const end = Date.now() + m.left * 1000;
+      const draw = () => {
+        const s = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+        timer.textContent = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        if (!s) clearInterval(this.questTimer);
+      };
+      draw();
+      this.questTimer = setInterval(draw, 500);
+    }
+  }
+
+  huntBanner(count, total, reward, robits, kind) {
+    const b = h('div', 'hunt-banner' + (kind === 'quests' ? ' relic' : ''), `<div class="hunt-token"></div><div><div class="hunt-title">${kind === 'quests' ? 'QUEST COMPLETE!' : 'SHARD FOUND!'}</div>
       <div class="hunt-count">${count} / ${total}${robits ? `<span class="hunt-robits">+${robits} R$</span>` : ''}</div>${reward ? `<div class="hunt-reward">You won: ${esc(reward.name)}!</div>` : ''}</div>`);
     this.root.append(b);
     setTimeout(() => b.classList.add('out'), 4500);

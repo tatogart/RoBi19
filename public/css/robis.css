@@ -545,3 +545,16 @@ html[data-theme="dark"] .group-card { background: #2b2d2f; }
 .perm-num .input { width: 130px; padding: 4px 8px; }
 .perm-chips { display: flex; flex-wrap: wrap; gap: 5px; width: 100%; }
 .perm-chips .badge-toggle { padding: 3px 10px; }
+.hunt-admin-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin: 10px 0; background: var(--panel); }
+.hunt-admin-card.now.live { border-left: 4px solid #02b757; }
+.hunt-admin-card h4 { margin: 0 0 6px; }
+.hunt-state { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: 1px; padding: 3px 9px; border-radius: 10px; color: #fff; background: #888; }
+.hunt-state.live { background: #02b757; }
+.hunt-state.preview { background: #e8a400; }
+.hunt-state.ended { background: #888; }
+.hunt-events { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.hunt-admin-card.event { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.hunt-admin-card.event.current { border-color: #02b757; }
+.hunt-admin-card.event p { margin: 4px 0 6px; flex: 1; }
+.hunt-admin-quests { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
+.hunt-admin-quest { border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }

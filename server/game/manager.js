@@ -60,6 +60,10 @@ export class GameManager {
         // the hub's own little quests (star fragments) and the shared rift counter
         fragment: (userId, n) => this.hunt.fragment(userId, n, gameId),
         global: () => this.hunt.global(),
+        kind: () => this.hunt.kind(),
+        quest: () => this.hunt.quest(gameId),
+        hubQuest: (userId) => this.hunt.hubQuest(userId, gameId),
+        isHub: () => this.hunt.isHub(gameId),
       } : null,
     };
   }

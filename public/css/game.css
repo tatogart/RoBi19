@@ -247,3 +247,14 @@ body:has(.game-root.touch) .room-hint { display: none; }
 @keyframes hunt-in { from { transform: translateX(-50%) scale(.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 @keyframes hunt-spin { from { transform: scaleX(1); } to { transform: scaleX(.35); } }
 .hunt-robits { margin-left: 10px; color: #7dffb0; }
+.hunt-quest { position: absolute; top: 34%; right: 12px; width: 230px; padding: 10px 12px; border-radius: 10px; background: rgba(28, 22, 10, .82); border: 2px solid #c8a165; color: #f5ead2; z-index: 30; pointer-events: none; font-size: 13px; }
+.hunt-quest .hq-title { font-weight: 900; letter-spacing: 1px; font-size: 11px; color: #ffc94a; }
+.hunt-quest .hq-text { margin: 4px 0; font-weight: 700; line-height: 1.25; }
+.hunt-quest .hq-progress { color: #9be6c2; font-size: 12px; }
+.hunt-quest .hq-timer { color: #ffb347; font-weight: 800; margin-top: 3px; }
+.hunt-quest.done { border-color: #5bd6a0; }
+.hunt-quest.done .hq-progress { color: #5bd6a0; font-weight: 800; }
+.hunt-banner.relic { background: linear-gradient(135deg, #2a1f0aee, #4a3a14ee); border-color: #ffc94a; box-shadow: 0 6px 30px rgba(255,201,74,.4); }
+.hunt-banner.relic .hunt-token { background: linear-gradient(135deg, #fff1c4, #ffc94a 45%, #8a6a1e); box-shadow: 0 0 22px #ffc94a; }
+.hunt-banner.relic .hunt-title { color: #ffd27a; text-shadow: 0 0 12px #c8a165; }
+@media (max-width: 700px) { .hunt-quest { width: 170px; font-size: 11px; top: 30%; } }

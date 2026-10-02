@@ -205,11 +205,12 @@ export class GameClient {
         setTimeout(() => { location.href = `/play?placeId=${+m.placeId}${m.place ? '&place=' + +m.place : ''}${m.serverId ? '&serverId=' + encodeURIComponent(m.serverId) : ''}`; }, 700);
         return;
       case 'hunt':
-        this.hud.huntBanner(m.count, m.total, m.reward, m.robits);
-        this.hud.addChat('', `The Hunt: shard found! ${m.count}/${m.total}` + (m.reward ? ` - you won ${m.reward.name}!` : ''), { system: true });
+        this.hud.huntBanner(m.count, m.total, m.reward, m.robits, m.kind);
+        this.hud.addChat('', (m.kind === 'quests' ? `The Hunt: quest complete! Relics: ${m.count}/${m.total}` : `The Hunt: shard found! ${m.count}/${m.total}`) + (m.reward ? ` - you won ${m.reward.name}!` : ''), { system: true });
         sound.coin();
         return;
       case 'huntSignal': this.hud.huntScanner(m.level); return;
+      case 'huntQuest': this.hud.huntQuest(m); return;
       case 'passList': this.hud.showPassList(m.passes || []); return;
       case 'passResult':
         if (m.ok) this.hud.dialog('Purchase complete', `You bought ${m.pass.name}! Your balance: R$ ${m.robits}.`, [{ text: 'OK', primary: true }]);
