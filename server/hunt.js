@@ -92,8 +92,9 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     log(uid, 0, `The Hunt prize: ${it.name}`);
     return { id: it.id, name: it.name };
   };
-  const collect = (uid, gameId) => {
-    if (!eligible(uid)) return null;
+  // force: given by an admin (works while the event is private too)
+  const collect = (uid, gameId, force = false) => {
+    if (!force && !eligible(uid)) return null;
     const games = eventGames();
     if (!games.some((g) => g.id === gameId)) return null;
     const have = H.progress[uid] || (H.progress[uid] = []);
@@ -104,7 +105,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     for (const k of prizeKeys()) if (p.count >= needFor(k, p.total)) { const r = giveReward(uid, k); if (r) rewards.push(r); }
     const reward = rewards.length ? { name: rewards.map((r) => r.name).join(', '), items: rewards } : null;
     const u = D.users[uid];
-    if (u) { u.robits += ROBITS_PER_TOKEN; log(uid, ROBITS_PER_TOKEN, `The Hunt token (${p.count}/${p.total})`); }
+    if (u) { u.robits += ROBITS_PER_TOKEN; log(uid, ROBITS_PER_TOKEN, force ? `The Hunt token from the admins (${p.count}/${p.total})` : `The Hunt token (${p.count}/${p.total})`); }
     db.save();
     return { new: true, count: p.count, total: p.total, reward, robits: ROBITS_PER_TOKEN };
   };
@@ -172,6 +173,37 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
       finders: Object.values(H.progress).filter((l) => l.length).length,
     });
   });
+  // Admin: one player's tokens. Give or take a game's token, give all, take all.
+  const findUser = (q) => {
+    const s = String(q || '').trim().toLowerCase();
+    return Object.values(D.users).find((u) => !u.system && (String(u.id) === s || u.username.toLowerCase() === s));
+  };
+  const playerTokens = (u) => ({ user: { id: u.id, username: u.username }, ...progress(u.id), prizes: H.rewarded[u.id] || [] });
+  api.get('/admin/hunt/player', requireAdmin, (req, res) => {
+    const u = findUser(req.query.user);
+    if (!u) return bad(res, 'No player with that name.', 404);
+    res.json(playerTokens(u));
+  });
+  // { user, gameId | all: true, take: bool }
+  api.post('/admin/hunt/tokens', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    const u = findUser(b.user);
+    if (!u) return bad(res, 'No player with that name.', 404);
+    const games = eventGames();
+    const ids = b.all ? games.map((g) => g.id) : [+b.gameId].filter((id) => games.some((g) => g.id === id));
+    if (!ids.length) return bad(res, 'That game is not in The Hunt.');
+    const prizes = [];
+    if (b.take) {
+      // tokens go away; prizes already won are kept
+      H.progress[u.id] = (H.progress[u.id] || []).filter((id) => !ids.includes(id));
+    } else {
+      for (const id of ids) { const r = collect(u.id, id, true); if (r?.reward) prizes.push(...r.reward.items); }
+    }
+    log(u.id, 0, `The Hunt: ${b.take ? 'took' : 'gave'} ${b.all ? 'all tokens' : '1 token'} (${req.user.username})`);
+    db.save();
+    res.json({ ...playerTokens(u), newPrizes: prizes });
+  });
+
   api.post('/admin/hunt', requireAdmin, (req, res) => {
     const b = req.body || {};
     if (b.public !== undefined) H.public = !!b.public;

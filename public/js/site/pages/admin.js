@@ -391,6 +391,7 @@ async function drawPromo() {
     const rows = [
       ...donate.packs.map((p) => ['r' + p.robits, `R$ ${fmtFull(p.robits)}`, p.price]),
       ...donate.memberships.map((m) => [m.id, data.memberships.find((x) => x.id === m.id)?.name || m.id, m.price]),
+      ...donate.giftcards.map((g) => [g.key, `Gift card: ${g.name}`, g.price]),
     ].map(([key, label, price]) => {
       const i = el('input', { class: 'input', value: price, placeholder: 'e.g. 99 ₽', maxlength: 30 });
       i.dataset.key = key;
@@ -481,7 +482,44 @@ async function drawHunt() {
     el('label', { class: 'row', style: { gap: '8px', margin: '12px 0' } }, el('span', { text: 'Most popular player games to add' }), auto),
     el('h4', { text: `In the event now (${h.event.length})` }),
     el('div', { class: 'promo-chosen' }, h.event.map((g) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' })))),
-    el('button', { class: 'btn btn-primary', style: { marginTop: '14px' }, text: 'Save', onclick: save }));
+    el('button', { class: 'btn btn-primary', style: { marginTop: '14px' }, text: 'Save', onclick: save }),
+    huntPlayerBox());
+}
+
+// Give or take a player's Hunt tokens (prizes and Robits come with them as usual).
+function huntPlayerBox() {
+  const who = el('input', { class: 'input', placeholder: 'Player name', list: 'admin-usernames-hunt', autocomplete: 'off', style: { maxWidth: '260px' } });
+  const names = el('datalist', { id: 'admin-usernames-hunt' }, data.users.map((u) => el('option', { value: u.username })));
+  const out = el('div');
+  const draw = (p) => {
+    out.replaceChildren(
+      el('div', { class: 'row wrap', style: { gap: '10px', margin: '10px 0' } },
+        el('b', { class: 'no-i18n', text: p.user.username }),
+        el('span', { text: `${p.count} / ${p.total} tokens` }),
+        el('button', { class: 'btn btn-small btn-green', text: 'Give all tokens', onclick: () => send({ all: true }) }),
+        el('button', { class: 'btn btn-small btn-red', text: 'Take all tokens', onclick: () => { if (confirm('Take all tokens? Prizes stay.')) send({ all: true, take: true }); } })),
+      el('div', { class: 'small muted', style: { marginBottom: '6px' }, text: 'Click a game to give or take its token.' }),
+      el('div', { class: 'badge-picker' }, p.games.map((g) => el('button', {
+        class: 'badge-toggle' + (g.found ? ' on' : ''), title: g.found ? 'Take this token' : 'Give this token',
+        onclick: () => send({ gameId: g.id, take: g.found }),
+      }, el('span', { class: 'hunt-dot-mini' + (g.found ? ' got' : '') }), el('span', { class: 'no-i18n', text: g.name })))));
+  };
+  const load = async () => {
+    try { draw(await api.get(`/admin/hunt/player?user=${encodeURIComponent(who.value.trim())}`)); } catch (e) { toast(e.message, 'error'); }
+  };
+  const send = async (b) => {
+    try {
+      const r = await api.post('/admin/hunt/tokens', { user: who.value.trim(), ...b });
+      draw(r);
+      toast(r.newPrizes?.length ? `Done! Prizes: ${r.newPrizes.map((x) => x.name).join(', ')}` : 'Done', 'success');
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  who.addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+  return el('div', { class: 'badge-give', style: { marginTop: '24px', borderBottom: 0 } },
+    el('h3', { text: 'Tokens for a player' }),
+    el('p', { class: 'small muted', text: 'Give or take tokens by hand. Given tokens bring their 15 R$ and unlock prizes like found ones; taking tokens keeps the prizes.' }),
+    el('div', { class: 'row wrap' }, who, names, el('button', { class: 'btn btn-primary', text: 'Show', onclick: load })),
+    out);
 }
 
 // Admins give other players rights (see PERMISSIONS in server/api.js).

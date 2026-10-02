@@ -1050,3 +1050,51 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   assert.equal((await call('POST', `/catalog/${prize.id}/buy`, {}, kid)).data.error, 'This item is not for sale.');
   await call('POST', '/admin/hunt', { public: false }, admin);
 });
+
+test('gift cards: buy with Robits, a friend redeems the code once', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const giver = (await call('POST', '/auth/signup', { username: 'GiftGiver', password: 'secret123' })).cookie;
+  const friend = (await call('POST', '/auth/signup', { username: 'GiftFriend', password: 'secret123' })).cookie;
+  const gid = (await call('GET', '/auth/me', null, giver)).data.user.id;
+  assert.equal((await call('POST', '/giftcards/buy', { key: 'g1000' }, giver)).status, 400); // not enough Robits
+  await call('POST', `/admin/users/${gid}/robits`, { amount: 5000 }, admin);
+  const before = (await call('GET', '/auth/me', null, giver)).data.user.robits;
+  const r = await call('POST', '/giftcards/buy', { key: 'g1000' }, giver);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.match(r.data.code, /^GIFT-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  assert.equal(r.data.robits, before - 1000);
+  const bc = (await call('POST', '/giftcards/buy', { key: 'gbc' }, giver)).data;
+  // the friend redeems both
+  const fb = (await call('GET', '/auth/me', null, friend)).data.user.robits;
+  assert.equal((await call('POST', '/promocodes/redeem', { code: r.data.code }, friend)).data.robits, 1000);
+  assert.equal((await call('GET', '/auth/me', null, friend)).data.user.robits, fb + 1000);
+  assert.equal((await call('POST', '/promocodes/redeem', { code: bc.code }, friend)).data.membership.name, 'Builders Club');
+  assert.equal((await call('POST', '/promocodes/redeem', { code: r.data.code }, admin)).data.error, 'This code has been used up.');
+  const mine = (await call('GET', '/giftcards/mine', null, giver)).data.cards;
+  assert.equal(mine.length, 2);
+  assert.ok(mine.every((c) => c.used && c.usedBy === 'GiftFriend'));
+  // prices for buying in Telegram
+  await call('POST', '/admin/donate', { prices: { g1000: '199 ₽' }, telegram: 'Robis_support' }, admin);
+  assert.equal((await call('GET', '/economy/store')).data.donate.giftcards.find((g) => g.key === 'g1000').price, '199 ₽');
+});
+
+test('The Hunt: admins give and take a player\'s tokens', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'TokenKid', password: 'secret123' })).cookie;
+  assert.equal((await call('POST', '/admin/hunt/tokens', { user: 'TokenKid', all: true }, kid)).status, 403);
+  let p = (await call('GET', '/admin/hunt/player?user=tokenkid', null, admin)).data;
+  assert.equal(p.count, 0);
+  const g = p.games[0];
+  const before = (await call('GET', '/auth/me', null, kid)).data.user.robits;
+  p = (await call('POST', '/admin/hunt/tokens', { user: 'TokenKid', gameId: g.id }, admin)).data;
+  assert.equal(p.count, 1);
+  assert.deepEqual(p.newPrizes.map((x) => x.name), ['The Hunt Tee']);
+  assert.equal((await call('GET', '/auth/me', null, kid)).data.user.robits, before + 15);
+  p = (await call('POST', '/admin/hunt/tokens', { user: 'TokenKid', all: true }, admin)).data;
+  assert.equal(p.count, p.total);
+  assert.ok(p.prizes.includes('all'));
+  p = (await call('POST', '/admin/hunt/tokens', { user: 'TokenKid', all: true, take: true }, admin)).data;
+  assert.equal(p.count, 0);
+  assert.ok(p.prizes.includes('all')); // prizes stay
+  assert.equal((await call('POST', '/admin/hunt/tokens', { user: 'Nobody_xyz', all: true }, admin)).status, 404);
+});

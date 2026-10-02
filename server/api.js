@@ -1275,11 +1275,21 @@ export function createApi(db, manager, opts = {}) {
   // Donate: Robits packs and memberships are bought by writing to support in
   // Telegram; admins set the price labels (Admin Panel → Promo Codes).
   const DONATE_PACKS = [400, 1000, 2500, 5000, 10000];
+  // Gift cards: a code a friend redeems on the Promo Codes page. Bought with
+  // your own Robits (cost) or for money through Telegram (the price label).
+  const GIFT_CARDS = [
+    { key: 'g400', name: '400 Robits', robits: 400, cost: 400, color: '#00b06f' },
+    { key: 'g1000', name: '1,000 Robits', robits: 1000, cost: 1000, color: '#00a2ff' },
+    { key: 'g2500', name: '2,500 Robits', robits: 2500, cost: 2500, color: '#a347ff' },
+    { key: 'g5000', name: '5,000 Robits', robits: 5000, cost: 5000, color: '#ff4d8d' },
+    { key: 'gbc', name: 'Builders Club · 30 days', membership: 'BuildersClub', days: 30, cost: 2000, color: '#f5a300' },
+  ];
   if (!D.donate) D.donate = {};
   const donateInfo = () => ({
     telegram: D.donate.telegram || 'Robis_support',
     packs: DONATE_PACKS.map((robits) => ({ robits, price: D.donate.prices?.['r' + robits] || '' })),
     memberships: Object.keys(MEMBERSHIPS).filter((id) => id !== 'None').map((id) => ({ id, price: D.donate.prices?.[id] || '' })),
+    giftcards: GIFT_CARDS.map((g) => ({ ...g, price: D.donate.prices?.[g.key] || '' })),
   });
   api.get('/economy/store', (req, res) => {
     res.json({
@@ -1292,7 +1302,7 @@ export function createApi(db, manager, opts = {}) {
     const b = req.body || {};
     const prices = {};
     for (const [k, v] of Object.entries(b.prices || {})) {
-      if (!/^(r\d+|BuildersClub|TurboBuildersClub|OutrageousBuildersClub)$/.test(k)) continue;
+      if (!/^(r\d+|g\d+|gbc|BuildersClub|TurboBuildersClub|OutrageousBuildersClub)$/.test(k)) continue;
       const t = String(v || '').trim().slice(0, 30);
       if (t) prices[k] = t;
     }
@@ -1799,6 +1809,7 @@ export function createApi(db, manager, opts = {}) {
     gamedelete: () => 'Deleted game',
     promocodes: (b) => (b.op ? `Promo code ${String(b.code || '').toUpperCase()}: ${b.op}` : `Made ${b.code ? 'promo code ' + String(b.code).toUpperCase() : (Math.trunc(+b.count || 1)) + ' promo code(s)'}: R$${Math.trunc(+b.robits || 0)}${(b.items || []).length ? ' + ' + b.items.length + ' item(s)' : ''}${MEMBERSHIPS[b.membership] && b.membership !== 'None' ? ' + ' + MEMBERSHIPS[b.membership].name + (+b.membershipDays ? ' ' + Math.trunc(+b.membershipDays) + 'd' : '') : ''}`),
     donate: () => 'Changed donate prices',
+    hunt: (b) => (b.user ? `The Hunt: ${b.take ? 'took' : 'gave'} ${b.all ? 'all tokens' : 'a token'} ${b.take ? 'from' : 'to'} ${String(b.user).slice(0, 30)}` : `The Hunt settings${b.public !== undefined ? (b.public ? ' (open)' : ' (private)') : ''}`),
   };
   api.use('/admin', (req, res, next) => {
     if (req.method !== 'POST' || !req.user) return next();
@@ -1936,6 +1947,30 @@ export function createApi(db, manager, opts = {}) {
     u.membershipUntil = days ? now + days * 86400e3 : 0;
     return { name, until: u.membershipUntil };
   };
+
+  // Gift cards bought with your own Robits: a one-use code to give to someone.
+  api.post('/giftcards/buy', requireUser, (req, res) => {
+    const card = GIFT_CARDS.find((g) => g.key === req.body?.key);
+    if (!card) return bad(res, 'Unknown gift card.');
+    const u = req.user;
+    if (u.robits < card.cost) return bad(res, `You need ${card.cost - u.robits} more Robits for this gift card.`);
+    if (Object.values(D.promocodes).filter((p) => p.giftFrom === u.id && !p.usedBy.length).length >= 20) return bad(res, 'You have 20 unused gift cards. Give some away first!');
+    u.robits -= card.cost;
+    let code;
+    do { code = 'GIFT-' + newCode(); } while (D.promocodes[code]);
+    D.promocodes[code] = {
+      code, robits: card.robits || 0, items: [], membership: card.membership || '', memberDays: card.days || 0, maxUses: 1, usedBy: [], expires: 0,
+      active: true, created: Date.now(), by: u.id, byName: u.username, note: `Gift card (${card.name}) from ${u.username}`, giftFrom: u.id, giftName: card.name,
+    };
+    log(u.id, -card.cost, `Gift card: ${card.name}`);
+    db.save();
+    res.json({ code, name: card.name, robits: u.robits });
+  });
+  api.get('/giftcards/mine', requireUser, (req, res) => {
+    res.json({ cards: Object.values(D.promocodes).filter((p) => p.giftFrom === req.user.id).sort((a, b) => b.created - a.created).slice(0, 50).map((p) => ({
+      code: p.code, name: p.giftName, created: p.created, used: p.usedBy.length > 0, usedBy: p.usedBy.length ? D.users[p.usedBy[0]]?.username || '?' : null,
+    })) });
+  });
 
   // Players redeem codes. Wrong guesses are limited so codes can't be brute-forced.
   const promoFails = new Map(); // userId -> [times]

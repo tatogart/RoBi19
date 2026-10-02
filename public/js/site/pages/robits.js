@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, icon, fmtFull, timeAgo, toast } from '../ui.js';
+import { el, icon, fmtFull, timeAgo, toast, modal } from '../ui.js';
 import { LANG } from '../../i18n.js';
 
 const me = await initPage({ active: 'robits' });
@@ -50,6 +50,55 @@ app.append(el('h2', { style: { marginTop: '28px' }, text: 'Buy Robits' }),
     ' in Telegram with a ready message. Pay there and you get your Robits.'),
   packs);
 
+// ---------------------------------------------------------------- gift cards
+// A code for a friend: buy it with your Robits right here, or for money in Telegram.
+const giftBox = el('div', { class: 'gift-grid' }, donate.giftcards.map((g) => el('div', { class: 'gift-card-wrap' },
+  el('div', { class: 'gift-card', style: { background: `linear-gradient(135deg, ${g.color}, #1b1b1b 160%)` } },
+    el('div', { class: 'gift-logo', text: 'ROBIS' }),
+    el('div', { class: 'gift-chip' }),
+    el('div', { class: 'gift-amount', text: g.membership ? 'BC' : fmtFull(g.robits) }),
+    el('div', { class: 'gift-label', text: g.membership ? 'Builders Club · 30 days' : 'Robits' }),
+    el('div', { class: 'gift-ribbon', text: 'GIFT CARD' })),
+  el('div', { class: 'gift-buy' },
+    el('button', { class: 'btn btn-green', text: `Buy for R$ ${fmtFull(g.cost)}`, onclick: () => buyGift(g) }),
+    el('button', { class: 'btn', text: g.price ? `Buy · ${g.price}` : 'Buy in Telegram', onclick: () => buy(`a gift card: ${g.name}`) })))));
+const myGifts = el('div');
+async function loadGifts() {
+  const { cards } = await api.get('/giftcards/mine');
+  myGifts.replaceChildren(cards.length ? el('div', {}, el('h3', { text: 'My gift cards' }), el('table', { class: 'list' },
+    el('tr', {}, el('th', { text: 'Card' }), el('th', { text: 'Code' }), el('th', { text: 'Status' })),
+    cards.map((c) => el('tr', {}, el('td', { text: c.name }), el('td', {}, el('code', { class: 'no-i18n', text: c.code })),
+      el('td', { text: c.used ? `Redeemed by ${c.usedBy}` : 'Not used yet' }))))) : el('span'));
+}
+function giftLink(code) { return `${location.origin}${location.pathname.replace(/robits(\.html)?$/, '')}promocodes?code=${code}`; }
+function buyGift(g) {
+  modal({
+    title: 'Buy a gift card',
+    body: el('p', { text: `${g.name} for R$ ${fmtFull(g.cost)}. You get a code: give it to a friend and they redeem it on the Promo Codes page.` }),
+    buttons: [{ text: 'Buy', cls: 'btn-green', onClick: async () => {
+      try {
+        const r = await api.post('/giftcards/buy', { key: g.key });
+        updateBalance(r.robits); loadTx(); loadGifts();
+        const link = giftLink(r.code);
+        modal({
+          title: 'Your gift card',
+          body: el('div', { class: 'gift-done' },
+            el('p', { text: 'Give this code to a friend. It works once.' }),
+            el('div', { class: 'gift-code no-i18n', text: r.code }),
+            el('div', { class: 'row wrap', style: { justifyContent: 'center' } },
+              el('button', { class: 'btn btn-small', text: 'Copy code', onclick: () => navigator.clipboard?.writeText(r.code).then(() => toast('Copied', 'success')).catch(() => {}) }),
+              el('button', { class: 'btn btn-small btn-primary', text: 'Copy link', onclick: () => navigator.clipboard?.writeText(link).then(() => toast('Copied', 'success')).catch(() => {}) }))),
+          buttons: [{ text: 'Done', cls: 'btn-primary' }],
+        });
+      } catch (e) { toast(e.message, 'error'); return false; }
+    } }, { text: 'Cancel' }],
+  });
+}
+app.append(el('h2', { style: { marginTop: '28px' }, text: 'Gift Cards' }),
+  el('p', { class: 'muted small', text: 'Give Robits or Builders Club to a friend. Buy a card with your Robits and get its code right away, or buy it in Telegram.' }),
+  giftBox, myGifts);
+loadGifts();
+
 // ---------------------------------------------------------------- Builders Club
 const PERKS = {
   None: ['Play every game', 'Daily R$25', 'Build in Robis Studio'],
@@ -96,6 +145,18 @@ style.textContent = `
 .donate-amount .robits-icon { width: 26px; height: 26px; }
 .donate-price { font-weight: 600; }
 .donate-pack .btn { width: 100%; }
+.gift-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.gift-card { position: relative; aspect-ratio: 1.6; border-radius: 14px; color: #fff; padding: 14px 16px; overflow: hidden; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.gift-card::after { content: ''; position: absolute; right: -40px; top: -40px; width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,.12); }
+.gift-logo { font-weight: 900; letter-spacing: 3px; font-size: 18px; }
+.gift-chip { width: 34px; height: 24px; border-radius: 5px; background: linear-gradient(135deg, #ffe08a, #c99a2e); margin-top: 10px; }
+.gift-amount { font-size: 34px; font-weight: 900; margin-top: 8px; line-height: 1; }
+.gift-label { font-size: 13px; opacity: .9; }
+.gift-ribbon { position: absolute; right: 12px; bottom: 10px; font-size: 11px; font-weight: 800; letter-spacing: 2px; opacity: .85; }
+.gift-buy { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.gift-buy .btn { width: 100%; }
+.gift-code { font-family: Consolas, Menlo, monospace; font-size: 26px; letter-spacing: 2px; text-align: center; padding: 14px; border: 2px dashed var(--border); border-radius: 8px; margin: 10px 0; user-select: all; }
+.gift-done p { text-align: center; }
 .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .plan { display: flex; flex-direction: column; }
 .plan ul { padding-left: 20px; flex: 1; }
