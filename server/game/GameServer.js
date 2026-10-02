@@ -297,19 +297,28 @@ export class GameServer {
     this.huntToken = null;
   }
 
-  // Hides the token on top of a random platform you can stand on.
+  // Hides the token on top of a random platform you can stand on: away from
+  // the spawn, and more often up high (harder to reach, harder to spot).
   _spawnHuntToken() {
     const BAD = /lava|kill|death|acid|spike|hazard|laser|trap|seek|void|fire|poison|danger|water/i;
     const all = this.game.Workspace.GetDescendants().filter((p) => p instanceof BasePart && p._p.Anchored && p._p.CanCollide
-      && p._p.Transparency < 0.5 && p._p.Size.X >= 3 && p._p.Size.Z >= 3 && p._p.Size.X <= 600
+      && p._p.Transparency < 0.5 && p._p.Size.X >= 2 && p._p.Size.Z >= 2 && p._p.Size.X <= 600
       && !BAD.test(p.Name) && !(p.Parent && BAD.test(p.Parent.Name)) && !p.FindFirstChildOfClass('Script')
       && p.ClassName !== 'SpawnLocation' && !(p.Parent && p.Parent._isCharacter) && p.Position.Y < 600 && p.Position.Y > -50);
-    // Prefer anything but the big baseplate.
+    const spawns = this.game.Workspace.GetDescendants().filter((p) => p instanceof SpawnLocation).map((p) => p.Position);
+    const far = (p) => spawns.every((s) => Math.hypot(p.Position.X - s.X, p.Position.Z - s.Z) > 45);
+    // Not the big baseplate, and not right next to a spawn.
     const nice = all.filter((p) => p.Name !== 'Baseplate' && p._p.Size.X * p._p.Size.Z < 40000);
-    const pool = nice.length ? nice : all;
+    const hard = nice.filter(far);
+    const pool = hard.length ? hard : nice.length ? nice : all;
     let pos = new Vector3(0, 6, 0);
     if (pool.length) {
-      const p = pool[Math.floor(Math.random() * pool.length)];
+      // weighted: higher platforms are picked more often
+      const minY = Math.min(...pool.map((p) => p.Position.Y));
+      const weights = pool.map((p) => 1 + Math.max(0, p.Position.Y - minY) / 6);
+      let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+      let p = pool[pool.length - 1];
+      for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) { p = pool[i]; break; } }
       const top = p.CFrame.mul(new CFrame((Math.random() - 0.5) * (p.Size.X - 2), p.Size.Y / 2, (Math.random() - 0.5) * (p.Size.Z - 2))).Position;
       pos = top.add(new Vector3(0, 2.2, 0));
     }
@@ -318,20 +327,18 @@ export class GameServer {
     const t = createInstance('Part');
     t.Name = 'HuntToken';
     t.Shape = 'Ball';
-    t.Size = new Vector3(2.6, 2.6, 2.6);
+    t.Size = new Vector3(1.6, 1.6, 1.6);
     t.Material = 'Neon';
     t.Color = Color3.fromHex('#ffc400');
     t.Anchored = true;
     t.CanCollide = false;
     t.CFrame = CFrame.fromPosition(pos);
     t.Parent = folder;
-    const label = createInstance('BillboardText');
-    label.Text = 'THE HUNT';
-    label.StudsOffset = new Vector3(0, 2.5, 0);
-    label.Parent = t;
+    // a faint glow only - no label to give it away
     const light = createInstance('PointLight');
     light.Color = Color3.fromHex('#ffc400');
-    light.Range = 16;
+    light.Range = 6;
+    light.Brightness = 0.6;
     light.Parent = t;
     folder.Parent = this.game.Workspace;
     return t;

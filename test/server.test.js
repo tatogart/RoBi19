@@ -998,6 +998,7 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   assert.equal(h.public, false);
   assert.ok(h.games.length >= 2);
   assert.ok(h.games.some((g) => g.byPlayer && g.id === pg.id), JSON.stringify(h.games));
+  assert.ok(!h.games.some((g) => g.name === 'Happy Home in Robisia')); // no house in the event
   // keep the event small: one official game + the player game
   const adm = (await call('GET', '/admin/hunt', null, admin)).data;
   const official = adm.official.find((g) => /Obby/.test(g.name)) || adm.official[0];
@@ -1023,9 +1024,9 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   c.ws.send(JSON.stringify({ t: 'move', p: [x, y, z], ry: 0, a: 'idle' }));
   const got = await c.wait((m) => m.t === 'hunt');
   assert.deepEqual([got.count, got.total], [1, 2]);
-  assert.equal(got.robits, 25);
-  // the first token and half of the tokens: two prizes at once
-  assert.deepEqual(got.reward.items.map((i) => i.name), ['The Hunt Tee', 'Hunt Dragon']);
+  assert.equal(got.robits, 15);
+  // the first token's prize (the Hunt Dragon needs 60% now)
+  assert.deepEqual(got.reward.items.map((i) => i.name), ['The Hunt Tee']);
   assert.equal((await call('GET', '/hunt', null, admin)).data.rewards.length, 8);
   c.ws.close();
   // players without access get no token

@@ -11,15 +11,17 @@ import { officialAccount } from './seed/seed.js';
 // Prize ladder: count = a number of tokens, share = a part of all tokens.
 const REWARDS = {
   tee: { count: 1, name: 'The Hunt Tee', type: 'TShirt', data: { graphic: 'star' }, description: 'A prize from The Hunt: find your first token.' },
-  cap: { count: 3, name: "Hunter's Cap", type: 'Hat', data: { model: 'cap', color: '#2b2340', accent: '#ffc400' }, description: 'A prize from The Hunt: find 3 tokens.' },
-  shades: { count: 5, name: 'Golden Hunt Shades', type: 'Hat', data: { model: 'shades', color: '#ffc400', accent: '#b37f00' }, description: 'A prize from The Hunt: find 5 tokens.' },
-  kitty: { count: 8, name: 'Golden Hunt Kitty', type: 'Pet', data: { model: 'cat', color: '#ffc400', accent: '#2b2340' }, description: 'A prize from The Hunt: find 8 tokens.' },
-  half: { share: 0.5, name: 'Hunt Dragon', type: 'Pet', data: { model: 'dragon', color: '#1b1b1b', accent: '#ffc400' }, description: 'A prize from The Hunt: find half of the tokens.' },
-  wings: { share: 0.75, name: "Hunter's Golden Wings", type: 'Hat', data: { model: 'wings', color: '#ffc400', accent: '#fff3b0' }, description: 'A prize from The Hunt: find three quarters of the tokens.' },
-  sword: { share: 0.9, name: 'Golden Hunt Sword', type: 'Gear', data: { model: 'sword', color: '#ffc400' }, description: 'A prize from The Hunt: find almost every token.' },
+  cap: { count: 4, name: "Hunter's Cap", type: 'Hat', data: { model: 'cap', color: '#2b2340', accent: '#ffc400' }, description: 'A prize from The Hunt: find 4 tokens.' },
+  shades: { count: 7, name: 'Golden Hunt Shades', type: 'Hat', data: { model: 'shades', color: '#ffc400', accent: '#b37f00' }, description: 'A prize from The Hunt: find 7 tokens.' },
+  kitty: { count: 10, name: 'Golden Hunt Kitty', type: 'Pet', data: { model: 'cat', color: '#ffc400', accent: '#2b2340' }, description: 'A prize from The Hunt: find 10 tokens.' },
+  half: { share: 0.6, name: 'Hunt Dragon', type: 'Pet', data: { model: 'dragon', color: '#1b1b1b', accent: '#ffc400' }, description: 'A prize from The Hunt: find 60% of the tokens.' },
+  wings: { share: 0.8, name: "Hunter's Golden Wings", type: 'Hat', data: { model: 'wings', color: '#ffc400', accent: '#fff3b0' }, description: 'A prize from The Hunt: find 80% of the tokens.' },
+  sword: { share: 0.95, name: 'Golden Hunt Sword', type: 'Gear', data: { model: 'sword', color: '#ffc400' }, description: 'A prize from The Hunt: find almost every token.' },
   all: { share: 1, name: "Hunter's Golden Crown", type: 'Hat', data: { model: 'crown', color: '#ffc400', accent: '#e8002a' }, description: 'The grand prize of The Hunt: find every token.' },
 };
-const ROBITS_PER_TOKEN = 25;
+const ROBITS_PER_TOKEN = 15;
+// Games that are never in the event (nothing to hunt in a house).
+const EXCLUDED_KEYS = ['happyhome'];
 // tokens needed for a prize when the event has `total` tokens
 const needFor = (key, total) => {
   const r = REWARDS[key];
@@ -60,11 +62,12 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     return !!u && (u.isAdmin || u.id === official()?.id);
   };
   // The games in the event: the chosen official games + the most popular player games.
+  const excluded = (g) => EXCLUDED_KEYS.includes(g.seedKey);
   const eventGames = () => {
     const off = official();
-    const picked = H.games.map((id) => D.games[id]).filter((g) => g && g.id !== H.hubId);
+    const picked = H.games.map((id) => D.games[id]).filter((g) => g && g.id !== H.hubId && !excluded(g));
     const players = Object.values(D.games)
-      .filter((g) => g.isPublic && g.id !== H.hubId && (!off || g.creatorId !== off.id) && !picked.includes(g) && !D.users[g.creatorId]?.system)
+      .filter((g) => g.isPublic && g.id !== H.hubId && !excluded(g) && (!off || g.creatorId !== off.id) && !picked.includes(g) && !D.users[g.creatorId]?.system)
       .sort((a, b) => (b.visits || 0) - (a.visits || 0) || b.upVotes - a.upVotes)
       .slice(0, Math.max(0, H.autoPlayers | 0));
     return [...picked.map((g) => ({ g, byPlayer: false })), ...players.map((g) => ({ g, byPlayer: true }))].map(({ g, byPlayer }) => ({
@@ -119,7 +122,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     let hub = D.games[H.hubId];
     const games = eventGames();
     const prizes = prizeList(games.length);
-    const key = JSON.stringify([3, games.map((g) => [g.id, g.name, g.creator]), prizes.map((p) => [p.name, p.need])]);
+    const key = JSON.stringify([4, games.map((g) => [g.id, g.name, g.creator]), prizes.map((p) => [p.name, p.need])]);
     if (!hub) {
       const id = db.nextId('game');
       hub = D.games[id] = {
@@ -164,7 +167,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const off = official();
     res.json({
       public: !!H.public, autoPlayers: H.autoPlayers, games: H.games, hubId: H.hubId,
-      official: Object.values(D.games).filter((g) => off && g.creatorId === off.id && g.id !== H.hubId && g.isPublic).map((g) => ({ id: g.id, name: g.name, visits: g.visits })),
+      official: Object.values(D.games).filter((g) => off && g.creatorId === off.id && g.id !== H.hubId && g.isPublic && !excluded(g)).map((g) => ({ id: g.id, name: g.name, visits: g.visits })),
       event: eventGames(),
       finders: Object.values(H.progress).filter((l) => l.length).length,
     });
