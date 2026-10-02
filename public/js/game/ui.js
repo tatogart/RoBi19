@@ -403,6 +403,15 @@ export class HUD {
     row('Show FPS', fps);
   }
 
+  // The Hunt: a big banner when you find a token.
+  huntBanner(count, total, reward) {
+    const b = h('div', 'hunt-banner', `<div class="hunt-token"></div><div><div class="hunt-title">TOKEN FOUND!</div>
+      <div class="hunt-count">${count} / ${total}</div>${reward ? `<div class="hunt-reward">You won: ${esc(reward.name)}!</div>` : ''}</div>`);
+    this.root.append(b);
+    setTimeout(() => b.classList.add('out'), 4500);
+    setTimeout(() => b.remove(), 5200);
+  }
+
   // Game passes of this game: buy them without leaving.
   _storeTab() {
     this.pendingConfirm = null;

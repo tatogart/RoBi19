@@ -1,7 +1,7 @@
 // One running game instance ("server" in the 2019 sense): owns a DataModel,
 // runs its Scripts, simulates touches/physics and replicates to clients.
 import crypto from 'node:crypto';
-import { CFrame, Vector3 } from '../../shared/engine/types.js';
+import { CFrame, Vector3, Color3 } from '../../shared/engine/types.js';
 import {
   DataModel, BaseScript, BasePart, Script, SpawnLocation, Explosion, Humanoid, ClickDetector,
   createInstance, setErrorReporter, partAABB, CLASSES,
@@ -59,6 +59,8 @@ export class GameServer {
       awardBadge: (uid, name) => this.backend.awardBadge ? this.backend.awardBadge(uid, name) : false,
       hasBadge: (uid, name) => this.backend.hasBadge ? this.backend.hasBadge(uid, name) : false,
       passes: this.backend.passes || null,
+      hunt: this.backend.hunt || null,
+      teleport: (player, placeId) => this.teleportToPlace(player, placeId),
       promptPass: (player, passId) => this.promptPass(player, passId),
       bubble: (part, msg) => this.enqueue(['bubble', part.id, filterChat(msg)]),
     });
@@ -266,7 +268,92 @@ export class GameServer {
     players._fire('PlayerAdded', player);
     this.log('info', `${user.username} joined the game`);
     if (players.CharacterAutoLoads) this.loadCharacter(player);
+    this._huntJoin(session);
     return session;
+  }
+
+  // ------------------------------------------------------------ The Hunt
+  // While a game is in The Hunt event, a golden token is hidden in it for the
+  // players taking part (only admins while the event is private).
+  _huntJoin(session) {
+    const h = this.backend.hunt;
+    if (!h || this.isTest || !h.inEvent() || !h.eligible(session.user.id)) return;
+    if (!this.huntToken || this.huntToken._destroyed) this.huntToken = this._spawnHuntToken();
+    const p = h.progress(session.user.id);
+    const found = p && p.games.some((g) => g.id === this.gameId && g.found);
+    setTimeout(() => {
+      if (!this.sessions.has(session.user.id)) return;
+      this.send(session, { t: 'sys', text: found
+        ? `The Hunt: you already found the token in this game (${p.count}/${p.total}).`
+        : 'The Hunt: a golden token is hidden somewhere in this game. Find it!' });
+    }, 1500);
+  }
+
+  _huntCleanup() {
+    const h = this.backend.hunt;
+    if (!this.huntToken || this.huntToken._destroyed) return;
+    if ([...this.sessions.values()].some((s) => h && h.eligible(s.user.id))) return;
+    this.huntToken.Parent.Destroy();
+    this.huntToken = null;
+  }
+
+  // Hides the token on top of a random platform you can stand on.
+  _spawnHuntToken() {
+    const BAD = /lava|kill|death|acid|spike|hazard|laser|trap|seek|void|fire|poison|danger|water/i;
+    const all = this.game.Workspace.GetDescendants().filter((p) => p instanceof BasePart && p._p.Anchored && p._p.CanCollide
+      && p._p.Transparency < 0.5 && p._p.Size.X >= 3 && p._p.Size.Z >= 3 && p._p.Size.X <= 600
+      && !BAD.test(p.Name) && !(p.Parent && BAD.test(p.Parent.Name)) && !p.FindFirstChildOfClass('Script')
+      && p.ClassName !== 'SpawnLocation' && !(p.Parent && p.Parent._isCharacter) && p.Position.Y < 600 && p.Position.Y > -50);
+    // Prefer anything but the big baseplate.
+    const nice = all.filter((p) => p.Name !== 'Baseplate' && p._p.Size.X * p._p.Size.Z < 40000);
+    const pool = nice.length ? nice : all;
+    let pos = new Vector3(0, 6, 0);
+    if (pool.length) {
+      const p = pool[Math.floor(Math.random() * pool.length)];
+      const top = p.CFrame.mul(new CFrame((Math.random() - 0.5) * (p.Size.X - 2), p.Size.Y / 2, (Math.random() - 0.5) * (p.Size.Z - 2))).Position;
+      pos = top.add(new Vector3(0, 2.2, 0));
+    }
+    const folder = createInstance('Folder');
+    folder.Name = 'TheHunt';
+    const t = createInstance('Part');
+    t.Name = 'HuntToken';
+    t.Shape = 'Ball';
+    t.Size = new Vector3(2.6, 2.6, 2.6);
+    t.Material = 'Neon';
+    t.Color = Color3.fromHex('#ffc400');
+    t.Anchored = true;
+    t.CanCollide = false;
+    t.CFrame = CFrame.fromPosition(pos);
+    t.Parent = folder;
+    const label = createInstance('BillboardText');
+    label.Text = 'THE HUNT';
+    label.StudsOffset = new Vector3(0, 2.5, 0);
+    label.Parent = t;
+    const light = createInstance('PointLight');
+    light.Color = Color3.fromHex('#ffc400');
+    light.Range = 16;
+    light.Parent = t;
+    folder.Parent = this.game.Workspace;
+    return t;
+  }
+
+  _huntTouched(session) {
+    const h = this.backend.hunt;
+    if (!h || !h.eligible(session.user.id)) return;
+    const r = h.collect(session.user.id);
+    if (!r || !r.new) return;
+    this.send(session, { t: 'hunt', count: r.count, total: r.total, reward: r.reward || null });
+    this.log('info', `${session.user.username} found The Hunt token (${r.count}/${r.total})`);
+  }
+
+  // TeleportService:Teleport: the player's client moves to another game.
+  teleportToPlace(player, placeId) {
+    const session = this.sessions.get(player._p ? player._p.UserId : player.UserId);
+    if (!session || this.isTest) {
+      if (session) this.send(session, { t: 'sys', text: `Teleport to place ${placeId} (only works in a published game).` });
+      return;
+    }
+    this.send(session, { t: 'teleportPlace', placeId });
   }
 
   playerInfo(s) {
@@ -285,6 +372,7 @@ export class GameServer {
       player.Destroy();
     }
     this.sessions.delete(session.user.id);
+    this._huntCleanup();
     this.broadcast({ t: 'playerLeft', userId: session.user.id });
     this.log('info', `${session.user.username} ${reason}`);
     if (!this.sessions.size) {
@@ -826,6 +914,11 @@ export class GameServer {
       const [a, b] = pair;
       a._fire('Touched', b);
       b._fire('Touched', a);
+      if (this.huntToken && (a === this.huntToken || b === this.huntToken)) {
+        const limb = a === this.huntToken ? b : a;
+        const who = limb._parent && limb._parent._isCharacter && [...this.sessions.values()].find((x) => x.character === limb._parent);
+        if (who) this._huntTouched(who);
+      }
       // Touching a VehicleSeat (or any part of the car it's in) gets you in.
       for (const [part, limb] of [[a, b], [b, a]]) {
         if (!(limb._parent && limb._parent._isCharacter) || part._parent === limb._parent) continue;

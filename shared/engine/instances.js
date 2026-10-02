@@ -933,6 +933,10 @@ export const DataStoreService = defineClass('DataStoreService', Instance, { serv
 export const Chat = defineClass('Chat', Instance, { service: true, creatable: false, icon: 'service' });
 export const MarketplaceService = defineClass('MarketplaceService', Instance, { service: true, creatable: false, icon: 'service', events: ['PromptGamePassPurchaseFinished'] });
 export const BadgeService = defineClass('BadgeService', Instance, { service: true, creatable: false, icon: 'service' });
+// TeleportService:Teleport(placeId, player) sends a player to another game.
+export const TeleportService = defineClass('TeleportService', Instance, { service: true, creatable: false, icon: 'service' });
+// Robis extra: The Hunt event (HuntService:GetProgress(userId)).
+export const HuntService = defineClass('HuntService', Instance, { service: true, creatable: false, icon: 'service' });
 
 // Services shown in the Explorer (in order) and saved with a place.
 export const TREE_SERVICES = ['Workspace', 'Players', 'Lighting', 'ReplicatedStorage', 'ServerScriptService', 'ServerStorage', 'StarterGui', 'StarterPack', 'Teams'];

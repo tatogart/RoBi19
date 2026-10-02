@@ -50,6 +50,13 @@ export class GameManager {
         perks: (userId) => this.passes.perks(userId, gameId),
         list: (userId) => this.passes.forGame(gameId, userId),
       } : null,
+      // The Hunt (set up by server/hunt.js).
+      hunt: this.hunt ? {
+        eligible: (userId) => this.hunt.eligible(userId),
+        inEvent: () => this.hunt.inEvent(gameId),
+        collect: (userId) => this.hunt.collect(userId, gameId),
+        progress: (userId) => this.hunt.progress(userId),
+      } : null,
     };
   }
 

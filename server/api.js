@@ -10,6 +10,7 @@ import { TEMPLATES } from './seed/places.js';
 import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES, CATALOG } from '../shared/avatar.js';
 import { PLACE_FORMAT } from '../shared/engine/serialize.js';
 import { filterChat } from './game/chatfilter.js';
+import { installHunt } from './hunt.js';
 
 const ONLINE_MS = 2 * 60 * 1000;
 const STIPEND_MS = 24 * 3600 * 1000;
@@ -95,7 +96,7 @@ export function createApi(db, manager, opts = {}) {
     u.adminPerks = true;
     u.robits = (u.robits || 0) + ADMIN_ROBITS;
     u.membership = 'OutrageousBuildersClub';
-    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...Object.keys(D.items).map(Number)])];
+    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...Object.keys(D.items).filter((k) => !D.items[k].offsale).map(Number)])];
     for (const it of Object.values(D.items)) giveSerial(it, u.id);
     D.transactions.push({ userId: u.id, amount: ADMIN_ROBITS, desc: 'Admin bonus', time: Date.now() });
     db.save();
@@ -125,7 +126,7 @@ export function createApi(db, manager, opts = {}) {
   // Admins own every catalog item, new ones too.
   for (const u of Object.values(D.users)) {
     if (!u.isAdmin || !u.adminPerks || u.system) continue;
-    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...Object.keys(D.items).filter((k) => !D.items[k].custom).map(Number)])];
+    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...Object.keys(D.items).filter((k) => !D.items[k].custom && !D.items[k].offsale).map(Number)])];
   }
   if (syncSerials()) db.save();
 
@@ -234,6 +235,7 @@ export function createApi(db, manager, opts = {}) {
   // Robis Badges: earned automatically for what you do on the site (shown on profiles).
   const ACHIEVEMENTS = [
     ['admin', '🛡️', 'Administrator', 'Runs this Robis.', (u) => u.isAdmin],
+    ['hunter', '🗝️', 'The Hunter', 'Found every token in The Hunt.', (u) => (D.hunt?.rewarded?.[u.id] || []).includes('all')],
     ['club', '🏗️', 'Welcome To The Club', 'Has a Builders Club membership.', (u) => u.membership && u.membership !== 'None'],
     ['veteran', '🎖️', 'Veteran', 'Has been on Robis for a year.', (u) => Date.now() - u.created > 365 * 86400e3],
     ['friendly', '🤝', 'Friendly', 'Has 5 friends.', (u, x) => x.friendCount >= 5],
@@ -292,6 +294,7 @@ export function createApi(db, manager, opts = {}) {
     ...publicUser(u, true), robits: u.robits, canClaimStipend: Date.now() - (u.lastStipend || 0) > STIPEND_MS,
     stipend: stipendFor(u), rawAvatar: normalizeAvatar(u.avatar),
     perms: u.isAdmin ? Object.keys(PERMISSIONS) : (u.perms || []), tradePrivacy: u.tradePrivacy || 'everyone',
+    hunt: !!D.hunt && (D.hunt.public || u.isAdmin || u.id === officialAccount(D)?.id), // The Hunt event page in the menu
   });
 
   // Owners, admins and the people they add to Team Create can edit a place.
@@ -319,7 +322,7 @@ export function createApi(db, manager, opts = {}) {
     return {
       id: it.id, name: it.name, type: it.type, price: it.price, data: it.data, description: it.description,
       creator: creator ? { id: creator.id, username: creator.username, flags: userFlags(creator) } : null,
-      created: it.created, sales: it.sales, limited: !!it.limited, remaining: it.remaining ?? null, stock: it.stock ?? null, custom: !!it.custom,
+      created: it.created, sales: it.sales, offsale: !!it.offsale, limited: !!it.limited, remaining: it.remaining ?? null, stock: it.stock ?? null, custom: !!it.custom,
       owned: user ? (D.inventory[user.id] || []).includes(it.id) : false,
       serial: user ? serialOf(it, user.id) : null, lastSerial: it.limited ? it.lastSerial || 0 : null,
       bestPrice: it.limited ? bestPrice(it.id) : null,
@@ -1022,7 +1025,7 @@ export function createApi(db, manager, opts = {}) {
   // ------------------------------------------------------------ catalog
   api.get('/catalog', (req, res) => {
     const { type, q, sort } = req.query;
-    let items = Object.values(D.items).filter((i) => (!type || type === 'All' || i.type === type || (type === 'Accessories' && (i.type === 'Hat' || i.type === 'Hair')) || (type === 'Clothing' && ['Shirt', 'Pants', 'TShirt'].includes(i.type)) || (type === 'Collectibles' && i.limited)));
+    let items = Object.values(D.items).filter((i) => !i.offsale && (!type || type === 'All' || i.type === type || (type === 'Accessories' && (i.type === 'Hat' || i.type === 'Hair')) || (type === 'Clothing' && ['Shirt', 'Pants', 'TShirt'].includes(i.type)) || (type === 'Collectibles' && i.limited)));
     if (q) items = items.filter((i) => i.name.toLowerCase().includes(String(q).toLowerCase()));
     if (req.query.creator) items = items.filter((i) => i.creatorId === toInt(req.query.creator));
     if (sort === 'price-asc') items.sort((a, b) => a.price - b.price);
@@ -1224,6 +1227,7 @@ export function createApi(db, manager, opts = {}) {
     if (!it) return bad(res, 'Item not found', 404);
     const inv = D.inventory[req.user.id] || (D.inventory[req.user.id] = []);
     if (inv.includes(it.id)) return bad(res, 'You already own this item.');
+    if (it.offsale) return bad(res, 'This item is not for sale.');
     if (it.limited && it.remaining !== null && it.remaining <= 0) return bad(res, 'This item is sold out.');
     if (req.user.robits < it.price) return bad(res, `You need ${it.price - req.user.robits} more Robits to purchase this item.`);
     req.user.robits -= it.price;
@@ -1753,7 +1757,7 @@ export function createApi(db, manager, opts = {}) {
     const servers = manager.allServers().filter((s) => !s.isTest);
     res.json({
       users: Object.keys(D.users).length,
-      games: Object.keys(D.games).length,
+      games: Object.values(D.games).filter((g) => !g.huntHub || g.isPublic).length,
       playing: servers.reduce((a, s) => a + s.playerCount, 0),
       servers: servers.length,
     });
@@ -2011,7 +2015,7 @@ export function createApi(db, manager, opts = {}) {
 
   api.post('/admin/users/:id/items', requirePerm('economy'), (req, res) => {
     const u = target(req, res); if (!u) return;
-    const ids = req.body?.all ? Object.keys(D.items).map(Number) : [toInt(req.body?.itemId)].filter((i) => D.items[i]);
+    const ids = req.body?.all ? Object.keys(D.items).filter((k) => !D.items[k].offsale).map(Number) : [toInt(req.body?.itemId)].filter((i) => D.items[i]);
     if (!ids.length) return bad(res, 'Item not found.');
     D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...ids])];
     for (const id of ids) giveSerial(D.items[id], u.id);
@@ -2218,6 +2222,8 @@ export function createApi(db, manager, opts = {}) {
     setBan(u, !!req.body?.banned, req.body?.reason, { device: !!req.body?.device, ms: BAN_TIMES[req.body?.duration] || 0 });
     res.json({ user: adminUser(u) });
   });
+
+  installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial });
 
   api.use((req, res) => bad(res, 'Not found', 404));
   return api;

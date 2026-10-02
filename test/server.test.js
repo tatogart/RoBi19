@@ -979,3 +979,68 @@ test('private servers: buy, invite, only invited players join', async () => {
   assert.ok(renewed.server.until > ps.until + 29 * 86400e3);
   h.ws.close(); g.ws.close(); s1.ws.close();
 });
+
+test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'HuntKid', password: 'secret123' })).cookie;
+  // a popular player game joins automatically
+  const maker = (await call('POST', '/auth/signup', { username: 'HuntMaker', password: 'secret123' })).cookie;
+  const pg = (await call('POST', '/games', { name: 'Player Hit Game', template: 'obby' }, maker)).data.game;
+  await call('PATCH', `/games/${pg.id}`, { isPublic: true }, maker);
+  // private: players don't see it
+  assert.equal((await call('GET', '/hunt', null, kid)).data.visible, false);
+  assert.equal((await call('GET', '/auth/me', null, kid)).data.user.hunt, false);
+  assert.equal((await call('GET', '/admin/hunt', null, kid)).status, 403);
+  let h = (await call('GET', '/hunt', null, admin)).data;
+  assert.equal(h.visible, true);
+  assert.equal(h.public, false);
+  assert.ok(h.games.length >= 2);
+  assert.ok(h.games.some((g) => g.byPlayer && g.id === pg.id), JSON.stringify(h.games));
+  // keep the event small: one official game + the player game
+  const adm = (await call('GET', '/admin/hunt', null, admin)).data;
+  const official = adm.official.find((g) => /Obby/.test(g.name)) || adm.official[0];
+  await call('POST', '/admin/hunt', { games: [official.id], autoPlayers: 1 }, admin);
+  h = (await call('GET', '/hunt', null, admin)).data;
+  assert.equal(h.games.length, 2);
+  const playerGame = h.games.find((g) => g.byPlayer);
+  assert.ok(playerGame && h.games.some((g) => g.id === official.id));
+  // the hub game isn't public while the event is private
+  assert.equal((await call('GET', `/games/${h.hubId}`, null, kid)).status, 404);
+  // find the token in the player game
+  const findToken = (c) => {
+    for (const m of c.inbox) {
+      const nodes = m.t === 'welcome' ? m.snapshot.flatMap((s) => s.ch || []) : m.t === 'tick' ? m.ops.filter((o) => o[0] === 'add').map((o) => o[2]) : [];
+      for (const n of nodes) if (n.c === 'Folder' && n.p.Name === 'TheHunt') return n.ch[0];
+    }
+    return null;
+  };
+  const c = await join(admin, { placeId: playerGame.id });
+  await c.wait((m) => m.t === 'tick' && !!findToken(c));
+  const tok = findToken(c);
+  const [x, y, z] = tok.p.CFrame;
+  c.ws.send(JSON.stringify({ t: 'move', p: [x, y, z], ry: 0, a: 'idle' }));
+  const got = await c.wait((m) => m.t === 'hunt');
+  assert.deepEqual([got.count, got.total], [1, 2]);
+  assert.equal(got.reward.name, 'Hunt Dragon'); // half of the tokens
+  c.ws.close();
+  // players without access get no token
+  await call('POST', '/admin/hunt', {}, admin);
+  // the hub: walking into a portal teleports you
+  const hub = await join(admin, { placeId: h.hubId });
+  const w = await hub.wait((m) => m.t === 'welcome');
+  const portals = w.snapshot.find((s) => s.c === 'Workspace').ch.find((n) => n.p.Name === 'Portals');
+  const gate = portals.ch[0].ch.find((n) => n.p.Name === 'Portal');
+  await hub.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  hub.ws.send(JSON.stringify({ t: 'move', p: [gate.p.CFrame[0], 4.5, gate.p.CFrame[2]], ry: 0, a: 'idle' }));
+  const tp = await hub.wait((m) => m.t === 'teleportPlace');
+  assert.ok([official.id, playerGame.id].includes(tp.placeId));
+  hub.ws.close();
+  // open it for everyone
+  await call('POST', '/admin/hunt', { public: true }, admin);
+  assert.equal((await call('GET', '/hunt', null, kid)).data.visible, true);
+  assert.equal((await call('GET', `/games/${h.hubId}`, null, kid)).status, 200);
+  // prizes can't be bought
+  const prize = h.rewards[0];
+  assert.equal((await call('POST', `/catalog/${prize.id}/buy`, {}, kid)).data.error, 'This item is not for sale.');
+  await call('POST', '/admin/hunt', { public: false }, admin);
+});

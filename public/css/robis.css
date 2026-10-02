@@ -479,3 +479,8 @@ html[data-theme="dark"] .group-card { background: #2b2d2f; }
 .promo-actions { white-space: nowrap; }
 .promo-actions .btn + .btn { margin-left: 4px; }
 .promo-items-field { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; max-width: 420px; }
+
+/* The Hunt link in the menu */
+.hunt-nav .hunt-dot { width: 20px; height: 20px; border-radius: 50%; flex: none; background: radial-gradient(circle at 35% 35%, #fff6c4, #ffc400 45%, #b37f00); box-shadow: 0 0 8px rgba(255,196,0,.7); }
+.hunt-nav span:last-child { font-weight: 700; }
+.hunt-admin-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 12px; }

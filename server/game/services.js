@@ -218,6 +218,16 @@ export function installServices(game, rt, backend) {
   market.PlayerOwnsAsset = () => false;
   market.PromptPurchase = () => {};
 
+  const tp = game.GetService('TeleportService');
+  tp.Teleport = (placeId, player) => { if (backend.teleport) backend.teleport(player, +placeId); };
+  tp.TeleportAsync = (placeId, players) => { for (const p of Array.isArray(players) ? players : [players]) tp.Teleport(placeId, p); };
+
+  const hunt = game.GetService('HuntService');
+  hunt.GetProgress = (userId) => {
+    const p = backend.hunt ? backend.hunt.progress(+userId) : null;
+    return p ? { Collected: p.count, Total: p.total, Games: p.games.map((x) => ({ PlaceId: x.id, Name: x.name, Found: x.found })) } : { Collected: 0, Total: 0, Games: [] };
+  };
+
   const chat = game.GetService('Chat');
   chat.Chat = (part, msg) => backend.bubble && backend.bubble(part, String(msg));
   return { tweenSvc };

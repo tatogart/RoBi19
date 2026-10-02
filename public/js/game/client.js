@@ -197,6 +197,17 @@ export class GameClient {
       }
       case 'sys': this.hud.addChat('', m.text, { system: true }); this.hud.log({ level: 'info', text: m.text }); return;
       case 'promptPass': this.hud.passDialog(m.pass, m.robits); return;
+      case 'teleportPlace':
+        // TeleportService: off to another game.
+        this.closedByServer = true;
+        this.hud.dialog('Teleporting...', 'Taking you to the next game.', []);
+        setTimeout(() => { location.href = `/play?placeId=${+m.placeId}`; }, 700);
+        return;
+      case 'hunt':
+        this.hud.huntBanner(m.count, m.total, m.reward);
+        this.hud.addChat('', `The Hunt: token found! ${m.count}/${m.total}` + (m.reward ? ` - you won ${m.reward.name}!` : ''), { system: true });
+        sound.coin();
+        return;
       case 'passList': this.hud.showPassList(m.passes || []); return;
       case 'passResult':
         if (m.ok) this.hud.dialog('Purchase complete', `You bought ${m.pass.name}! Your balance: R$ ${m.robits}.`, [{ text: 'OK', primary: true }]);

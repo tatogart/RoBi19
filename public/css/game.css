@@ -227,3 +227,13 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .pass-row { display: flex; gap: 14px; align-items: center; text-align: left; }
 .pass-row p { margin: 4px 0 0; }
 .pass-balance { font-size: 13px; }
+
+/* The Hunt */
+.hunt-banner { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 18px; padding: 16px 28px; background: linear-gradient(135deg, #2b2340ee, #4a2f6bee); border: 2px solid #ffc400; border-radius: 14px; color: #fff; z-index: 35; box-shadow: 0 6px 30px rgba(255,196,0,.35); animation: hunt-in .5s cubic-bezier(.2,1.4,.4,1); pointer-events: none; transition: opacity .6s, transform .6s; }
+.hunt-banner.out { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+.hunt-token { width: 58px; height: 58px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff6c4, #ffc400 45%, #b37f00); box-shadow: 0 0 22px #ffc400; animation: hunt-spin 1.2s ease-in-out infinite alternate; }
+.hunt-title { font-size: 28px; font-weight: 800; letter-spacing: 2px; color: #ffc400; }
+.hunt-count { font-size: 18px; font-weight: 700; }
+.hunt-reward { margin-top: 4px; font-weight: 700; color: #7dffb0; }
+@keyframes hunt-in { from { transform: translateX(-50%) scale(.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+@keyframes hunt-spin { from { transform: scaleX(1); } to { transform: scaleX(.35); } }

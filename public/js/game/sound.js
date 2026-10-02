@@ -84,3 +84,18 @@ export function click() {
 }
 
 export function unlock() { ac(); }
+
+// A bright three-note chime (The Hunt token, rewards).
+export function coin() {
+  const c = ac(); if (!c) return;
+  const t = c.currentTime;
+  [988, 1319, 1976].forEach((f, i) => {
+    const osc = c.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = f;
+    const g = c.createGain();
+    env(g, t + i * 0.09, 0.005, 0.16, 0.12);
+    osc.connect(g); g.connect(master);
+    osc.start(t + i * 0.09); osc.stop(t + i * 0.09 + 0.3);
+  });
+}

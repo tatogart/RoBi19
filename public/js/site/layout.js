@@ -137,6 +137,7 @@ function buildNav(me, active) {
   }
   if (isStaff(me)) nav.append(el('a', { href: '/admin', class: active === 'admin' ? 'active' : '' }, icon('settings'), el('span', { text: 'Admin Panel' })));
   nav.append(el('div', { class: 'section-label', text: 'Events' }));
+  if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-dot' }), el('span', { text: 'The Hunt' })));
   nav.append(el('a', { href: '/game?id=2' }, icon('star'), el('span', { text: 'Obby Week!' })));
   document.addEventListener('click', (e) => {
     if (document.body.classList.contains('nav-open') && !nav.contains(e.target) && !e.target.closest('.menu-btn')) document.body.classList.remove('nav-open');

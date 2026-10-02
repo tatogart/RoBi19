@@ -56,6 +56,7 @@ const TABS = {
   players: { label: 'Players', draw: drawPlayers },
   badges: { label: 'Badges', draw: drawBadges, admin: true },
   promo: { label: 'Promo Codes', draw: drawPromo, perm: 'economy' },
+  hunt: { label: 'The Hunt', draw: drawHunt, admin: true },
   games: { label: 'Games', draw: drawGames },
   items: { label: 'Items', draw: drawItems },
   log: { label: 'Admin Log', draw: drawLog },
@@ -444,6 +445,43 @@ async function drawPromo() {
         c.state === 'off' ? el('button', { class: 'btn btn-small', text: 'Turn on', onclick: () => edit(c, 'on') }) : c.state === 'active' ? el('button', { class: 'btn btn-small', text: 'Turn off', onclick: () => edit(c, 'off') }) : null,
         el('button', { class: 'btn btn-small btn-red', text: 'Delete', onclick: () => edit(c, 'delete') })))))
     : el('div', { class: 'empty', text: 'No codes yet.' }));
+}
+
+// ---------------------------------------------------------------- The Hunt
+// Private (admins only) until it's switched on; pick official games, and how
+// many of the most popular player games join automatically.
+async function drawHunt() {
+  body.replaceChildren(spinner());
+  let h;
+  try { h = await api.get('/admin/hunt'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const pub = el('input', { type: 'checkbox', checked: h.public });
+  const auto = el('input', { class: 'input', type: 'number', min: 0, max: 20, value: h.autoPlayers, style: { width: '90px' } });
+  const boxes = h.official.map((g) => {
+    const cb = el('input', { type: 'checkbox', checked: h.games.includes(g.id) });
+    cb.dataset.id = g.id;
+    return el('label', { class: 'perm-row' }, cb, el('span', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: ` · ${fmtNum(g.visits || 0)} visits` }));
+  });
+  const save = async () => {
+    try {
+      await api.post('/admin/hunt', { public: pub.checked, autoPlayers: +auto.value, games: boxes.map((b) => b.firstChild).filter((c) => c.checked).map((c) => +c.dataset.id) });
+      toast(pub.checked ? 'The Hunt is open for everyone!' : 'Saved (still private)', 'success');
+      drawHunt();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  body.replaceChildren(
+    el('div', { class: 'badge-give' },
+      el('h3', { text: 'The Hunt' }),
+      el('p', { class: 'small muted', text: 'A hub with portals to every game in the event. A golden token is hidden in each game (placed automatically, even in player games); half of the tokens win the Hunt Dragon, all of them the Hunter\'s Golden Crown.' }),
+      el('label', { class: 'perm-row' }, pub, el('b', { text: 'Open for everyone' }), el('span', { class: 'small muted', text: ' (off: only admins can see the page, play the hub and find tokens)' })),
+      el('div', { class: 'row wrap', style: { gap: '12px', margin: '10px 0' } },
+        el('a', { class: 'btn', href: '/hunt', text: 'Open the event page' }),
+        h.hubId ? el('a', { class: 'btn', href: `/game?id=${h.hubId}`, text: 'Hub game' }) : null,
+        el('span', { class: 'small muted', text: `${h.finders} players found tokens` }))),
+    el('h4', { text: 'Official games' }), el('div', { class: 'hunt-admin-games' }, boxes),
+    el('label', { class: 'row', style: { gap: '8px', margin: '12px 0' } }, el('span', { text: 'Most popular player games to add' }), auto),
+    el('h4', { text: `In the event now (${h.event.length})` }),
+    el('div', { class: 'promo-chosen' }, h.event.map((g) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' })))),
+    el('button', { class: 'btn btn-primary', style: { marginTop: '14px' }, text: 'Save', onclick: save }));
 }
 
 // Admins give other players rights (see PERMISSIONS in server/api.js).
