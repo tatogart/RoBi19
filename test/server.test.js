@@ -99,7 +99,9 @@ test('signup, login validation, avatar and purchases', async () => {
   assert.equal((await call('POST', '/economy/stipend', {}, c2)).status, 400);
   // no free Robits or memberships: players can't give themselves any
   assert.equal((await call('POST', '/economy/buy', { amount: 400 }, c2)).status, 404);
-  assert.equal((await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, c2)).status, 404);
+  const club = await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, c2); // costs Robits now
+  assert.equal(club.status, 400);
+  assert.match(club.data.error, /more Robits/);
   // admin panel: only admins, gift Robits, ban
   assert.equal((await call('GET', '/admin/overview', null, c2)).status, 403);
   const ov = (await call('GET', '/admin/overview', null, cookie)).data;
@@ -1051,31 +1053,33 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   await call('POST', '/admin/hunt', { public: false }, admin);
 });
 
-test('gift cards: buy with Robits, a friend redeems the code once', async () => {
+test('Builders Club for Robits; gift cards only in Telegram', async () => {
   const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
-  const giver = (await call('POST', '/auth/signup', { username: 'GiftGiver', password: 'secret123' })).cookie;
-  const friend = (await call('POST', '/auth/signup', { username: 'GiftFriend', password: 'secret123' })).cookie;
-  const gid = (await call('GET', '/auth/me', null, giver)).data.user.id;
-  assert.equal((await call('POST', '/giftcards/buy', { key: 'g1000' }, giver)).status, 400); // not enough Robits
-  await call('POST', `/admin/users/${gid}/robits`, { amount: 5000 }, admin);
-  const before = (await call('GET', '/auth/me', null, giver)).data.user.robits;
-  const r = await call('POST', '/giftcards/buy', { key: 'g1000' }, giver);
+  const kid = (await call('POST', '/auth/signup', { username: 'ClubBuyer', password: 'secret123' })).cookie;
+  const me = async () => (await call('GET', '/auth/me', null, kid)).data.user;
+  const id = (await me()).id;
+  assert.equal((await call('POST', '/economy/membership', { tier: 'BuildersClub' }, kid)).status, 400); // not enough Robits
+  await call('POST', `/admin/users/${id}/robits`, { amount: 20000 }, admin);
+  const before = (await me()).robits;
+  const r = await call('POST', '/economy/membership', { tier: 'BuildersClub' }, kid);
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.match(r.data.code, /^GIFT-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-  assert.equal(r.data.robits, before - 1500); // a gift card costs 50% more than it gives
-  const bc = (await call('POST', '/giftcards/buy', { key: 'gbc' }, giver)).data;
-  // the friend redeems both
-  const fb = (await call('GET', '/auth/me', null, friend)).data.user.robits;
-  assert.equal((await call('POST', '/promocodes/redeem', { code: r.data.code }, friend)).data.robits, 1000);
-  assert.equal((await call('GET', '/auth/me', null, friend)).data.user.robits, fb + 1000);
-  assert.equal((await call('POST', '/promocodes/redeem', { code: bc.code }, friend)).data.membership.name, 'Builders Club');
-  assert.equal((await call('POST', '/promocodes/redeem', { code: r.data.code }, admin)).data.error, 'This code has been used up.');
-  const mine = (await call('GET', '/giftcards/mine', null, giver)).data.cards;
-  assert.equal(mine.length, 2);
-  assert.ok(mine.every((c) => c.used && c.usedBy === 'GiftFriend'));
-  // prices for buying in Telegram
+  assert.equal(r.data.robits, before - 1500);
+  let u = await me();
+  assert.equal(u.membership, 'BuildersClub');
+  assert.ok(u.membershipUntil > Date.now() + 29 * 86400e3);
+  // the same plan is extended, a better one upgrades, a lower one is refused
+  await call('POST', '/economy/membership', { tier: 'BuildersClub' }, kid);
+  assert.ok((await me()).membershipUntil > Date.now() + 59 * 86400e3);
+  await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, kid);
+  assert.equal((await me()).membership, 'TurboBuildersClub');
+  assert.equal((await call('POST', '/economy/membership', { tier: 'BuildersClub' }, kid)).status, 400);
+  assert.equal((await call('POST', '/economy/membership', { tier: 'None' }, kid)).status, 400);
+  // gift cards can't be bought for Robits any more; their Telegram prices still work
+  assert.equal((await call('POST', '/giftcards/buy', { key: 'g1000' }, kid)).status, 404);
   await call('POST', '/admin/donate', { prices: { g1000: '199 ₽' }, telegram: 'Robis_support' }, admin);
-  assert.equal((await call('GET', '/economy/store')).data.donate.giftcards.find((g) => g.key === 'g1000').price, '199 ₽');
+  const { donate } = (await call('GET', '/economy/store')).data;
+  assert.equal(donate.giftcards.find((g) => g.key === 'g1000').price, '199 ₽');
+  assert.equal(donate.memberships.find((m) => m.id === 'BuildersClub').cost, 1500);
 });
 
 test('The Hunt: admins give and take a player\'s tokens', async () => {

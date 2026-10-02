@@ -51,7 +51,7 @@ app.append(el('h2', { style: { marginTop: '28px' }, text: 'Buy Robits' }),
   packs);
 
 // ---------------------------------------------------------------- gift cards
-// A code for a friend: buy it with your Robits right here, or for money in Telegram.
+// Sold only in Telegram: support sends the buyer the card's code.
 const giftBox = el('div', { class: 'gift-grid' }, donate.giftcards.map((g) => el('div', { class: 'gift-card-wrap' },
   el('div', { class: 'gift-card', style: { background: `linear-gradient(135deg, ${g.color}, #1b1b1b 160%)` } },
     el('div', { class: 'gift-logo', text: 'ROBIS' }),
@@ -60,44 +60,11 @@ const giftBox = el('div', { class: 'gift-grid' }, donate.giftcards.map((g) => el
     el('div', { class: 'gift-label', text: g.membership ? 'Builders Club · 30 days' : 'Robits' }),
     el('div', { class: 'gift-ribbon', text: 'GIFT CARD' })),
   el('div', { class: 'gift-buy' },
-    el('button', { class: 'btn btn-green', text: `Buy for R$ ${fmtFull(g.cost)}`, onclick: () => buyGift(g) }),
-    el('button', { class: 'btn', text: g.price ? `Buy · ${g.price}` : 'Buy in Telegram', onclick: () => buy(`a gift card: ${g.name}`) })))));
-const myGifts = el('div');
-async function loadGifts() {
-  const { cards } = await api.get('/giftcards/mine');
-  myGifts.replaceChildren(cards.length ? el('div', {}, el('h3', { text: 'My gift cards' }), el('table', { class: 'list' },
-    el('tr', {}, el('th', { text: 'Card' }), el('th', { text: 'Code' }), el('th', { text: 'Status' })),
-    cards.map((c) => el('tr', {}, el('td', { text: c.name }), el('td', {}, el('code', { class: 'no-i18n', text: c.code })),
-      el('td', { text: c.used ? `Redeemed by ${c.usedBy}` : 'Not used yet' }))))) : el('span'));
-}
-function giftLink(code) { return `${location.origin}${location.pathname.replace(/robits(\.html)?$/, '')}promocodes?code=${code}`; }
-function buyGift(g) {
-  modal({
-    title: 'Buy a gift card',
-    body: el('p', { text: `${g.name} for R$ ${fmtFull(g.cost)}. You get a code: give it to a friend and they redeem it on the Promo Codes page.` }),
-    buttons: [{ text: 'Buy', cls: 'btn-green', onClick: async () => {
-      try {
-        const r = await api.post('/giftcards/buy', { key: g.key });
-        updateBalance(r.robits); loadTx(); loadGifts();
-        const link = giftLink(r.code);
-        modal({
-          title: 'Your gift card',
-          body: el('div', { class: 'gift-done' },
-            el('p', { text: 'Give this code to a friend. It works once.' }),
-            el('div', { class: 'gift-code no-i18n', text: r.code }),
-            el('div', { class: 'row wrap', style: { justifyContent: 'center' } },
-              el('button', { class: 'btn btn-small', text: 'Copy code', onclick: () => navigator.clipboard?.writeText(r.code).then(() => toast('Copied', 'success')).catch(() => {}) }),
-              el('button', { class: 'btn btn-small btn-primary', text: 'Copy link', onclick: () => navigator.clipboard?.writeText(link).then(() => toast('Copied', 'success')).catch(() => {}) }))),
-          buttons: [{ text: 'Done', cls: 'btn-primary' }],
-        });
-      } catch (e) { toast(e.message, 'error'); return false; }
-    } }, { text: 'Cancel' }],
-  });
-}
+    g.price ? el('div', { class: 'donate-price', style: { textAlign: 'center' }, text: g.price }) : null,
+    el('button', { class: 'btn btn-green', text: 'Buy in Telegram', onclick: () => buy(`a gift card: ${g.name}`) })))));
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Gift Cards' }),
-  el('p', { class: 'muted small', text: 'Give Robits or Builders Club to a friend. Buy a card with your Robits (a gift card costs 50% more than it gives) and get its code right away, or buy it in Telegram.' }),
-  giftBox, myGifts);
-loadGifts();
+  el('p', { class: 'muted small', text: 'Give Robits or Builders Club to a friend. Gift cards are sold in Telegram: you get a code, your friend redeems it on the Promo Codes page.' }),
+  giftBox);
 
 // ---------------------------------------------------------------- Builders Club
 const PERKS = {
@@ -112,11 +79,32 @@ const plans = el('div', { class: 'plans' }, store.memberships.map((m) => {
     el('h3', { text: m.name }),
     el('ul', {}, (PERKS[m.id] || []).map((f) => el('li', { text: f }))),
     current ? el('div', { class: 'plan-tag', text: me.membershipUntil ? `Your plan until ${new Date(me.membershipUntil).toLocaleDateString()}` : 'Your plan' }) : null,
-    m.id !== 'None' ? priceTag(donate.memberships.find((x) => x.id === m.id)?.price) : null,
-    m.id !== 'None' ? el('button', { class: 'btn btn-small btn-primary', text: current ? 'Extend' : 'Buy', onclick: () => buy(m.name) }) : null);
+    m.id !== 'None' ? planBuy(m, current) : null);
 }));
+// Builders Club: for Robits right here (30 days), or in Telegram.
+function planBuy(m, current) {
+  const d = donate.memberships.find((x) => x.id === m.id) || {};
+  return el('div', { class: 'plan-buy' },
+    el('div', { class: 'plan-cost' }, icon('robits', 'robits-icon'), el('span', { text: `${fmtFull(d.cost)} / ${d.days} days` })),
+    el('button', { class: 'btn btn-small btn-green', text: current ? `Extend for R$ ${fmtFull(d.cost)}` : `Buy for R$ ${fmtFull(d.cost)}`, onclick: () => buyPlan(m, d) }),
+    el('button', { class: 'btn btn-small', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(m.name) }));
+}
+function buyPlan(m, d) {
+  modal({
+    title: `Buy ${m.name}`,
+    body: el('p', { text: `${m.name} for ${d.days} days for R$ ${fmtFull(d.cost)}. If you have a lower plan, it is upgraded; the same plan is extended.` }),
+    buttons: [{ text: 'Buy', cls: 'btn-green', onClick: async () => {
+      try {
+        const r = await api.post('/economy/membership', { tier: m.id });
+        updateBalance(r.robits);
+        toast(`You have ${m.name} until ${new Date(r.until).toLocaleDateString()}!`, 'success');
+        setTimeout(() => location.reload(), 900);
+      } catch (e) { toast(e.message, 'error'); return false; }
+    } }, { text: 'Cancel' }],
+  });
+}
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Builders Club' }),
-  el('p', { class: 'muted small', text: 'Buy a membership through Telegram, get one from a promo code or from the admins.' }), plans);
+  el('p', { class: 'muted small', text: 'Buy a membership for Robits (30 days) or in Telegram, or get one from a promo code.' }), plans);
 
 // ---------------------------------------------------------------- transactions
 const tx = el('div', { class: 'panel' });
@@ -136,6 +124,10 @@ style.textContent = `
 .robits-icon.big { width: 38px; height: 38px; }
 .plan + .plan { margin-top: 0; }
 .plan .btn { margin-top: 8px; }
+.plan-buy { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.plan-buy .btn { margin-top: 0; width: 100%; }
+.plan-cost { display: flex; align-items: center; gap: 4px; font-weight: 700; color: #02b757; }
+.plan-cost .robits-icon { width: 18px; height: 18px; }
 .donate-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .donate-pack { margin: 0; text-align: center; position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-top: 22px; }
 .donate-pack + .donate-pack { margin-top: 0; }
