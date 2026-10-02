@@ -464,6 +464,7 @@ async function drawHunt() {
   try { h = await api.get('/admin/hunt'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
   const pub = el('input', { type: 'checkbox', checked: h.public });
   const auto = el('input', { class: 'input', type: 'number', min: 0, max: 20, value: h.autoPlayers, style: { width: '90px' } });
+  const rift = el('input', { class: 'input', type: 'number', min: 1, max: 100000, value: h.riftGoal, style: { width: '110px' } });
   const boxes = h.official.map((g) => {
     const cb = el('input', { type: 'checkbox', checked: h.games.includes(g.id) });
     cb.dataset.id = g.id;
@@ -471,7 +472,7 @@ async function drawHunt() {
   });
   const save = async () => {
     try {
-      await api.post('/admin/hunt', { public: pub.checked, autoPlayers: +auto.value, games: boxes.map((b) => b.firstChild).filter((c) => c.checked).map((c) => +c.dataset.id) });
+      await api.post('/admin/hunt', { public: pub.checked, autoPlayers: +auto.value, riftGoal: +rift.value, games: boxes.map((b) => b.firstChild).filter((c) => c.checked).map((c) => +c.dataset.id) });
       toast(pub.checked ? 'The Hunt is open for everyone!' : 'Saved (still private)', 'success');
       drawHunt();
     } catch (e) { toast(e.message, 'error'); }
@@ -479,7 +480,7 @@ async function drawHunt() {
   body.replaceChildren(
     el('div', { class: 'badge-give' },
       el('h3', { text: 'The Hunt' }),
-      el('p', { class: 'small muted', text: 'The Hunt: Another Dimension (part 2). A space hub with wormholes to every game in the event. A dimension shard is hidden in each game (placed automatically, even in player games) and players follow their scanner to it. Every shard gives 20 R$; 8 prizes up to the Crown of the Cosmos, plus bonus prizes for the 6 star fragments in the hub and for opening the Rift together (300 shards by everyone).' }),
+      el('p', { class: 'small muted', text: 'The Hunt: Another Dimension (part 2). A space hub with wormholes to every game in the event. A dimension shard is hidden in each game (placed automatically, even in player games) and players follow their scanner to it. Every shard gives 20 R$; 8 prizes up to the Crown of the Cosmos, plus bonus prizes for the 6 star fragments in the hub and for opening the Rift together (all players find the Rift goal of shards together).' }),
       el('label', { class: 'perm-row' }, pub, el('b', { text: 'Open for everyone' }), el('span', { class: 'small muted', text: ' (off: only admins can see the page, play the hub and find tokens)' })),
       el('div', { class: 'row wrap', style: { gap: '12px', margin: '10px 0' } },
         el('a', { class: 'btn', href: '/hunt', text: 'Open the event page' }),
@@ -487,6 +488,8 @@ async function drawHunt() {
         el('span', { class: 'small muted', text: `${h.finders} players found tokens` }))),
     el('h4', { text: 'Official games' }), el('div', { class: 'hunt-admin-games' }, boxes),
     el('label', { class: 'row', style: { gap: '8px', margin: '12px 0' } }, el('span', { text: 'Most popular player games to add' }), auto),
+    el('label', { class: 'row wrap', style: { gap: '8px', margin: '12px 0' } }, el('span', { text: 'Rift goal (shards found by everyone together)' }), rift,
+      el('span', { class: 'small muted', text: `now ${h.riftShards}${h.riftOpen ? ' · OPEN' : ''} · the most possible is players × shards in the event` })),
     el('h4', { text: `In the event now (${h.event.length})` }),
     el('div', { class: 'promo-chosen' }, h.event.map((g) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' })))),
     el('button', { class: 'btn btn-primary', style: { marginTop: '14px' }, text: 'Save', onclick: save }),

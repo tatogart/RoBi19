@@ -1265,3 +1265,20 @@ test('permissions: fine settings for each right (item types, limits, bans, Robit
   const u = (await call('GET', '/admin/overview', null, admin)).data.users.find((x) => x.id === id);
   assert.deepEqual(u.permOpts.items.types, ['Hat', 'Pet']);
 });
+
+test('The Hunt: the Rift goal can be reached and admins can change it', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  await call('POST', '/admin/hunt', { public: true }, admin);
+  const kid = (await call('POST', '/auth/signup', { username: 'RiftKid', password: 'secret123' })).cookie;
+  let a = (await call('GET', '/admin/hunt', null, admin)).data;
+  assert.equal(a.riftGoal, 50); // a round number a small server can reach
+  assert.equal((await call('POST', '/admin/hunt', { riftGoal: 0 }, admin)).status, 400);
+  const g = (await call('GET', '/admin/hunt/player?user=riftkid', null, admin)).data.games[0];
+  await call('POST', '/admin/hunt/tokens', { user: 'RiftKid', gameId: g.id }, admin);
+  a = (await call('GET', '/admin/hunt', null, admin)).data;
+  await call('POST', '/admin/hunt', { riftGoal: a.riftShards }, admin);
+  const h = (await call('GET', '/hunt', null, kid)).data;
+  assert.equal(h.rift.open, true);
+  assert.ok(h.rewards.find((r) => r.key === 'rift').got);
+  await call('POST', '/admin/hunt', { riftGoal: 50 }, admin);
+});

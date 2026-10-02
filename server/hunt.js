@@ -31,7 +31,8 @@ const ALL_PRIZES = { ...REWARDS, ...BONUS };
 const FRAGMENTS = 6;
 const ROBITS_PER_TOKEN = 20;
 const HUB_DESCRIPTION = 'Part 2 of The Hunt! A rift to another dimension has opened. Jump through the wormholes, follow your scanner to the dimension shard hidden in every game, collect star fragments in the low-gravity hub and open the Rift together with everyone. 10 prizes, up to the Crown of the Cosmos.';
-const RIFT_GOAL = 300;
+// Default shards everyone must find together to open the Rift (admins can change it).
+const RIFT_GOAL = 50;
 // Games that are never in the event (nothing to hunt in a house).
 const EXCLUDED_KEYS = ['happyhome'];
 // shards needed for a prize when the event has `total` shards
@@ -68,6 +69,9 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     H.version = 3;
   }
   H.fragments = H.fragments || {};
+  // 300 was out of reach for a small server: a round number players can get to
+  if (!H.riftGoal || H.riftGoal === 300) H.riftGoal = RIFT_GOAL;
+  const riftGoal = () => H.riftGoal || RIFT_GOAL;
 
   // Prize items: not for sale, only given by the event.
   H.rewards = H.rewards || {};
@@ -86,7 +90,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   // Shards found by everyone together; at RIFT_GOAL the Rift opens for all finders.
   const globalShards = () => Object.values(H.progress).reduce((n, l) => n + l.length, 0);
   const riftCheck = (uid) => {
-    if (!H.riftOpen && globalShards() >= RIFT_GOAL) H.riftOpen = true;
+    if (!H.riftOpen && globalShards() >= riftGoal()) H.riftOpen = true;
     if (H.riftOpen && uid && (H.progress[uid] || []).length) return giveReward(uid, 'rift');
     return null;
   };
@@ -163,8 +167,12 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     inEvent: (gameId) => eventGames().some((g) => g.id === gameId),
     collect,
     fragment,
-    global: () => ({ Shards: globalShards(), Goal: RIFT_GOAL, Open: !!H.riftOpen }),
-    progress: (uid) => (eligible(uid) ? progress(uid) : null),
+    global: () => ({ Shards: globalShards(), Goal: riftGoal(), Open: !!H.riftOpen }),
+    progress: (uid) => {
+      if (!eligible(uid)) return null;
+      if (riftCheck(uid)) db.save(); // the Rift opened since this player's last shard
+      return progress(uid);
+    },
   };
 
   // The hub game (owned by the main account), rebuilt when the list changes.
@@ -190,7 +198,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     hub.isPublic = !!H.public;
     hub.featured = !!H.public;
     if (H.hubKey !== key || !db.readPlace(hub.id)) {
-      db.writePlace(hub.id, buildHuntHub(games, prizes, { fragments: FRAGMENTS, goal: RIFT_GOAL }));
+      db.writePlace(hub.id, buildHuntHub(games, prizes, { fragments: FRAGMENTS, goal: riftGoal() }));
       hub.updated = Date.now();
       H.hubKey = key;
       // empty hub servers restart with the new portals
@@ -209,7 +217,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     return {
       name: HUNT_NAME, public: !!H.public, hubId: syncHub()?.id || null, ...p,
       robitsPerToken: ROBITS_PER_TOKEN,
-      rift: { shards: globalShards(), goal: RIFT_GOAL, open: !!H.riftOpen },
+      rift: { shards: globalShards(), goal: riftGoal(), open: !!H.riftOpen },
       fragments: { count: u ? (H.fragments[u.id] || []).length : 0, total: FRAGMENTS },
       rewards: prizeList(p.total).map((r) => ({ ...r, type: D.items[r.id].type, data: D.items[r.id].data, got: !!u && (H.rewarded[u.id] || []).includes(r.key) })),
     };
@@ -224,6 +232,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const off = official();
     res.json({
       public: !!H.public, autoPlayers: H.autoPlayers, games: H.games, hubId: H.hubId,
+      riftGoal: riftGoal(), riftShards: globalShards(), riftOpen: !!H.riftOpen,
       official: Object.values(D.games).filter((g) => off && g.creatorId === off.id && g.id !== H.hubId && g.isPublic && !excluded(g)).map((g) => ({ id: g.id, name: g.name, visits: g.visits })),
       event: eventGames(),
       finders: Object.values(H.progress).filter((l) => l.length).length,
@@ -264,6 +273,12 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const b = req.body || {};
     if (b.public !== undefined) H.public = !!b.public;
     if (Array.isArray(b.games)) H.games = [...new Set(b.games.map((x) => +x))].filter((id) => D.games[id] && id !== H.hubId).slice(0, 30);
+    if (b.riftGoal !== undefined) {
+      const n = Math.trunc(+b.riftGoal || 0);
+      if (n < 1 || n > 100000) return bad(res, 'Rift goal: between 1 and 100,000 shards.');
+      H.riftGoal = n;
+      H.riftOpen = globalShards() >= n;
+    }
     if (b.autoPlayers !== undefined) {
       const n = Math.trunc(+b.autoPlayers || 0);
       if (n < 0 || n > 20) return bad(res, 'Player games: between 0 and 20.');
