@@ -17,6 +17,10 @@ import { backupConfig, restore, startBackups } from './backup.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+// One bad game script or timer must not take the whole site down: log it and keep going.
+process.on('uncaughtException', (e) => console.error('[robis] uncaught error:', e && e.stack || e));
+process.on('unhandledRejection', (e) => console.error('[robis] unhandled rejection:', e && e.stack || e));
+
 // The deployed commit (Render sets RENDER_GIT_COMMIT; otherwise read .git).
 function buildVersion() {
   if (process.env.RENDER_GIT_COMMIT) return process.env.RENDER_GIT_COMMIT;

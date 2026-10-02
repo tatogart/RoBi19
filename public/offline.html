@@ -21,6 +21,18 @@
   <h1>Can't reach the Robis server</h1>
   <p>Check your internet connection. If it is fine, the server may be restarting for an update: try again in a minute.</p>
   <button onclick="location.reload()">Try again</button>
+  <p id="auto" style="margin-top:14px;font-size:13px"></p>
 </div>
+<script>
+// Keep checking: as soon as the server answers again, reload by itself.
+(function () {
+  var n = 0, el = document.getElementById('auto');
+  setInterval(function () {
+    n++;
+    el.textContent = 'Checking again... (' + n + ')';
+    fetch('/api/stats', { cache: 'no-store' }).then(function (r) { if (r.ok) location.reload(); }).catch(function () {});
+  }, 5000);
+})();
+</script>
 </body>
 </html>

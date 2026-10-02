@@ -40,7 +40,12 @@ export function findHuntSpot(workspace, rnd = Math.random, opts = {}) {
   const anySpawn = allSpawns.map(box);
   const safe = (p) => !BAD.test(p.Name) && !(p.Parent && BAD.test(p.Parent.Name)) && !p.FindFirstChildOfClass('Script');
   // walkable platforms (and trusses to climb)
-  const nodes = solid.filter((p) => safe(p) && (p.ClassName === 'TrussPart' || (p._p.Size.X >= 1.5 && p._p.Size.Z >= 1.5))).map(box);
+  let nodes = solid.filter((p) => safe(p) && (p.ClassName === 'TrussPart' || (p._p.Size.X >= 1.5 && p._p.Size.Z >= 1.5))).map(box);
+  // Huge maps: the walk is quadratic, so keep it to the biggest platforms (and every truss).
+  if (nodes.length > 4000) {
+    const area = (n) => (n.maxX - n.minX) * (n.maxZ - n.minZ);
+    nodes = nodes.sort((a, b) => (b.part.ClassName === 'TrussPart') - (a.part.ClassName === 'TrussPart') || area(b) - area(a)).slice(0, 4000);
+  }
   for (const n of nodes) n.truss = n.part.ClassName === 'TrussPart';
   const lowest = () => nodes.filter((n) => n.top <= Math.min(...nodes.map((m) => m.top)) + 1);
   const starts = spawns.length ? spawns : lowest();

@@ -296,7 +296,7 @@ export class GameServer {
     clearInterval(this.huntTimer);
     this.huntTimer = null;
     if (!this.huntToken || this.huntToken._destroyed) return;
-    this.huntToken.Parent.Destroy();
+    (this.huntToken.Parent || this.huntToken).Destroy();
     this.huntToken = null;
   }
 
@@ -312,10 +312,13 @@ export class GameServer {
     };
     const tick = () => {
       if (this.closed) return;
+      try { step(); } catch (e) { this.log('warn', 'The Hunt: ' + e.message); }
+    };
+    const step = () => {
       const t = this.huntToken;
       if (t && !t._destroyed) {
         if (this._huntSupported(t.Position)) return;
-        t.Parent.Destroy(); // its platform is gone
+        (t.Parent || t).Destroy(); // its platform is gone
         this.huntToken = null;
       }
       this.huntTries = (this.huntTries || 0) + 1;
