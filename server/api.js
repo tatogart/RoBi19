@@ -14,7 +14,8 @@ import { filterChat } from './game/chatfilter.js';
 const ONLINE_MS = 2 * 60 * 1000;
 const STIPEND_MS = 24 * 3600 * 1000;
 
-// Builders Club tiers (2019 names). Only admins can hand them out.
+// Builders Club tiers (2019 names). Admins hand them out, also through promo codes
+// (then for a number of days: u.membershipUntil; u.membershipAfter is the plan to go back to).
 export const MEMBERSHIPS = {
   None: { name: 'Classic', stipend: 25 },
   BuildersClub: { name: 'Builders Club', short: 'BC', stipend: 40 },
@@ -251,11 +252,22 @@ export function createApi(db, manager, opts = {}) {
   ];
   const achievements = (u, x) => ACHIEVEMENTS.filter((a) => { try { return a[4](u, x); } catch { return false; } }).map(([id, icon, name, desc]) => ({ id, icon, name, desc }));
 
+  // A membership from a promo code runs out: back to the plan the player had before.
+  const checkMembership = (u) => {
+    if (u && u.membershipUntil && Date.now() > u.membershipUntil) {
+      D.transactions.push({ userId: u.id, amount: 0, desc: `${MEMBERSHIPS[u.membership]?.name || 'Membership'} ended`, time: Date.now() });
+      u.membership = u.membershipAfter || 'None';
+      u.membershipUntil = 0;
+      delete u.membershipAfter;
+      db.save();
+    }
+  };
   const publicUser = (u, full = false) => {
     if (!u) return null;
+    checkMembership(u);
     const out = {
       id: u.id, username: u.username, created: u.created, status: u.status || '',
-      membership: u.membership || 'None', isAdmin: !!u.isAdmin, isSystem: !!u.system, presence: presence(u), flags: userFlags(u),
+      membership: u.membership || 'None', membershipUntil: u.membershipUntil || 0, isAdmin: !!u.isAdmin, isSystem: !!u.system, presence: presence(u), flags: userFlags(u),
       avatar: resolvedAvatar(u),
     };
     if (full) {
@@ -275,7 +287,7 @@ export function createApi(db, manager, opts = {}) {
   };
   manager.resolveAvatar = resolvedAvatar;
 
-  const stipendFor = (u) => (MEMBERSHIPS[u.membership] || MEMBERSHIPS.None).stipend;
+  const stipendFor = (u) => { checkMembership(u); return (MEMBERSHIPS[u.membership] || MEMBERSHIPS.None).stipend; };
   const me = (u) => ({
     ...publicUser(u, true), robits: u.robits, canClaimStipend: Date.now() - (u.lastStipend || 0) > STIPEND_MS,
     stipend: stipendFor(u), rawAvatar: normalizeAvatar(u.avatar),
@@ -1256,11 +1268,36 @@ export function createApi(db, manager, opts = {}) {
     res.json({ robits: req.user.robits, amount });
   });
 
+  // Donate: Robits packs and memberships are bought by writing to support in
+  // Telegram; admins set the price labels (Admin Panel → Promo Codes).
+  const DONATE_PACKS = [400, 1000, 2500, 5000, 10000];
+  if (!D.donate) D.donate = {};
+  const donateInfo = () => ({
+    telegram: D.donate.telegram || 'Robis_support',
+    packs: DONATE_PACKS.map((robits) => ({ robits, price: D.donate.prices?.['r' + robits] || '' })),
+    memberships: Object.keys(MEMBERSHIPS).filter((id) => id !== 'None').map((id) => ({ id, price: D.donate.prices?.[id] || '' })),
+  });
   api.get('/economy/store', (req, res) => {
     res.json({
       memberships: Object.entries(MEMBERSHIPS).map(([id, m]) => ({ id, ...m })),
       current: req.user ? req.user.membership || 'None' : null,
+      donate: donateInfo(),
     });
+  });
+  api.post('/admin/donate', requirePerm('economy'), (req, res) => {
+    const b = req.body || {};
+    const prices = {};
+    for (const [k, v] of Object.entries(b.prices || {})) {
+      if (!/^(r\d+|BuildersClub|TurboBuildersClub|OutrageousBuildersClub)$/.test(k)) continue;
+      const t = String(v || '').trim().slice(0, 30);
+      if (t) prices[k] = t;
+    }
+    D.donate.prices = prices;
+    const tg = String(b.telegram || '').trim().replace(/^@/, '').replace(/^https?:\/\/t\.me\//, '');
+    if (tg && !/^[A-Za-z0-9_]{4,32}$/.test(tg)) return bad(res, 'That is not a Telegram username.');
+    D.donate.telegram = tg || 'Robis_support';
+    db.save();
+    res.json({ donate: donateInfo() });
   });
 
   api.get('/economy/transactions', requireUser, (req, res) => {
@@ -1527,7 +1564,8 @@ export function createApi(db, manager, opts = {}) {
     logout: () => 'Logged out everywhere',
     announcement: (b) => (String(b.text || '').trim() ? `Announcement: ${String(b.text).trim().slice(0, 120)}` : 'Cleared announcement'),
     gamedelete: () => 'Deleted game',
-    promocodes: (b) => (b.op ? `Promo code ${String(b.code || '').toUpperCase()}: ${b.op}` : `Made ${b.code ? 'promo code ' + String(b.code).toUpperCase() : (Math.trunc(+b.count || 1)) + ' promo code(s)'}: R$${Math.trunc(+b.robits || 0)}${(b.items || []).length ? ' + ' + b.items.length + ' item(s)' : ''}`),
+    promocodes: (b) => (b.op ? `Promo code ${String(b.code || '').toUpperCase()}: ${b.op}` : `Made ${b.code ? 'promo code ' + String(b.code).toUpperCase() : (Math.trunc(+b.count || 1)) + ' promo code(s)'}: R$${Math.trunc(+b.robits || 0)}${(b.items || []).length ? ' + ' + b.items.length + ' item(s)' : ''}${MEMBERSHIPS[b.membership] && b.membership !== 'None' ? ' + ' + MEMBERSHIPS[b.membership].name + (+b.membershipDays ? ' ' + Math.trunc(+b.membershipDays) + 'd' : '') : ''}`),
+    donate: () => 'Changed donate prices',
   };
   api.use('/admin', (req, res, next) => {
     if (req.method !== 'POST' || !req.user) return next();
@@ -1586,7 +1624,8 @@ export function createApi(db, manager, opts = {}) {
   };
   const promoState = (p) => (!p.active ? 'off' : p.expires && Date.now() > p.expires ? 'expired' : p.maxUses && p.usedBy.length >= p.maxUses ? 'used up' : 'active');
   const publicPromo = (p) => ({
-    code: p.code, robits: p.robits, items: p.items.map((id) => D.items[id]).filter(Boolean).map((it) => ({ id: it.id, name: it.name, type: it.type })),
+    code: p.code, robits: p.robits, membership: p.membership || '', membershipName: p.membership ? MEMBERSHIPS[p.membership]?.name : '', memberDays: p.memberDays || 0,
+    items: p.items.map((id) => D.items[id]).filter(Boolean).map((it) => ({ id: it.id, name: it.name, type: it.type })),
     maxUses: p.maxUses, uses: p.usedBy.length, expires: p.expires, created: p.created, byName: p.byName, note: p.note || '', state: promoState(p),
     lastUsers: p.usedBy.slice(-5).map((id) => D.users[id]?.username).filter(Boolean),
   });
@@ -1601,7 +1640,11 @@ export function createApi(db, manager, opts = {}) {
     const robits = Math.trunc(+b.robits || 0);
     if (robits < 0 || robits > 1e6) return bad(res, 'Robits must be between 0 and 1,000,000.');
     const items = [...new Set((Array.isArray(b.items) ? b.items : []).map(toInt))].filter((id) => D.items[id]).slice(0, 10);
-    if (!robits && !items.length) return bad(res, 'Add Robits or at least one item.');
+    const membership = b.membership && b.membership !== 'None' ? String(b.membership) : '';
+    if (membership && !MEMBERSHIPS[membership]) return bad(res, 'Unknown membership.');
+    const memberDays = Math.trunc(+b.membershipDays || 0);
+    if (memberDays < 0 || memberDays > 3650) return bad(res, 'Membership days must be between 0 (forever) and 3650.');
+    if (!robits && !items.length && !membership) return bad(res, 'Add Robits, an item or a membership.');
     const maxUses = Math.trunc(+b.maxUses || 0);
     if (maxUses < 0 || maxUses > 1e6) return bad(res, 'Uses must be between 0 (no limit) and 1,000,000.');
     const days = +b.days || 0;
@@ -1619,7 +1662,7 @@ export function createApi(db, manager, opts = {}) {
     }
     const now = Date.now();
     for (const code of codes) {
-      D.promocodes[code] = { code, robits, items, maxUses, usedBy: [], expires: days ? now + days * 86400e3 : 0, active: true, created: now, by: req.user.id, byName: req.user.username, note: String(b.note || '').slice(0, 100) };
+      D.promocodes[code] = { code, robits, items, membership, memberDays, maxUses, usedBy: [], expires: days ? now + days * 86400e3 : 0, active: true, created: now, by: req.user.id, byName: req.user.username, note: String(b.note || '').slice(0, 100) };
     }
     db.save();
     res.json({ codes: codes.map((c) => publicPromo(D.promocodes[c])) });
@@ -1636,6 +1679,30 @@ export function createApi(db, manager, opts = {}) {
     db.save();
     res.json({ ok: true, code: op === 'delete' ? null : publicPromo(p) });
   });
+
+  // Builders Club from a promo code: a better plan replaces yours for `days`
+  // (0 = forever) and you go back to your old plan after; the same plan is
+  // extended; a lower plan than yours is skipped.
+  const TIERS = Object.keys(MEMBERSHIPS);
+  const giveMembership = (u, tier, days) => {
+    checkMembership(u);
+    const cur = u.membership || 'None';
+    const now = Date.now();
+    const name = MEMBERSHIPS[tier].name;
+    if (TIERS.indexOf(tier) < TIERS.indexOf(cur)) return { name, skipped: true };
+    if (tier === cur) {
+      if (!u.membershipUntil) return { name, skipped: true }; // already yours for good
+      u.membershipUntil = days ? Math.max(u.membershipUntil, now) + days * 86400e3 : 0;
+      if (!days) delete u.membershipAfter;
+      return { name, until: u.membershipUntil };
+    }
+    // a better plan: remember the plan to go back to (if it was yours for good)
+    if (days) u.membershipAfter = u.membershipUntil ? (u.membershipAfter || 'None') : cur;
+    else delete u.membershipAfter;
+    u.membership = tier;
+    u.membershipUntil = days ? now + days * 86400e3 : 0;
+    return { name, until: u.membershipUntil };
+  };
 
   // Players redeem codes. Wrong guesses are limited so codes can't be brute-forced.
   const promoFails = new Map(); // userId -> [times]
@@ -1663,9 +1730,11 @@ export function createApi(db, manager, opts = {}) {
       got.push({ id: it.id, name: it.name, type: it.type });
     }
     if (p.robits) u.robits += p.robits;
-    log(u.id, p.robits, `Promo code ${p.code}` + (got.length ? ` (${got.map((i) => i.name).join(', ')})` : ''));
+    const member = p.membership ? giveMembership(u, p.membership, p.memberDays || 0) : null;
+    const what = [...got.map((i) => i.name), member ? member.name : ''].filter(Boolean);
+    log(u.id, p.robits, `Promo code ${p.code}` + (what.length ? ` (${what.join(', ')})` : ''));
     db.save();
-    res.json({ robits: p.robits, items: got, balance: u.robits });
+    res.json({ robits: p.robits, items: got, membership: member, balance: u.robits });
   });
 
   api.get('/admin/overview', requireStaff, (req, res) => {
@@ -1704,6 +1773,8 @@ export function createApi(db, manager, opts = {}) {
     const u = target(req, res); if (!u) return;
     if (!MEMBERSHIPS[req.body?.tier]) return bad(res, 'Unknown membership.');
     u.membership = req.body.tier;
+    u.membershipUntil = 0; // set by staff: no end date
+    delete u.membershipAfter;
     log(u.id, 0, `Membership set by ${req.user.username}`);
     db.save();
     res.json({ user: adminUser(u) });

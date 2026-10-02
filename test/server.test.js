@@ -845,3 +845,37 @@ test('promo codes: staff generate them, players redeem each once', async () => {
   assert.equal(list.find((c) => c.code === 'PARTY2019').uses, 2);
   assert.equal(list.find((c) => c.code === batch[1].code).state, 'off');
 });
+
+test('promo codes for Builders Club and donate prices', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'ClubKid', password: 'secret123' })).cookie;
+  const me = async () => (await call('GET', '/auth/me', null, kid)).data.user;
+  assert.equal((await call('POST', '/admin/promocodes', { membership: 'Nope', code: 'BADCLUB' }, admin)).status, 400);
+  await call('POST', '/admin/promocodes', { membership: 'TurboBuildersClub', membershipDays: 7, code: 'TBC7' }, admin);
+  await call('POST', '/admin/promocodes', { membership: 'BuildersClub', membershipDays: 30, code: 'BC30' }, admin);
+  await call('POST', '/admin/promocodes', { membership: 'TurboBuildersClub', membershipDays: 3, code: 'TBC3' }, admin);
+  const r = await call('POST', '/promocodes/redeem', { code: 'tbc7' }, kid);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.membership.name, 'Turbo Builders Club');
+  let u = await me();
+  assert.equal(u.membership, 'TurboBuildersClub');
+  const week = u.membershipUntil - Date.now();
+  assert.ok(week > 6.9 * 86400e3 && week <= 7 * 86400e3);
+  // a lower plan is skipped, the same plan is extended
+  assert.equal((await call('POST', '/promocodes/redeem', { code: 'BC30' }, kid)).data.membership.skipped, true);
+  assert.equal((await me()).membership, 'TurboBuildersClub');
+  await call('POST', '/promocodes/redeem', { code: 'TBC3' }, kid);
+  u = await me();
+  assert.ok(u.membershipUntil - Date.now() > 9.9 * 86400e3);
+  // staff setting a plan makes it permanent
+  await call('POST', `/admin/users/${u.id}/membership`, { tier: 'BuildersClub' }, admin);
+  assert.deepEqual([(await me()).membership, (await me()).membershipUntil], ['BuildersClub', 0]);
+  // donate prices
+  assert.equal((await call('POST', '/admin/donate', { prices: { r400: '99 ₽' } }, kid)).status, 403);
+  assert.equal((await call('POST', '/admin/donate', { prices: {}, telegram: 'not a name!' }, admin)).status, 400);
+  await call('POST', '/admin/donate', { prices: { r400: '99 ₽', BuildersClub: '149 ₽', hack: 'x' }, telegram: '@Robis_support' }, admin);
+  const { donate } = (await call('GET', '/economy/store')).data;
+  assert.equal(donate.telegram, 'Robis_support');
+  assert.equal(donate.packs.find((p) => p.robits === 400).price, '99 ₽');
+  assert.equal(donate.memberships.find((m) => m.id === 'BuildersClub').price, '149 ₽');
+});

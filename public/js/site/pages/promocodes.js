@@ -23,9 +23,12 @@ async function redeem() {
     const items = await Promise.all(r.items.map((i) => api.get(`/catalog/${i.id}`).then((x) => x.item).catch(() => null)));
     result.replaceChildren(el('div', { class: 'promo-ok' },
       el('h3', { text: 'Code redeemed!' }),
+      r.membership && !r.membership.skipped ? el('div', { class: 'promo-member' }, el('span', { text: '🏗️' }),
+        el('b', { text: r.membership.name }), el('span', { class: 'muted', text: r.membership.until ? 'until ' + new Date(r.membership.until).toLocaleDateString() : 'forever' })) : null,
+      r.membership && r.membership.skipped ? el('div', { class: 'small muted', text: `You already have ${r.membership.name} or better.` }) : null,
       r.robits ? el('div', { class: 'promo-robits' }, icon('robits', 'robits-icon'), el('span', { text: '+' + fmtFull(r.robits) })) : null,
       items.filter(Boolean).length ? el('div', {}, el('div', { class: 'small muted', text: 'New in your inventory:' }), el('div', { class: 'item-grid promo-items' }, items.filter(Boolean).map((it) => itemCard(it)))) : null,
-      !r.robits && !items.filter(Boolean).length ? el('div', { class: 'muted', text: 'You already own everything this code gives.' }) : null));
+      !r.robits && !items.filter(Boolean).length && !(r.membership && !r.membership.skipped) ? el('div', { class: 'muted', text: 'You already own everything this code gives.' }) : null));
     toast('Code redeemed!', 'success');
   } catch (e) {
     result.replaceChildren(el('div', { class: 'promo-err', text: e.message }));
@@ -38,7 +41,7 @@ app.append(
   el('div', { class: 'panel promo-panel' },
     el('div', { class: 'promo-art', text: '🎁' }),
     el('div', { class: 'promo-main' },
-      el('p', { text: 'Got a code from the admins, an event or a video? Type it here to get Robits and free items.' }),
+      el('p', { text: 'Got a code from the admins, an event or a video? Type it here to get Robits, Builders Club and free items.' }),
       el('div', { class: 'row wrap' }, input, btn),
       result,
       el('div', { class: 'small muted', style: { marginTop: '10px' }, text: 'Each code works once per player. Codes don\'t care about upper or lower case.' }))));
@@ -55,6 +58,8 @@ style.textContent = `
 .promo-robits { display: flex; align-items: center; gap: 6px; font-size: 28px; font-weight: 700; color: #02b757; margin-bottom: 10px; }
 .promo-robits .robits-icon { width: 30px; height: 30px; }
 .promo-items { margin-top: 6px; }
+.promo-member { display: flex; align-items: center; gap: 8px; font-size: 20px; margin-bottom: 8px; }
+.promo-member .muted { font-size: 14px; }
 .promo-err { color: #d0021b; font-weight: 600; }
 @media (max-width: 600px) { .promo-panel { flex-direction: column; gap: 8px; } .promo-art { font-size: 56px; } }
 `;

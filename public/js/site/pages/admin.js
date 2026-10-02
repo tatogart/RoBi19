@@ -323,7 +323,7 @@ function drawBadges() {
 
 // ---------------------------------------------------------------- promo codes
 // Generator: Robits and/or items, how many codes, uses per code, expiry, or one custom code.
-const promo = { robits: 100, items: [], count: 1, uses: 1, days: 0, code: '', note: '', made: [] };
+const promo = { robits: 100, items: [], count: 1, uses: 1, days: 0, code: '', note: '', membership: 'None', memberDays: 30, made: [] };
 async function drawPromo() {
   const num = (key, attrs) => {
     const i = el('input', { class: 'input', type: 'number', value: promo[key], ...attrs });
@@ -357,6 +357,10 @@ async function drawPromo() {
     }, 250);
   });
   const countField = el('label', { class: 'field' }, 'How many codes', num('count', { min: 1, max: 200 }));
+  const tierSel = el('select', { class: 'input' }, data.memberships.map((m) => el('option', { value: m.id, text: m.id === 'None' ? 'No membership' : m.name, selected: m.id === promo.membership })));
+  const daysField = el('label', { class: 'field' }, 'Membership days (0 = forever)', num('memberDays', { min: 0, max: 3650 }));
+  daysField.classList.toggle('hidden', promo.membership === 'None');
+  tierSel.onchange = () => { promo.membership = tierSel.value; daysField.classList.toggle('hidden', promo.membership === 'None'); };
   countField.classList.toggle('hidden', !!promo.code.trim());
   const madeBox = el('div');
   const drawMade = () => {
@@ -370,7 +374,7 @@ async function drawPromo() {
   drawMade();
   const make = async () => {
     try {
-      const r = await api.post('/admin/promocodes', { robits: promo.robits, items: promo.items.map((i) => i.id), count: promo.count, maxUses: promo.uses, days: promo.days, code: promo.code.trim(), note: promo.note });
+      const r = await api.post('/admin/promocodes', { membership: promo.membership, membershipDays: promo.memberDays, robits: promo.robits, items: promo.items.map((i) => i.id), count: promo.count, maxUses: promo.uses, days: promo.days, code: promo.code.trim(), note: promo.note });
       promo.made = r.codes;
       promo.code = '';
       toast(r.codes.length === 1 ? 'Code made' : `${r.codes.length} codes made`, 'success');
@@ -378,12 +382,38 @@ async function drawPromo() {
     } catch (e) { toast(e.message, 'error'); }
   };
   const listBox = el('div', {}, spinner());
+  // Donate prices: what "Buy" on the Robits page shows; buying happens in Telegram.
+  const donateBox = el('div', { class: 'donate-admin' });
+  const drawDonate = async () => {
+    const { donate } = await api.get('/economy/store');
+    const tg = el('input', { class: 'input', value: '@' + donate.telegram });
+    const rows = [
+      ...donate.packs.map((p) => ['r' + p.robits, `R$ ${fmtFull(p.robits)}`, p.price]),
+      ...donate.memberships.map((m) => [m.id, data.memberships.find((x) => x.id === m.id)?.name || m.id, m.price]),
+    ].map(([key, label, price]) => {
+      const i = el('input', { class: 'input', value: price, placeholder: 'e.g. 99 ₽', maxlength: 30 });
+      i.dataset.key = key;
+      return el('label', { class: 'field' }, label, i);
+    });
+    donateBox.replaceChildren(
+      el('h3', { style: { marginTop: '24px' }, text: 'Donate prices' }),
+      el('p', { class: 'small muted', text: 'Shown on the Robits page. "Buy" opens this Telegram account with a ready message; you give the Robits or the membership by hand (or with a promo code).' }),
+      el('label', { class: 'field', style: { maxWidth: '260px' } }, 'Telegram', tg),
+      el('div', { class: 'promo-form' }, rows),
+      el('button', { class: 'btn btn-primary', text: 'Save prices', onclick: async () => {
+        const prices = {};
+        for (const r of rows) { const i = r.querySelector('input'); prices[i.dataset.key] = i.value; }
+        try { await api.post('/admin/donate', { prices, telegram: tg.value }); toast('Prices saved', 'success'); } catch (e) { toast(e.message, 'error'); }
+      } }));
+  };
   body.replaceChildren(
     el('div', { class: 'badge-give' },
       el('h3', { text: 'Make promo codes' }),
-      el('p', { class: 'small muted', text: 'Players type codes on the Promo Codes page. Each player can use a code once.' }),
+      el('p', { class: 'small muted', text: 'Players type codes on the Promo Codes page. Each player can use a code once. A Builders Club code gives the plan for the set days, then the player goes back to their old plan.' }),
       el('div', { class: 'promo-form' },
         el('label', { class: 'field' }, 'Robits', num('robits', { min: 0, max: 1000000 })),
+        el('label', { class: 'field' }, 'Builders Club', tierSel),
+        daysField,
         countField,
         el('label', { class: 'field' }, 'Uses per code (0 = no limit)', num('uses', { min: 0 })),
         el('label', { class: 'field' }, 'Expires in days (0 = never)', num('days', { min: 0, max: 3650 })),
@@ -392,7 +422,8 @@ async function drawPromo() {
       el('div', { class: 'promo-items-field' }, el('b', { text: 'Items' }), q), found, chosen,
       el('button', { class: 'btn btn-green', style: { marginTop: '10px' }, text: 'Generate', onclick: make }),
       madeBox),
-    el('h3', { text: 'All codes' }), listBox);
+    el('h3', { text: 'All codes' }), listBox, donateBox);
+  drawDonate();
   let codes = [];
   try { ({ codes } = await api.get('/admin/promocodes')); } catch (e) { listBox.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
   const edit = async (c, op) => {
@@ -404,7 +435,7 @@ async function drawPromo() {
     el('tr', {}, ['Code', 'Gives', 'Used', 'Expires', 'Status', ''].map((h) => el('th', { text: h }))),
     codes.map((c) => el('tr', {},
       el('td', {}, el('code', { class: 'no-i18n', text: c.code }), c.note ? el('div', { class: 'small muted', text: c.note }) : null),
-      el('td', { class: 'small', text: [c.robits ? `R$ ${fmtFull(c.robits)}` : '', ...c.items.map((i) => i.name)].filter(Boolean).join(' + ') }),
+      el('td', { class: 'small', text: [c.robits ? `R$ ${fmtFull(c.robits)}` : '', c.membershipName ? `${c.membershipName} (${c.memberDays ? c.memberDays + ' d' : '∞'})` : '', ...c.items.map((i) => i.name)].filter(Boolean).join(' + ') }),
       el('td', { class: 'small', title: c.lastUsers.join(', '), text: `${c.uses}${c.maxUses ? ' / ' + c.maxUses : ''}` }),
       el('td', { class: 'small', text: c.expires ? new Date(c.expires).toLocaleDateString() : 'Never' }),
       el('td', {}, el('span', { class: 'pill promo-state ' + STATE_CLASS[c.state], text: c.state })),
