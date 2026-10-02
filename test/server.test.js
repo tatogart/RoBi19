@@ -1062,7 +1062,7 @@ test('gift cards: buy with Robits, a friend redeems the code once', async () => 
   const r = await call('POST', '/giftcards/buy', { key: 'g1000' }, giver);
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.match(r.data.code, /^GIFT-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
-  assert.equal(r.data.robits, before - 1000);
+  assert.equal(r.data.robits, before - 1500); // a gift card costs 50% more than it gives
   const bc = (await call('POST', '/giftcards/buy', { key: 'gbc' }, giver)).data;
   // the friend redeems both
   const fb = (await call('GET', '/auth/me', null, friend)).data.user.robits;

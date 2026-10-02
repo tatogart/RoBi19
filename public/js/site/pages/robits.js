@@ -95,7 +95,7 @@ function buyGift(g) {
   });
 }
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Gift Cards' }),
-  el('p', { class: 'muted small', text: 'Give Robits or Builders Club to a friend. Buy a card with your Robits and get its code right away, or buy it in Telegram.' }),
+  el('p', { class: 'muted small', text: 'Give Robits or Builders Club to a friend. Buy a card with your Robits (a gift card costs 50% more than it gives) and get its code right away, or buy it in Telegram.' }),
   giftBox, myGifts);
 loadGifts();
 

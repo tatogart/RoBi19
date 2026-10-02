@@ -261,7 +261,7 @@ const RU = {
   'This item is not for sale.': 'Этот предмет не продаётся.', 'Teleporting...': 'Телепортация...', 'Taking you to the next game.': 'Переносим тебя в следующую игру.',
   'TOKEN FOUND!': 'ТОКЕН НАЙДЕН!', 'The Hunter': 'Охотник', 'Found every token in The Hunt.': 'Нашёл все токены в The Hunt.',
   'Gift Cards': 'Подарочные карты', 'GIFT CARD': 'ПОДАРОЧНАЯ КАРТА', 'Buy a gift card': 'Купить подарочную карту', 'Your gift card': 'Твоя подарочная карта',
-  'Give Robits or Builders Club to a friend. Buy a card with your Robits and get its code right away, or buy it in Telegram.': 'Подари другу Robits или Builders Club. Купи карту за свои Robits и сразу получи код — или купи её в Telegram.',
+  'Give Robits or Builders Club to a friend. Buy a card with your Robits (a gift card costs 50% more than it gives) and get its code right away, or buy it in Telegram.': 'Подари другу Robits или Builders Club. Купи карту за свои Robits (карта стоит на 50% больше, чем даёт) и сразу получи код — или купи её в Telegram.',
   'Give this code to a friend. It works once.': 'Отдай этот код другу. Он срабатывает один раз.', 'Copy code': 'Скопировать код', 'Copy link': 'Скопировать ссылку', 'Done': 'Готово',
   'My gift cards': 'Мои подарочные карты', 'Card': 'Карта', 'Not used yet': 'Ещё не активирована', 'Buy in Telegram': 'Купить в Telegram',
   'Builders Club · 30 days': 'Builders Club · 30 дней', 'Unknown gift card.': 'Неизвестная карта.', 'You have 20 unused gift cards. Give some away first!': 'У тебя 20 неиспользованных карт. Сначала подари какие-нибудь!',

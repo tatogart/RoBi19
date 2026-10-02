@@ -1276,13 +1276,14 @@ export function createApi(db, manager, opts = {}) {
   // Telegram; admins set the price labels (Admin Panel → Promo Codes).
   const DONATE_PACKS = [400, 1000, 2500, 5000, 10000];
   // Gift cards: a code a friend redeems on the Promo Codes page. Bought with
-  // your own Robits (cost) or for money through Telegram (the price label).
+  // your own Robits (cost: 50% more than the card gives) or for money through
+  // Telegram (the price label).
   const GIFT_CARDS = [
-    { key: 'g400', name: '400 Robits', robits: 400, cost: 400, color: '#00b06f' },
-    { key: 'g1000', name: '1,000 Robits', robits: 1000, cost: 1000, color: '#00a2ff' },
-    { key: 'g2500', name: '2,500 Robits', robits: 2500, cost: 2500, color: '#a347ff' },
-    { key: 'g5000', name: '5,000 Robits', robits: 5000, cost: 5000, color: '#ff4d8d' },
-    { key: 'gbc', name: 'Builders Club · 30 days', membership: 'BuildersClub', days: 30, cost: 2000, color: '#f5a300' },
+    { key: 'g400', name: '400 Robits', robits: 400, cost: 600, color: '#00b06f' },
+    { key: 'g1000', name: '1,000 Robits', robits: 1000, cost: 1500, color: '#00a2ff' },
+    { key: 'g2500', name: '2,500 Robits', robits: 2500, cost: 3750, color: '#a347ff' },
+    { key: 'g5000', name: '5,000 Robits', robits: 5000, cost: 7500, color: '#ff4d8d' },
+    { key: 'gbc', name: 'Builders Club · 30 days', membership: 'BuildersClub', days: 30, cost: 3500, color: '#f5a300' },
   ];
   if (!D.donate) D.donate = {};
   const donateInfo = () => ({
