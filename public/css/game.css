@@ -237,3 +237,4 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .hunt-reward { margin-top: 4px; font-weight: 700; color: #7dffb0; }
 @keyframes hunt-in { from { transform: translateX(-50%) scale(.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 @keyframes hunt-spin { from { transform: scaleX(1); } to { transform: scaleX(.35); } }
+.hunt-robits { margin-left: 10px; color: #7dffb0; }

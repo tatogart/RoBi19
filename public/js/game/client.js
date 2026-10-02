@@ -204,7 +204,7 @@ export class GameClient {
         setTimeout(() => { location.href = `/play?placeId=${+m.placeId}`; }, 700);
         return;
       case 'hunt':
-        this.hud.huntBanner(m.count, m.total, m.reward);
+        this.hud.huntBanner(m.count, m.total, m.reward, m.robits);
         this.hud.addChat('', `The Hunt: token found! ${m.count}/${m.total}` + (m.reward ? ` - you won ${m.reward.name}!` : ''), { system: true });
         sound.coin();
         return;

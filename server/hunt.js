@@ -8,10 +8,22 @@
 import { buildHuntHub } from './seed/hunt.js';
 import { officialAccount } from './seed/seed.js';
 
-const DEFAULT_KEYS = ['doors', 'kart', 'brickbattle', 'speeddraw', 'obby', 'disaster', 'tower', 'lava'];
+// Prize ladder: count = a number of tokens, share = a part of all tokens.
 const REWARDS = {
-  half: { name: 'Hunt Dragon', type: 'Pet', data: { model: 'dragon', color: '#1b1b1b', accent: '#ffc400' }, description: 'A prize from The Hunt: find half of the tokens.' },
-  all: { name: "Hunter's Golden Crown", type: 'Hat', data: { model: 'crown', color: '#ffc400', accent: '#e8002a' }, description: 'The grand prize of The Hunt: find every token.' },
+  tee: { count: 1, name: 'The Hunt Tee', type: 'TShirt', data: { graphic: 'star' }, description: 'A prize from The Hunt: find your first token.' },
+  cap: { count: 3, name: "Hunter's Cap", type: 'Hat', data: { model: 'cap', color: '#2b2340', accent: '#ffc400' }, description: 'A prize from The Hunt: find 3 tokens.' },
+  shades: { count: 5, name: 'Golden Hunt Shades', type: 'Hat', data: { model: 'shades', color: '#ffc400', accent: '#b37f00' }, description: 'A prize from The Hunt: find 5 tokens.' },
+  kitty: { count: 8, name: 'Golden Hunt Kitty', type: 'Pet', data: { model: 'cat', color: '#ffc400', accent: '#2b2340' }, description: 'A prize from The Hunt: find 8 tokens.' },
+  half: { share: 0.5, name: 'Hunt Dragon', type: 'Pet', data: { model: 'dragon', color: '#1b1b1b', accent: '#ffc400' }, description: 'A prize from The Hunt: find half of the tokens.' },
+  wings: { share: 0.75, name: "Hunter's Golden Wings", type: 'Hat', data: { model: 'wings', color: '#ffc400', accent: '#fff3b0' }, description: 'A prize from The Hunt: find three quarters of the tokens.' },
+  sword: { share: 0.9, name: 'Golden Hunt Sword', type: 'Gear', data: { model: 'sword', color: '#ffc400' }, description: 'A prize from The Hunt: find almost every token.' },
+  all: { share: 1, name: "Hunter's Golden Crown", type: 'Hat', data: { model: 'crown', color: '#ffc400', accent: '#e8002a' }, description: 'The grand prize of The Hunt: find every token.' },
+};
+const ROBITS_PER_TOKEN = 25;
+// tokens needed for a prize when the event has `total` tokens
+const needFor = (key, total) => {
+  const r = REWARDS[key];
+  return Math.max(1, Math.min(total, r.count || Math.ceil(total * r.share)));
 };
 
 export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial }) {
@@ -20,12 +32,15 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   const H = D.hunt;
   H.progress = H.progress || {};
   H.rewarded = H.rewarded || {};
-  if (H.autoPlayers === undefined) H.autoPlayers = 5;
   const official = () => officialAccount(D);
-  if (!H.games) {
-    // Start with the best official games.
+  // Version 2 (the release): every official game, 8 player games, open for everyone.
+  if ((H.version || 0) < 2) {
     const off = official();
-    H.games = DEFAULT_KEYS.map((k) => Object.values(D.games).find((g) => g.seedKey === k && (!off || g.creatorId === off.id))).filter(Boolean).map((g) => g.id);
+    const allOfficial = Object.values(D.games).filter((g) => off && g.creatorId === off.id && g.isPublic && !g.huntHub).map((g) => g.id);
+    H.games = [...new Set([...(H.games || []), ...allOfficial])];
+    H.autoPlayers = Math.max(H.autoPlayers || 0, 8);
+    H.public = true;
+    H.version = 2;
   }
 
   // Prize items: not for sale, only given by the event.
@@ -36,7 +51,9 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     D.items[id] = { id, name: r.name, type: r.type, price: 0, data: r.data, description: r.description, creatorId: official()?.id || 0, created: Date.now(), sales: 0, offsale: true, limited: false };
     H.rewards[k] = id;
   }
-
+  // prizes in ladder order
+  const prizeKeys = () => Object.keys(REWARDS).filter((k) => D.items[H.rewards[k]]);
+  const prizeList = (total) => prizeKeys().map((k) => ({ key: k, id: H.rewards[k], name: D.items[H.rewards[k]].name, need: needFor(k, total) }));
   const eligible = (uid) => {
     if (H.public) return true;
     const u = D.users[uid];
@@ -80,11 +97,13 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     if (have.includes(gameId)) return { new: false };
     have.push(gameId);
     const p = progress(uid);
-    let reward = null;
-    if (p.count >= Math.ceil(p.total / 2)) reward = giveReward(uid, 'half') || reward;
-    if (p.count >= p.total) reward = giveReward(uid, 'all') || reward;
+    const rewards = [];
+    for (const k of prizeKeys()) if (p.count >= needFor(k, p.total)) { const r = giveReward(uid, k); if (r) rewards.push(r); }
+    const reward = rewards.length ? { name: rewards.map((r) => r.name).join(', '), items: rewards } : null;
+    const u = D.users[uid];
+    if (u) { u.robits += ROBITS_PER_TOKEN; log(uid, ROBITS_PER_TOKEN, `The Hunt token (${p.count}/${p.total})`); }
     db.save();
-    return { new: true, count: p.count, total: p.total, reward };
+    return { new: true, count: p.count, total: p.total, reward, robits: ROBITS_PER_TOKEN };
   };
   manager.hunt = {
     eligible,
@@ -99,11 +118,12 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     if (!off) return null;
     let hub = D.games[H.hubId];
     const games = eventGames();
-    const key = JSON.stringify(games.map((g) => [g.id, g.name, g.creator]));
+    const prizes = prizeList(games.length);
+    const key = JSON.stringify([2, games.map((g) => [g.id, g.name, g.creator]), prizes.map((p) => [p.name, p.need])]);
     if (!hub) {
       const id = db.nextId('game');
       hub = D.games[id] = {
-        id, name: 'The Hunt', description: 'The Hunt is here! Step through the portals, find the golden token hidden in every game and win the Hunt Dragon and the Hunter\'s Golden Crown.',
+        id, name: 'The Hunt', description: 'The Hunt is here! Step through the portals, find the golden token hidden in every game, get Robits for every token and win 8 prizes, up to the Hunter\'s Golden Crown.',
         creatorId: off.id, genre: 'Adventure', created: Date.now(), updated: Date.now(), visits: 0, maxPlayers: 20,
         isPublic: !!H.public, featured: false, copyable: false, upVotes: 0, downVotes: 0, favorites: 0, huntHub: true,
       };
@@ -113,9 +133,11 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     hub.isPublic = !!H.public;
     hub.featured = !!H.public;
     if (H.hubKey !== key || !db.readPlace(hub.id)) {
-      db.writePlace(hub.id, buildHuntHub(games));
+      db.writePlace(hub.id, buildHuntHub(games, prizes));
       hub.updated = Date.now();
       H.hubKey = key;
+      // empty hub servers restart with the new portals
+      for (const srv of manager.serversFor(hub.id)) if (!srv.playerCount) srv.close();
     }
     db.save();
     return hub;
@@ -128,7 +150,8 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const p = u ? progress(u.id) : { games: eventGames().map((g) => ({ ...g, found: false })), count: 0, total: eventGames().length };
     return {
       public: !!H.public, hubId: syncHub()?.id || null, ...p,
-      rewards: Object.entries(H.rewards).map(([k, id]) => ({ key: k, id, name: D.items[id]?.name, type: D.items[id]?.type, data: D.items[id]?.data, need: k === 'half' ? Math.ceil(p.total / 2) : p.total, got: !!u && (H.rewarded[u.id] || []).includes(k) })),
+      robitsPerToken: ROBITS_PER_TOKEN,
+      rewards: prizeList(p.total).map((r) => ({ ...r, type: D.items[r.id].type, data: D.items[r.id].data, got: !!u && (H.rewarded[u.id] || []).includes(r.key) })),
     };
   };
   api.get('/hunt', (req, res) => {

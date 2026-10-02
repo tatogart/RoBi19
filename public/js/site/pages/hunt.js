@@ -18,6 +18,7 @@ if (!h.visible) {
     !h.public ? el('div', { class: 'hunt-private', text: 'Private preview: only admins can see the event right now' }) : null,
     el('div', { class: 'hunt-logo', text: 'THE HUNT' }),
     el('p', { class: 'hunt-sub', text: 'Find the golden token hidden in every game. Collect them all to win the grand prize!' }),
+    el('p', { class: 'hunt-sub small', text: `Every token gives R$ ${h.robitsPerToken}, and ${h.rewards.length} prizes are waiting along the way.` }),
     el('div', { class: 'hunt-progress' },
       el('div', { class: 'hunt-bar' }, el('div', { style: { width: pct + '%' } })),
       el('div', { class: 'hunt-count', text: `${h.count} / ${h.total} tokens` })),

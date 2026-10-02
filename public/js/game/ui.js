@@ -404,9 +404,9 @@ export class HUD {
   }
 
   // The Hunt: a big banner when you find a token.
-  huntBanner(count, total, reward) {
+  huntBanner(count, total, reward, robits) {
     const b = h('div', 'hunt-banner', `<div class="hunt-token"></div><div><div class="hunt-title">TOKEN FOUND!</div>
-      <div class="hunt-count">${count} / ${total}</div>${reward ? `<div class="hunt-reward">You won: ${esc(reward.name)}!</div>` : ''}</div>`);
+      <div class="hunt-count">${count} / ${total}${robits ? `<span class="hunt-robits">+${robits} R$</span>` : ''}</div>${reward ? `<div class="hunt-reward">You won: ${esc(reward.name)}!</div>` : ''}</div>`);
     this.root.append(b);
     setTimeout(() => b.classList.add('out'), 4500);
     setTimeout(() => b.remove(), 5200);

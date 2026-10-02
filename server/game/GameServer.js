@@ -342,7 +342,7 @@ export class GameServer {
     if (!h || !h.eligible(session.user.id)) return;
     const r = h.collect(session.user.id);
     if (!r || !r.new) return;
-    this.send(session, { t: 'hunt', count: r.count, total: r.total, reward: r.reward || null });
+    this.send(session, { t: 'hunt', count: r.count, total: r.total, reward: r.reward || null, robits: r.robits || 0 });
     this.log('info', `${session.user.username} found The Hunt token (${r.count}/${r.total})`);
   }
 

@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 21);
+  assert.equal(data.games, 22); // 21 showcase games + The Hunt hub
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -987,7 +987,9 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   const maker = (await call('POST', '/auth/signup', { username: 'HuntMaker', password: 'secret123' })).cookie;
   const pg = (await call('POST', '/games', { name: 'Player Hit Game', template: 'obby' }, maker)).data.game;
   await call('PATCH', `/games/${pg.id}`, { isPublic: true }, maker);
-  // private: players don't see it
+  // released by default; the admin can make it private again
+  assert.equal((await call('GET', '/hunt', null, kid)).data.visible, true);
+  await call('POST', '/admin/hunt', { public: false }, admin);
   assert.equal((await call('GET', '/hunt', null, kid)).data.visible, false);
   assert.equal((await call('GET', '/auth/me', null, kid)).data.user.hunt, false);
   assert.equal((await call('GET', '/admin/hunt', null, kid)).status, 403);
@@ -1021,7 +1023,10 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   c.ws.send(JSON.stringify({ t: 'move', p: [x, y, z], ry: 0, a: 'idle' }));
   const got = await c.wait((m) => m.t === 'hunt');
   assert.deepEqual([got.count, got.total], [1, 2]);
-  assert.equal(got.reward.name, 'Hunt Dragon'); // half of the tokens
+  assert.equal(got.robits, 25);
+  // the first token and half of the tokens: two prizes at once
+  assert.deepEqual(got.reward.items.map((i) => i.name), ['The Hunt Tee', 'Hunt Dragon']);
+  assert.equal((await call('GET', '/hunt', null, admin)).data.rewards.length, 8);
   c.ws.close();
   // players without access get no token
   await call('POST', '/admin/hunt', {}, admin);
@@ -1033,7 +1038,7 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   await hub.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
   hub.ws.send(JSON.stringify({ t: 'move', p: [gate.p.CFrame[0], 4.5, gate.p.CFrame[2]], ry: 0, a: 'idle' }));
   const tp = await hub.wait((m) => m.t === 'teleportPlace');
-  assert.ok([official.id, playerGame.id].includes(tp.placeId));
+  assert.ok([official.id, playerGame.id].includes(tp.placeId), JSON.stringify([tp, official.id, playerGame.id, portals.ch.map((c) => c.p.Name)]));
   hub.ws.close();
   // open it for everyone
   await call('POST', '/admin/hunt', { public: true }, admin);

@@ -471,7 +471,7 @@ async function drawHunt() {
   body.replaceChildren(
     el('div', { class: 'badge-give' },
       el('h3', { text: 'The Hunt' }),
-      el('p', { class: 'small muted', text: 'A hub with portals to every game in the event. A golden token is hidden in each game (placed automatically, even in player games); half of the tokens win the Hunt Dragon, all of them the Hunter\'s Golden Crown.' }),
+      el('p', { class: 'small muted', text: 'A hub with portals to every game in the event. A golden token is hidden in each game (placed automatically, even in player games). Every token gives 25 R$; 8 prizes from the first token up to the Hunter\'s Golden Crown for all of them.' }),
       el('label', { class: 'perm-row' }, pub, el('b', { text: 'Open for everyone' }), el('span', { class: 'small muted', text: ' (off: only admins can see the page, play the hub and find tokens)' })),
       el('div', { class: 'row wrap', style: { gap: '12px', margin: '10px 0' } },
         el('a', { class: 'btn', href: '/hunt', text: 'Open the event page' }),
