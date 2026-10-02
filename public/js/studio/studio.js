@@ -79,7 +79,7 @@ class Studio {
   }
 
   updateTitle() {
-    const name = this.gameInfo ? this.gameInfo.name : 'Untitled Place';
+    const name = this.gameInfo ? this.gameInfo.name + (this.subPlace ? ` — ${this.subPlace.name}` : '') : 'Untitled Place';
     document.title = `${this.dirty ? '* ' : ''}${name} - Robis Studio`;
     this.editor.setPlaceName(name);
   }
@@ -267,26 +267,29 @@ class Studio {
     this.suspendEvents = false;
     this.gameInfo = info;
     this.gameId = info ? info.id : null;
+    // one of the game's other places (see the Places window), or its start place
+    this.subPlace = info && opts.subPlace ? opts.subPlace : null;
     this.setSelection([]);
     this.history.reset();
-    if (!opts.keepTeam && info && info.id && info.canEdit) this.team = new TeamCreate(this, info.id);
+    if (!opts.keepTeam && info && info.id && info.canEdit) this.team = new TeamCreate(this, info.id, this.subPlace ? this.subPlace.id : 0);
     this.emit('team');
     this.explorer.setGame(this.game);
     this.viewport.env.apply(this.game.Lighting);
     this.updateTitle();
     const url = new URL(location.href);
     if (this.gameId) url.searchParams.set('gameId', this.gameId); else url.searchParams.delete('gameId');
+    if (this.subPlace) url.searchParams.set('place', this.subPlace.id); else url.searchParams.delete('place');
     history.replaceState(null, '', url);
     this.viewport.camera.position.set(20, 22, 30);
     this.viewport.yaw = Math.atan2(20, 30);
     this.viewport.pitch = -0.45;
   }
 
-  async openGame(id) {
+  async openGame(id, placeId = 0) {
     try {
-      const { place, game } = await api.get(`/games/${id}/place`);
-      this.loadPlaceData(place, game.canEdit ? game : null);
-      this.log('info', `Opened "${game.name}"${game.canEdit ? '' : ' (copy — publishing will create a new game)'}`);
+      const { place, game, subPlace } = await api.get(`/games/${id}/place${placeId ? '?place=' + placeId : ''}`);
+      this.loadPlaceData(place, game.canEdit ? game : null, { subPlace });
+      this.log('info', `Opened "${game.name}"${subPlace ? ` — place "${subPlace.name}" (ID ${subPlace.id})` : ''}${game.canEdit ? '' : ' (copy — publishing will create a new game)'}`);
     } catch (e) {
       this.log('error', e.message);
       alert(e.message);
@@ -342,7 +345,7 @@ class Studio {
       const place = savePlace(this.game, { name: this.gameInfo.name });
       let thumbnail;
       try { thumbnail = await renderPlace(null, 384, { game: this.game }); } catch { /* optional */ }
-      const r = await api.put(`/games/${this.gameId}/place`, { place, thumbnail });
+      const r = await api.put(`/games/${this.gameId}/place${this.subPlace ? '?place=' + this.subPlace.id : ''}`, { place, thumbnail });
       this.gameInfo = r.game;
       this.dirty = false;
       this.updateTitle();
@@ -410,6 +413,50 @@ class Studio {
     this.updateRibbonState();
     this.log('info', 'Test session ended.');
     this.status('Ready');
+  }
+
+  // ------------------------------------------------------------ places
+  // A game is a set of places: the start place (where players join) and more
+  // (a lobby's levels, other worlds). Scripts move players between them with
+  // TeleportService:Teleport(placeId, player).
+  async placesDialog() {
+    if (!this.gameId) { alert('Publish your game first: places belong to a published game.'); return; }
+    const body = h('div', { class: 'places-dlg' });
+    let close;
+    const open = async (pl) => {
+      if (this.dirty && !confirm('You have unpublished changes in this place. Open another place anyway?')) return;
+      close();
+      await this.openGame(this.gameId, pl.start ? 0 : pl.id);
+    };
+    const draw = async () => {
+      let r;
+      try { r = await api.get(`/games/${this.gameId}/places`); } catch (e) { body.replaceChildren(h('div', { text: e.message })); return; }
+      const cur = this.subPlace ? this.subPlace.id : this.gameId;
+      body.replaceChildren(
+        h('p', { class: 'muted', text: 'Players join the Start Place. Send them to another place from a script:' }),
+        h('pre', { class: 'places-code', text: 'local TeleportService = game:GetService("TeleportService")\nTeleportService:Teleport(PLACE_ID, player)\n-- a group into one new server (like an elevator):\nTeleportService:TeleportPartyAsync(PLACE_ID, {player1, player2})\n-- find an id by name:\nlocal id = TeleportService:GetPlaceId("Level 1")' }),
+        h('div', { class: 'places-list' }, r.places.map((pl) => h('div', { class: 'places-row' + (pl.id === cur ? ' current' : '') },
+          h('span', { class: 'ic', html: RIBBON.places }),
+          h('div', { class: 'places-name' }, h('b', { text: pl.name }), h('span', { class: 'muted', text: `  ID ${pl.id}${pl.start ? ' · start place' : ''}${pl.id === cur ? ' · open now' : ''}` })),
+          pl.id === cur ? null : h('button', { class: 'sbtn', text: 'Open', onclick: () => open(pl) }),
+          h('button', { class: 'sbtn', text: 'Copy ID', onclick: () => navigator.clipboard?.writeText(String(pl.id)).then(() => this.toast('Copied')).catch(() => {}) }),
+          pl.start ? null : h('button', { class: 'sbtn', text: 'Rename', onclick: async () => {
+            const name = await this.prompt('Rename place', 'Name', pl.name);
+            if (!name) return;
+            try { await api.post(`/places/${pl.id}`, { name }); if (this.subPlace && this.subPlace.id === pl.id) { this.subPlace.name = name; this.updateTitle(); } draw(); } catch (e) { alert(e.message); }
+          } }),
+          pl.start || pl.id === cur ? null : h('button', { class: 'sbtn', text: 'Delete', onclick: async () => {
+            if (!confirm(`Delete the place "${pl.name}"? This can't be undone.`)) return;
+            try { await api.post(`/places/${pl.id}`, { delete: true }); draw(); } catch (e) { alert(e.message); }
+          } })))),
+        r.canEdit ? h('button', { class: 'sbtn primary', text: '+ New place', onclick: async () => {
+          const name = await this.prompt('New place', 'Name (for example: Level 1, The Hotel, Arena)', '');
+          if (!name) return;
+          try { const x = await api.post(`/games/${this.gameId}/places`, { name, template: 'baseplate' }); this.log('info', `Place "${name}" made — its ID is ${x.place.id}`); draw(); } catch (e) { alert(e.message); }
+        } }) : null);
+    };
+    close = this.dialog('Places', body, [{ text: 'Close' }], 640);
+    draw();
   }
 
   // ------------------------------------------------------------ dialogs & menus
@@ -682,7 +729,8 @@ class Studio {
             btn('lock', 'Lock', 'lock', () => this.setOnSelectedParts('Locked', (p) => !p.Locked, 'Lock'), { small: true }),
             btn('anchor', 'Anchor', 'anchor', () => this.setOnSelectedParts('Anchored', (p) => !p.Anchored, 'Anchor'), { small: true }))),
         testGroup(),
-        group('Settings', btn('settings', 'Game Settings', 'settings', () => this.gameSettings())),
+        group('Settings', btn('settings', 'Game Settings', 'settings', () => this.gameSettings()),
+          btn('places', 'Places', 'places', () => this.placesDialog(), { title: 'The places of this game: a lobby, levels, ... Teleport between them with TeleportService' })),
         group('Collaborate', btn('team', 'Team Create', 'group', () => this.teamDialog(), { title: 'Edit this place together with friends' })),
         group('Publish', btn('publish', 'Publish', 'publish', () => this.publish(), { title: 'Publish to Robis (Ctrl+S)' })),
       ],
@@ -897,7 +945,7 @@ class Studio {
     this.renderToolbox();
 
     const params = new URLSearchParams(location.search);
-    if (params.get('gameId')) await this.openGame(+params.get('gameId'));
+    if (params.get('gameId')) await this.openGame(+params.get('gameId'), +params.get('place') || 0);
     else {
       await this.newFromTemplate('baseplate');
       this.startPage();

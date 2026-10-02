@@ -29,6 +29,9 @@ export class GameServer {
     this.maxPlayers = opts.maxPlayers || 12;
     this.isTest = !!opts.test;
     this.privateId = opts.privateId || 0; // a private server (see manager.serverForPrivate)
+    this.subPlace = opts.subPlace || 0; // a place of the game other than its start place
+    this.placeName = opts.placeName || '';
+    this.reserved = !!opts.reserved; // made for one group (TeleportPartyAsync)
     this.privateName = opts.privateName || '';
     this.backend = opts.backend || {};
     this.onClose = opts.onClose || (() => {});
@@ -42,7 +45,7 @@ export class GameServer {
     this.time = 0;
 
     const game = this.game = new DataModel();
-    game.PlaceId = this.gameId;
+    game.PlaceId = this.subPlace || this.gameId;
     game.GameId = this.gameId;
     game.JobId = this.id;
     game.CreatorId = this.creatorId;
@@ -61,7 +64,8 @@ export class GameServer {
       hasBadge: (uid, name) => this.backend.hasBadge ? this.backend.hasBadge(uid, name) : false,
       passes: this.backend.passes || null,
       hunt: this.backend.hunt || null,
-      teleport: (player, placeId) => this.teleportToPlace(player, placeId),
+      teleport: (players, placeId, together) => this.teleportToPlace(players, placeId, together),
+      placeId: (name) => (this.manager && this.manager.places ? this.manager.places.byName(this.gameId, name) : 0),
       promptPass: (player, passId) => this.promptPass(player, passId),
       bubble: (part, msg) => this.enqueue(['bubble', part.id, filterChat(msg)]),
     });
@@ -278,7 +282,7 @@ export class GameServer {
   // players taking part (only admins while the event is private).
   _huntJoin(session) {
     const h = this.backend.hunt;
-    if (!h || this.isTest || !h.inEvent() || !h.eligible(session.user.id)) return;
+    if (!h || this.isTest || this.subPlace || !h.inEvent() || !h.eligible(session.user.id)) return;
     this._huntEnsure();
     const p = h.progress(session.user.id);
     const found = p && p.games.some((g) => g.id === this.gameId && g.found);
@@ -373,14 +377,22 @@ export class GameServer {
     this.log('info', `${session.user.username} found The Hunt token (${r.count}/${r.total})`);
   }
 
-  // TeleportService:Teleport: the player's client moves to another game.
-  teleportToPlace(player, placeId) {
-    const session = this.sessions.get(player._p ? player._p.UserId : player.UserId);
-    if (!session || this.isTest) {
-      if (session) this.send(session, { t: 'sys', text: `Teleport to place ${placeId} (only works in a published game).` });
+  // TeleportService: the players' clients move to another place (of this game
+  // or another one). together: all of them into one fresh server.
+  teleportToPlace(players, placeId, together = false) {
+    const sessions = players.map((p) => p && this.sessions.get(p._p ? p._p.UserId : p.UserId)).filter(Boolean);
+    if (!sessions.length) return;
+    if (this.isTest) {
+      for (const s of sessions) this.send(s, { t: 'sys', text: `Teleport to place ${placeId} (only works in a published game).` });
       return;
     }
-    this.send(session, { t: 'teleportPlace', placeId });
+    const where = this.manager && this.manager.places ? this.manager.places.resolve(placeId) : { gameId: placeId, place: 0 };
+    if (!where) { this.log('error', `TeleportService: there is no place ${placeId}`); return; }
+    let serverId;
+    if (together) {
+      try { serverId = this.manager.reserve(where.gameId, where.place); } catch (e) { this.log('error', 'TeleportService: ' + e.message); return; }
+    }
+    for (const s of sessions) this.send(s, { t: 'teleportPlace', placeId: where.gameId, place: where.place || undefined, serverId });
   }
 
   playerInfo(s) {

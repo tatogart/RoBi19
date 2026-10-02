@@ -55,6 +55,11 @@ export const can = (u, perm) => !!u && (u.isAdmin || (u.perms || []).includes(pe
 // opts.adminCodeHash: sha256 of a secret admin code; entering it makes any account an admin.
 // opts.requireAdminCode: only code-verified accounts may stay admins (phone build, where
 //   every device is its own "server" and anyone would otherwise be first).
+// A deleted game takes its other places (lobby levels etc.) with it.
+function dropSubPlaces(D, gameId) {
+  for (const p of Object.values(D.places || {})) if (p.gameId === gameId) delete D.places[p.id];
+}
+
 export function createApi(db, manager, opts = {}) {
   const firstUserIsAdmin = opts.firstUserIsAdmin !== false;
   const adminCodeHash = (opts.adminCodeHash || '').trim().toLowerCase();
@@ -1650,6 +1655,7 @@ export function createApi(db, manager, opts = {}) {
     if (g.creatorId !== req.user.id && !req.user.isAdmin) return bad(res, 'Forbidden', 403);
     for (const s of manager.serversFor(g.id)) s.close();
     delete D.games[g.id];
+    dropSubPlaces(D, g.id);
     db.save();
     res.json({ ok: true });
   });
@@ -1687,14 +1693,85 @@ export function createApi(db, manager, opts = {}) {
     res.json({ games: Object.values(D.games).filter((g) => (g.collaborators || []).includes(req.user.id)).map((g) => publicGame(g, req.user)) });
   });
 
+  // ------------------------------------------------------------ places
+  // A game can have more places than its start place (a lobby and the levels
+  // behind it, like DOORS). Their ids start at 100001 so they never clash with
+  // game ids; the game's own id is its start place. TeleportService moves
+  // players between them.
+  if (!D.places) D.places = {};
+  if ((D.meta.nextIds.place || 0) < 100001) D.meta.nextIds.place = 100001;
+  const subPlaces = (g) => Object.values(D.places).filter((p) => p.gameId === g.id).sort((a, b) => a.id - b.id);
+  const placesOf = (g) => [{ id: g.id, name: 'Start Place', start: true, updated: g.updated },
+    ...subPlaces(g).map((p) => ({ id: p.id, name: p.name, start: false, updated: p.updated }))];
+  manager.places = {
+    // a place id -> { gameId, place (0 = the start place) }
+    resolve: (pid) => (D.places[pid] ? { gameId: D.places[pid].gameId, place: D.places[pid].id } : D.games[pid] ? { gameId: +pid, place: 0 } : null),
+    byName: (gameId, name) => {
+      const n = String(name || '').trim().toLowerCase();
+      const g = D.games[gameId];
+      if (!g) return 0;
+      if (n === 'start place' || n === g.name.toLowerCase()) return g.id;
+      return Object.values(D.places).find((p) => p.gameId === gameId && p.name.toLowerCase() === n)?.id || 0;
+    },
+    name: (pid) => D.places[pid]?.name || '',
+  };
+  // ?place=<id> picks a sub-place of the game; anything else is the start place
+  const pickPlace = (g, req, res) => {
+    const pid = toInt(req.query.place);
+    if (!pid || pid === g.id) return { id: g.id, sub: null };
+    const p = D.places[pid];
+    if (!p || p.gameId !== g.id) { bad(res, 'This place is not part of the game.', 404); return null; }
+    return { id: p.id, sub: p };
+  };
+
+  api.get('/games/:id/places', (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    res.json({ places: placesOf(g), canEdit: canEditPlace(g, req.user) });
+  });
+  api.post('/games/:id/places', requireUser, (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    if (!canEditPlace(g, req.user)) return bad(res, 'You do not have permission to edit this game.', 403);
+    if (subPlaces(g).length >= 20) return bad(res, 'A game can have up to 20 places.');
+    const name = String(req.body?.name || '').trim().slice(0, 50);
+    if (name.length < 2) return bad(res, 'Give the place a name.');
+    if (manager.places.byName(g.id, name)) return bad(res, 'There is already a place with that name.');
+    const id = db.nextId('place');
+    const t = TEMPLATES[req.body?.template] || TEMPLATES.baseplate;
+    db.writePlace(id, t.build());
+    D.places[id] = { id, gameId: g.id, name, created: Date.now(), updated: Date.now() };
+    db.save();
+    res.json({ place: { id, name, start: false }, places: placesOf(g) });
+  });
+  api.post('/places/:pid', requireUser, (req, res) => {
+    const p = D.places[toInt(req.params.pid)];
+    const g = p && D.games[p.gameId];
+    if (!g) return bad(res, 'Place not found', 404);
+    if (!canEditPlace(g, req.user)) return bad(res, 'You do not have permission to edit this game.', 403);
+    if (req.body?.delete) {
+      for (const s of manager.allServers()) if (s.subPlace === p.id) s.close('This place was deleted');
+      delete D.places[p.id];
+    } else {
+      const name = String(req.body?.name || '').trim().slice(0, 50);
+      if (name.length < 2) return bad(res, 'Give the place a name.');
+      const other = manager.places.byName(g.id, name);
+      if (other && other !== p.id) return bad(res, 'There is already a place with that name.');
+      p.name = name;
+    }
+    db.save();
+    res.json({ places: placesOf(g) });
+  });
+
   api.get('/games/:id/place', (req, res) => {
     const g = D.games[toInt(req.params.id)];
     if (!g) return bad(res, 'Game not found', 404);
     const canEdit = canEditPlace(g, req.user);
     if (!canEdit && !g.copyable) return bad(res, 'This place is not copyable.', 403);
-    const place = db.readPlace(g.id);
+    const which = pickPlace(g, req, res); if (!which) return;
+    const place = db.readPlace(which.id);
     if (!place) return bad(res, 'Place file missing', 404);
-    res.json({ place, game: publicGame(g, req.user) });
+    res.json({ place, game: publicGame(g, req.user), subPlace: which.sub ? { id: which.sub.id, name: which.sub.name } : null });
   });
 
   api.put('/games/:id/place', requireUser, (req, res) => {
@@ -1703,9 +1780,12 @@ export function createApi(db, manager, opts = {}) {
     if (!canEditPlace(g, req.user)) return bad(res, 'You do not have permission to edit this place.', 403);
     const place = req.body?.place;
     if (!place || place.format !== PLACE_FORMAT || typeof place.services !== 'object') return bad(res, 'Invalid place file');
-    db.writePlace(g.id, place);
+    const which = pickPlace(g, req, res); if (!which) return;
+    db.writePlace(which.id, place);
     g.updated = Date.now();
-    if (typeof req.body.thumbnail === 'string') saveThumb('game', g.id, req.body.thumbnail);
+    if (which.sub) which.sub.updated = Date.now();
+    // the game's picture is the start place's
+    else if (typeof req.body.thumbnail === 'string') saveThumb('game', g.id, req.body.thumbnail);
     db.save();
     res.json({ ok: true, game: publicGame(g, req.user) });
   });
@@ -2116,6 +2196,7 @@ export function createApi(db, manager, opts = {}) {
       if (g.creatorId !== id) continue;
       for (const srv of manager.serversFor(g.id)) srv.close();
       delete D.games[g.id];
+    dropSubPlaces(D, g.id);
     }
     for (const itemId of D.inventory[id] || []) dropSerial(itemId, id);
     delete D.inventory[id];
@@ -2238,6 +2319,7 @@ export function createApi(db, manager, opts = {}) {
     if (!g) return bad(res, 'Game not found', 404);
     for (const srv of manager.serversFor(g.id)) srv.close();
     delete D.games[g.id];
+    dropSubPlaces(D, g.id);
     db.save();
     res.json({ ok: true });
   });

@@ -11,17 +11,151 @@ function tool(parent, name, toolModel, color, o = {}) {
 }
 
 // ================================================================ DOORS
-export function gameDoors() {
-  const g = newGame();
-  const ws = g.Workspace;
-  const L = g.Lighting;
+// DOORS is two places, like the real one: the lobby (start place) where
+// players step into the elevator, and The Hotel, where a group plays one run
+// on its own server (TeleportPartyAsync) and comes back to the lobby after.
+function doorsLighting(L) {
   L.ClockTime = 0;
   L.Brightness = 0.4;
   L.Ambient = Color3.fromRGB(25, 22, 30);
   L.OutdoorAmbient = Color3.fromRGB(20, 20, 26);
   L.FogEnd = 220;
   L.FogColor = Color3.fromRGB(8, 8, 12);
-  // The hotel lobby: the elevator where every run starts.
+}
+
+const DOORS_STATS = `
+-- Best Door and Escapes are saved, so the lobby shows them too.
+local store = game:GetService("DataStoreService"):GetDataStore("DoorsStats")
+local function loadStats(player)
+	local ls = Instance.new("Folder")
+	ls.Name = "leaderstats"
+	ls.Parent = player
+	local best = Instance.new("IntValue")
+	best.Name = "Best Door"
+	best.Parent = ls
+	local wins = Instance.new("IntValue")
+	wins.Name = "Escapes"
+	wins.Parent = ls
+	local ok, saved = pcall(function() return store:GetAsync("u" .. player.UserId) end)
+	if ok and type(saved) == "table" then
+		best.Value = saved.best or 0
+		wins.Value = saved.escapes or 0
+	end
+	return ls
+end
+local function saveStats(player)
+	local ls = player:FindFirstChild("leaderstats")
+	if not ls then return end
+	pcall(function()
+		store:SetAsync("u" .. player.UserId, { best = ls["Best Door"].Value, escapes = ls.Escapes.Value })
+	end)
+end
+`;
+
+export function gameDoorsLobby() {
+  const g = newGame();
+  const ws = g.Workspace;
+  doorsLighting(g.Lighting);
+  g.Lighting.Brightness = 0.6;
+  const WOOD = '#56422f';
+  const lob = model(ws, 'Lobby');
+  part(lob, { name: 'Floor', size: [60, 1, 50], pos: [0, 0.5, 0], color: WOOD, material: 'WoodPlanks' });
+  part(lob, { name: 'Carpet', size: [10, 0.1, 40], pos: [0, 1.05, 0], color: '#6b1f1f', material: 'Fabric' });
+  part(lob, { cls: 'SpawnLocation', name: 'LobbySpawn', size: [8, 1, 8], pos: [0, 1.1, 16], color: '#7c5c46', props: { Duration: 0 } });
+  for (const [x, z, sx, sz] of [[0, 25, 60, 1], [0, -25, 60, 1], [-30, 0, 1, 50], [30, 0, 1, 50]]) {
+    part(lob, { name: 'Wall', size: [sx, 16, sz], pos: [x, 8.5, z], color: '#3b2a24', material: 'Wood' });
+  }
+  part(lob, { name: 'Ceiling', size: [60, 1, 50], pos: [0, 16.5, 0], color: '#2a1f1b', material: 'Wood' });
+  for (const [x, z] of [[-15, 10], [15, 10], [-15, -10], [15, -10]]) {
+    const lamp = part(lob, { name: 'Lamp', size: [2, 0.5, 2], pos: [x, 16, z], color: '#ffe0a0', material: 'Neon' });
+    inst(lamp, 'PointLight', { Range: 26, Brightness: 1.6, Color: Color3.fromRGB(255, 210, 150) });
+  }
+  // the reception desk
+  part(lob, { name: 'Desk', size: [14, 4, 3], pos: [-18, 3, -6], color: '#3b2416', material: 'Wood' });
+  part(lob, { name: 'DeskTop', size: [14.4, 0.4, 3.4], pos: [-18, 5.2, -6], color: '#7a5634', material: 'Wood' });
+  const bell = part(lob, { name: 'Bell', size: [1, 0.6, 1], pos: [-14, 5.7, -6], color: '#f5cd30', material: 'Metal', shape: 'Ball' });
+  inst(bell, 'PointLight', { Range: 6, Brightness: 1, Color: Color3.fromRGB(255, 220, 120) });
+  for (const x of [-26, -22, 22, 26]) part(lob, { name: 'Plant', size: [2, 5, 2], pos: [x, 3.5, 20], color: '#2f5a2a', material: 'Grass' });
+  part(lob, { name: 'Sofa', size: [10, 2, 3], pos: [18, 2, 8], color: '#5a1c1c', material: 'Fabric' });
+  part(lob, { name: 'SofaBack', size: [10, 3, 1], pos: [18, 3.5, 9.5], color: '#5a1c1c', material: 'Fabric' });
+  // the elevator at the far end
+  const el = model(ws, 'Elevator');
+  part(el, { name: 'Shaft', size: [14, 14, 1], pos: [0, 8, -24.4], color: '#1b1b1b', material: 'Metal' });
+  for (const x of [-7, 7]) part(el, { name: 'Side', size: [1, 14, 10], pos: [x, 8, -19.5], color: '#2b2b2b', material: 'Metal' });
+  part(el, { name: 'Top', size: [15, 1, 10], pos: [0, 15.5, -19.5], color: '#2b2b2b', material: 'Metal' });
+  part(el, { name: 'ElevatorFloor', size: [13, 0.2, 9], pos: [0, 1.1, -19.5], color: '#8a8a8a', material: 'DiamondPlate' });
+  part(el, { name: 'Zone', size: [12, 6, 8], pos: [0, 4, -19.5], color: '#00ff00', transparency: 1, canCollide: false });
+  part(el, { name: 'Door', size: [12, 13, 0.6], pos: [0, 7.5, -14.2], color: '#3a3a3a', material: 'Metal', transparency: 1, canCollide: false });
+  const sign = part(el, { name: 'Sign', size: [8, 1.6, 0.4], pos: [0, 14, -14.2], color: '#1a0f0a', material: 'Wood' });
+  inst(sign, 'BillboardText', { Text: 'ELEVATOR - The Hotel' });
+  const glow = part(el, { name: 'Glow', size: [10, 0.3, 0.3], pos: [0, 15, -14.4], color: '#ff9d3a', material: 'Neon' });
+  inst(glow, 'PointLight', { Range: 18, Brightness: 2, Color: Color3.fromRGB(255, 160, 80) });
+  script(g.ServerScriptService, 'Elevator', `
+-- DOORS lobby. Step into the elevator: when it leaves, everyone inside goes
+-- to The Hotel together, on their own new server.
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local el = workspace.Elevator
+local zone = el.Zone
+local door = el.Door
+local hint = Instance.new("Hint", workspace)
+local HOTEL = TeleportService:GetPlaceId("The Hotel")
+local MAX = 4
+` + DOORS_STATS + `
+Players.PlayerAdded:Connect(loadStats)
+for _, p in ipairs(Players:GetPlayers()) do if not p:FindFirstChild("leaderstats") then loadStats(p) end end
+
+local function inside()
+	local list = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		local r = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+		if r and #list < MAX then
+			local d = r.Position - zone.Position
+			if math.abs(d.X) < zone.Size.X / 2 and math.abs(d.Z) < zone.Size.Z / 2 and math.abs(d.Y) < 8 then
+				table.insert(list, p)
+			end
+		end
+	end
+	return list
+end
+
+while true do
+	local group = inside()
+	if #group == 0 then
+		hint.Text = "Step into the ELEVATOR to start a run (1-" .. MAX .. " players)"
+		wait(0.5)
+	else
+		local left = 10
+		while left > 0 and #group > 0 do
+			hint.Text = "The elevator leaves in " .. left .. "...   " .. #group .. "/" .. MAX .. " players"
+			wait(1)
+			left = left - 1
+			group = inside()
+		end
+		if #group > 0 then
+			hint.Text = "Going down to The Hotel..."
+			door.CanCollide = true
+			door.Transparency = 0
+			if HOTEL == 0 then
+				hint.Text = "The Hotel place is missing (see Places in Studio)."
+			else
+				TeleportService:TeleportPartyAsync(HOTEL, group)
+			end
+			wait(4)
+			door.CanCollide = false
+			door.Transparency = 1
+		end
+	end
+end
+`);
+  return finish(g, { name: 'DOORS' });
+}
+
+export function gameDoorsHotel() {
+  const g = newGame();
+  const ws = g.Workspace;
+  doorsLighting(g.Lighting);
+  // Where the elevator arrives: every run starts here.
   const lob = model(ws, 'Lobby');
   part(lob, { name: 'LobbyFloor', size: [30, 1, 30], pos: [0, 0.5, 40], color: '#56422f', material: 'WoodPlanks' });
   part(lob, { cls: 'SpawnLocation', name: 'LobbySpawn', size: [8, 1, 8], pos: [0, 1.5, 44], color: '#7c5c46', props: { Duration: 0 } });
@@ -39,8 +173,10 @@ export function gameDoors() {
   script(g.ServerScriptService, 'Hotel', `
 -- DOORS: walk through the hotel, door by door. Hide in closets when the
 -- lights flicker (Rush is coming!), find keys for locked doors and survive
--- Seek's chase. Reach Door 50 to escape.
+-- Seek's chase. Reach Door 50 to escape. After the run everyone goes back
+-- up to the lobby (the start place).
 local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
 local BadgeService = game:GetService("BadgeService")
@@ -58,22 +194,15 @@ local running = false
 local entityActive = false
 local chase = false
 
+` + DOORS_STATS + `
 Players.PlayerAdded:Connect(function(player)
-	local ls = Instance.new("Folder")
-	ls.Name = "leaderstats"
-	ls.Parent = player
-	local best = Instance.new("IntValue")
-	best.Name = "Best Door"
-	best.Parent = ls
-	local wins = Instance.new("IntValue")
-	wins.Name = "Escapes"
-	wins.Parent = ls
+	loadStats(player)
 	player.CharacterAdded:Connect(function(char)
 		local hum = char:FindFirstChild("Humanoid")
 		if hum then hum.Died:Connect(function() inRun[player] = nil hiding[player] = nil end) end
 	end)
 end)
-Players.PlayerRemoving:Connect(function(p) inRun[p] = nil hiding[p] = nil end)
+Players.PlayerRemoving:Connect(function(p) saveStats(p) inRun[p] = nil hiding[p] = nil end)
 
 local function say(text, secs)
 	local m = Instance.new("Message")
@@ -407,14 +536,16 @@ end
 
 while true do
 	reset()
-	for i = 15, 1, -1 do
-		hint.Text = "The elevator opens in " .. i .. "..."
+	-- wait for the elevator group to arrive (they load in one by one)
+	while #Players:GetPlayers() == 0 do
+		hint.Text = "The elevator is arriving..."
+		wait(0.5)
+	end
+	for i = 5, 1, -1 do
+		hint.Text = "The elevator doors open in " .. i .. "..."
 		wait(1)
 	end
-	if #Players:GetPlayers() == 0 then
-		hint.Text = "Waiting for players..."
-		wait(2)
-	else
+	if #Players:GetPlayers() > 0 then
 		for _, p in ipairs(Players:GetPlayers()) do
 			inRun[p] = true
 			p.RespawnLocation = lobbySpawn
@@ -439,18 +570,21 @@ while true do
 			wait(0.5)
 		end
 		if running then
-			hint.Text = "Everyone died at Door " .. opened .. ". Try again!"
+			hint.Text = "Everyone died at Door " .. opened .. ". Back to the lobby..."
 		else
-			hint.Text = "Escaped at Door " .. GOAL .. "!"
+			hint.Text = "Escaped at Door " .. GOAL .. "! Back to the lobby..."
 		end
 		running = false
 		inRun = {}
+		for _, p in ipairs(Players:GetPlayers()) do saveStats(p) end
 		wait(5)
-		for _, p in ipairs(Players:GetPlayers()) do p:LoadCharacter() end
+		-- back up to the lobby (the start place of this game)
+		for _, p in ipairs(Players:GetPlayers()) do TeleportService:Teleport(game.GameId, p) end
+		wait(5)
 	end
 end
 `);
-  return finish(g, { name: 'DOORS' });
+  return finish(g, { name: 'The Hotel' });
 }
 
 // ================================================================ Kart Racing
@@ -1154,9 +1288,10 @@ end
 }
 
 export const NEW_GAMES = [
-  { key: 'doors', name: 'DOORS', build: gameDoors, genre: 'Horror', featured: true, maxPlayers: 4,
+  { key: 'doors', name: 'DOORS', build: gameDoorsLobby, genre: 'Horror', featured: true, maxPlayers: 12,
     visits: 102340, up: 3120, down: 210, favorites: 8800,
-    description: 'Walk through the haunted hotel door by door. Hide in closets when the lights flicker, find keys for locked doors and run from Seek. Can you reach Door 50?' },
+    description: 'Walk through the haunted hotel door by door. Hide in closets when the lights flicker, find keys for locked doors and run from Seek. Can you reach Door 50? Step into the elevator in the lobby with up to 3 friends.',
+    subPlaces: [{ key: 'hotel', name: 'The Hotel', build: gameDoorsHotel }] },
   { key: 'kart', name: 'Robis Kart Racing', build: gameKartRacing, genre: 'Sports', featured: true, maxPlayers: 8,
     visits: 61240, up: 1700, down: 120, favorites: 4100,
     description: 'Jump in a go-kart and race 3 laps! Drive with WASD, take the jump ramp, pass every checkpoint and beat your best lap.' },

@@ -32,7 +32,12 @@ export function handleConnection(ws, user, { db, manager }) {
             const why = manager.privateAccess ? manager.privateAccess(user, +msg.privateId, gameId) : 'Private servers are not available.';
             if (why) throw new Error(why);
             gameServer = manager.serverForPrivate(gameId, +msg.privateId);
-          } else gameServer = manager.serverForGame(gameId, msg.serverId);
+          } else {
+            // msg.place: one of the game's other places (a lobby's level, like DOORS' hotel)
+            const sub = +msg.place && +msg.place !== gameId ? +msg.place : 0;
+            if (sub && db.data.places?.[sub]?.gameId !== gameId) throw new Error('This place is not part of the game.');
+            gameServer = manager.serverForGame(gameId, msg.serverId, sub);
+          }
           game.visits++;
           countPlay(db.data, user.id);
           user.recentGames = [gameId, ...(user.recentGames || []).filter((g) => g !== gameId)].slice(0, 20);
@@ -57,7 +62,7 @@ export function handleConnection(ws, user, { db, manager }) {
 // ---------------------------------------------------------------- Team Create
 // People editing the same place in Studio share their changes live. The server
 // only relays: each Studio applies the others' edits (see shared/engine/placediff.js).
-const rooms = new Map(); // gameId -> Set of { ws, user, id }
+const rooms = new Map(); // gameId (or 'gameId:placeId') -> Set of { ws, user, id }
 let memberId = 0;
 
 export function canEditPlace(game, user) {
@@ -86,16 +91,19 @@ function teamCreate(ws, user, msg, db, setTeam, team) {
     const gameId = +msg.gameId;
     const game = db.data.games[gameId];
     if (!canEditPlace(game, user)) { ws.send(JSON.stringify({ t: 'tc.error', msg: 'You can\'t edit this place.' })); return; }
-    const room = rooms.get(gameId) || new Set();
-    rooms.set(gameId, room);
-    const me = { ws, user, gameId, id: ++memberId };
+    // Each place of a game has its own room (the start place is the game id).
+    const place = +msg.place && +msg.place !== gameId && db.data.places?.[+msg.place]?.gameId === gameId ? +msg.place : 0;
+    const key = place ? `${gameId}:${place}` : gameId;
+    const room = rooms.get(key) || new Set();
+    rooms.set(key, room);
+    const me = { ws, user, gameId: key, id: ++memberId };
     const others = [...room];
     room.add(me);
     setTeam(me);
     sendTo(me, { t: 'tc.welcome', member: me.id, users: roomUsers(room) });
     // Ask someone already editing for the latest (maybe unpublished) version.
     if (others.length) sendTo(others[0], { t: 'tc.need', for: me.id });
-    presence(gameId);
+    presence(key);
     return;
   }
   if (!team) return;

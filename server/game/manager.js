@@ -10,7 +10,8 @@ export class GameManager {
 
   allServers() { return [...this.servers.values()].filter((s) => !s.closed); }
   // Public servers only; private ones are reached through their own id.
-  serversFor(gameId) { return this.allServers().filter((s) => !s.isTest && !s.privateId && s.gameId === gameId); }
+  // (every place of the game; reserved group servers aren't listed either)
+  serversFor(gameId) { return this.allServers().filter((s) => !s.isTest && !s.privateId && !s.reserved && s.gameId === gameId); }
 
   findUser(userId) {
     for (const server of this.allServers()) {
@@ -66,21 +67,35 @@ export class GameManager {
     return server;
   }
 
-  serverForGame(gameId, serverId) {
+  // place: a sub-place id of the game (0 = its start place).
+  serverForGame(gameId, serverId, place = 0) {
     const game = this.db.data.games[gameId];
     if (!game) throw new Error('Game not found');
+    const placeId = place || 0;
     if (serverId) {
       const s = this.servers.get(serverId);
-      if (s && !s.closed && s.gameId === gameId && !s.isFull) return s;
+      if (s && !s.closed && s.gameId === gameId && (s.subPlace || 0) === placeId && !s.isFull) return s;
     }
-    const open = this.serversFor(gameId).filter((s) => !s.isFull).sort((a, b) => b.playerCount - a.playerCount);
+    const open = this.serversFor(gameId).filter((s) => (s.subPlace || 0) === placeId && !s.isFull).sort((a, b) => b.playerCount - a.playerCount);
     if (open.length) return open[0];
-    const place = this.db.readPlace(gameId);
+    return this._newPlaceServer(game, placeId);
+  }
+
+  _newPlaceServer(game, placeId, opts = {}) {
+    const place = this.db.readPlace(placeId || game.id);
     if (!place) throw new Error('Place file missing');
     return this._create({
-      gameId, name: game.name, creatorId: game.creatorId, maxPlayers: game.maxPlayers, place,
-      backend: this.backendFor(gameId),
+      gameId: game.id, name: game.name, creatorId: game.creatorId, maxPlayers: game.maxPlayers, place,
+      subPlace: placeId, placeName: placeId ? (this.places ? this.places.name(placeId) : '') : '',
+      backend: this.backendFor(game.id), ...opts,
     });
+  }
+
+  // A fresh server only for a group (TeleportPartyAsync): returns its id.
+  reserve(gameId, placeId = 0) {
+    const game = this.db.data.games[gameId];
+    if (!game) throw new Error('Game not found');
+    return this._newPlaceServer(game, placeId, { reserved: true }).id;
   }
 
   // A private server: one running instance per private server id.

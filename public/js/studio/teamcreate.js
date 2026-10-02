@@ -4,7 +4,8 @@ import { applyOps } from '/shared/engine/placediff.js';
 import { savePlace } from '/shared/engine/serialize.js';
 
 export class TeamCreate {
-  constructor(studio, gameId) {
+  constructor(studio, gameId, place = 0) {
+    this.place = place;
     this.studio = studio;
     this.gameId = gameId;
     this.users = [];
@@ -15,7 +16,7 @@ export class TeamCreate {
   connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     this.ws = new WebSocket(`${proto}://${location.host}/ws`);
-    this.ws.onopen = () => this.ws.send(JSON.stringify({ t: 'tc.join', gameId: this.gameId }));
+    this.ws.onopen = () => this.ws.send(JSON.stringify({ t: 'tc.join', gameId: this.gameId, place: this.place || undefined }));
     this.ws.onmessage = (e) => { try { this.handle(JSON.parse(e.data)); } catch (err) { console.warn(err); } };
     this.ws.onclose = () => {
       if (this.closed) return;

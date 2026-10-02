@@ -144,6 +144,31 @@ function placeHash(place) {
   return h.toString(16) + ':' + str.length;
 }
 
+// A showcase game's other places (DOORS' hotel...): made if missing, and
+// updated like the game itself unless someone edited them in Studio.
+function syncSubPlaces(db, game, sg, now) {
+  const D = db.data;
+  if (!sg.subPlaces) return;
+  if (!D.places) D.places = {};
+  if ((D.meta.nextIds.place || 0) < 100001) D.meta.nextIds.place = 100001;
+  for (const sp of sg.subPlaces) {
+    const p = Object.values(D.places).find((x) => x.gameId === game.id && x.seedKey === sp.key);
+    if (!p) {
+      const id = db.nextId('place');
+      const place = sp.build();
+      db.writePlace(id, place);
+      D.places[id] = { id, gameId: game.id, name: sp.name, created: now, updated: now, seedKey: sp.key, seedHash: placeHash(place) };
+      continue;
+    }
+    const current = db.readPlace(p.id);
+    if (current && p.seedHash && placeHash(current) !== p.seedHash) continue; // edited in Studio
+    const fresh = sp.build();
+    const h = placeHash(fresh);
+    if (!current || h !== placeHash(current)) { db.writePlace(p.id, fresh); p.updated = now; }
+    p.seedHash = h;
+  }
+}
+
 // Adds showcase games this world doesn't have yet (so older worlds get new
 // places too), and updates the ones nobody has edited to the newest version.
 // Returns how many were added.
@@ -171,6 +196,7 @@ export function addSeedGames(db) {
         const h = placeHash(fresh);
         if (h !== placeHash(current)) { db.writePlace(existing.id, fresh); existing.updated = now; }
         existing.seedHash = h;
+        syncSubPlaces(db, existing, sg, now);
       }
       done.add(sg.key);
       continue;
@@ -187,6 +213,7 @@ export function addSeedGames(db) {
       upVotes: sg.up || 0, downVotes: sg.down || 0, favorites: sg.favorites || 0,
       seedKey: sg.key, seedHash: placeHash(place),
     };
+    syncSubPlaces(db, D.games[id], sg, now);
     added++;
   }
   D.meta.seedKeys = [...done];

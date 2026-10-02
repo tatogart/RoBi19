@@ -1155,3 +1155,52 @@ test('admin panel update: dashboard, servers, settings, broadcast, alts, socials
   const kidId = (await call('GET', '/auth/me', null, kid)).data.user.id;
   assert.ok(Array.isArray((await call('GET', `/admin/users/${kidId}/alts`, null, admin)).data.alts));
 });
+
+test('places: a game has more places, scripts teleport between them (DOORS lobby → hotel)', async () => {
+  const maker = (await call('POST', '/auth/signup', { username: 'PlaceMaker', password: 'secret123' })).cookie;
+  const other = (await call('POST', '/auth/signup', { username: 'PlaceSnoop', password: 'secret123' })).cookie;
+  const g = (await call('POST', '/games', { name: 'Many Places', template: 'baseplate' }, maker)).data.game;
+  let r = (await call('GET', `/games/${g.id}/places`, null, maker)).data;
+  assert.deepEqual(r.places.map((p) => [p.name, p.start]), [['Start Place', true]]);
+  assert.equal((await call('POST', `/games/${g.id}/places`, { name: 'Level 1' }, other)).status, 403);
+  const lv = (await call('POST', `/games/${g.id}/places`, { name: 'Level 1', template: 'baseplate' }, maker)).data.place;
+  assert.ok(lv.id > 100000);
+  r = (await call('GET', `/games/${g.id}/places`, null, maker)).data;
+  assert.deepEqual(r.places.map((p) => p.name), ['Start Place', 'Level 1']);
+  // Studio opens and saves the other place by itself
+  const pl = (await call('GET', `/games/${g.id}/place?place=${lv.id}`, null, maker)).data;
+  assert.equal(pl.subPlace.name, 'Level 1');
+  assert.equal((await call('PUT', `/games/${g.id}/place?place=${lv.id}`, { place: pl.place }, maker)).status, 200);
+  await call('POST', `/places/${lv.id}`, { name: 'Level One' }, maker);
+  assert.equal((await call('GET', `/games/${g.id}/places`, null, maker)).data.places[1].name, 'Level One');
+  assert.equal((await call('POST', `/places/${lv.id}`, { delete: true }, other)).status, 403);
+  await call('POST', `/places/${lv.id}`, { delete: true }, maker);
+  assert.equal((await call('GET', `/games/${g.id}/places`, null, maker)).data.places.length, 1);
+
+  // DOORS: the lobby is the start place, The Hotel is its other place
+  const doors = (await call('GET', '/games?sort=popular')).data.games.find((x) => x.name === 'DOORS')
+    || (await call('GET', '/games?q=DOORS')).data.games.find((x) => x.name === 'DOORS');
+  const dp = (await call('GET', `/games/${doors.id}/places`, null, maker)).data.places;
+  const hotel = dp.find((p) => p.name === 'The Hotel');
+  assert.ok(hotel, JSON.stringify(dp));
+  // a place of another game can't be joined through this one
+  const bad = await join(maker, { placeId: g.id, place: hotel.id });
+  assert.equal((await bad.wait((m) => m.t === 'error')).msg, 'This place is not part of the game.');
+  const c = await join(maker, { placeId: doors.id });
+  const w = await c.wait((m) => m.t === 'welcome');
+  const ws0 = w.snapshot.find((s) => s.c === 'Workspace');
+  assert.ok(ws0.ch.some((n) => n.p.Name === 'Elevator'));
+  await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  const step = setInterval(() => c.ws.send(JSON.stringify({ t: 'move', p: [0, 4.5, -19.5], ry: 0, a: 'idle' })), 300);
+  const tp = await c.wait((m) => m.t === 'teleportPlace', 16000).finally(() => clearInterval(step));
+  assert.equal(tp.placeId, doors.id);
+  assert.equal(tp.place, hotel.id);
+  assert.ok(tp.serverId);
+  c.ws.close();
+  // the group's own hotel server: not in the public server list
+  const h = await join(maker, { placeId: doors.id, place: hotel.id, serverId: tp.serverId });
+  const hw = await h.wait((m) => m.t === 'welcome');
+  assert.equal(hw.serverId, tp.serverId);
+  assert.ok(hw.snapshot.find((s) => s.c === 'Workspace').ch.some((n) => n.p.Name === 'Rooms'));
+  h.ws.close();
+});

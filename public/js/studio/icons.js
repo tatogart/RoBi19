@@ -46,6 +46,7 @@ export function classIcon(cls) {
 // Ribbon icons (32x32)
 const R = (body) => `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
 export const RIBBON = {
+  places: R('<rect x="3" y="15" width="12" height="12" rx="2" fill="#00a2ff"/><rect x="17" y="5" width="12" height="12" rx="2" fill="#02b757"/><rect x="17" y="19" width="12" height="9" rx="2" fill="#f5a300"/><path d="M15 21h2M21 17v2" stroke="#666" stroke-width="2"/>'),
   paste: R('<rect x="6" y="5" width="20" height="24" rx="2" fill="#c58a3c"/><rect x="11" y="3" width="10" height="5" rx="1" fill="#888"/><rect x="10" y="11" width="15" height="16" fill="#fff" stroke="#999"/>'),
   copy: R('<rect x="5" y="4" width="15" height="18" fill="#fff" stroke="#888" stroke-width="1.5"/><rect x="12" y="10" width="15" height="18" fill="#fff" stroke="#3a7bd5" stroke-width="1.5"/>'),
   cut: R('<circle cx="9" cy="24" r="4" fill="none" stroke="#555" stroke-width="2"/><circle cx="23" cy="24" r="4" fill="none" stroke="#555" stroke-width="2"/><path d="M11 21 24 4M21 21 8 4" stroke="#555" stroke-width="2"/>'),

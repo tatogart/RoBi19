@@ -186,3 +186,11 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .tb-cats { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; }
 .tb-cats button { font-size: 12px; padding: 2px 8px; border: 1px solid #c8c8c8; background: #fff; border-radius: 10px; cursor: pointer; }
 .tb-cats button.on { background: #3a7bd5; color: #fff; border-color: #3a7bd5; }
+.places-dlg p { margin: 0 0 6px; }
+.places-code { background: #1e1e1e; color: #d4d4d4; font-size: 12px; padding: 8px 10px; border-radius: 3px; margin: 0 0 10px; white-space: pre-wrap; user-select: text; }
+.places-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; max-height: 320px; overflow: auto; }
+.places-row { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(0,0,0,.05); border-radius: 3px; }
+.places-row.current { background: rgba(58,123,213,.15); outline: 1px solid #3a7bd5; }
+.places-row .ic { width: 20px; height: 20px; flex: none; }
+.places-row .ic svg { width: 100%; height: 100%; }
+.places-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

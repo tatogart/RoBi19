@@ -81,6 +81,7 @@ export class GameClient {
       const msg = { t: 'join', placeId: this.opts.placeId || 0 };
       if (this.opts.serverId) msg.serverId = this.opts.serverId;
       if (this.opts.privateId) msg.privateId = this.opts.privateId;
+      if (this.opts.place) msg.place = this.opts.place;
       if (this.opts.testPlace) msg.test = this.opts.testPlace;
       this.ws.send(JSON.stringify(msg));
     };
@@ -201,7 +202,7 @@ export class GameClient {
         // TeleportService: off to another game.
         this.closedByServer = true;
         this.hud.dialog('Teleporting...', 'Taking you to the next game.', []);
-        setTimeout(() => { location.href = `/play?placeId=${+m.placeId}`; }, 700);
+        setTimeout(() => { location.href = `/play?placeId=${+m.placeId}${m.place ? '&place=' + +m.place : ''}${m.serverId ? '&serverId=' + encodeURIComponent(m.serverId) : ''}`; }, 700);
         return;
       case 'hunt':
         this.hud.huntBanner(m.count, m.total, m.reward, m.robits);

@@ -66,7 +66,7 @@ async function openRoom(welcome) {
 }
 
 const client = new GameClient(document.body, {
-  placeId: room ? 0 : placeId, serverId: params.get('serverId'), privateId: params.get('private'), gameInfo,
+  placeId: room ? 0 : placeId, serverId: params.get('serverId'), privateId: params.get('private'), place: params.get('place'), gameInfo,
   onWelcome: rooms && !room ? openRoom : null,
 });
 client.start();

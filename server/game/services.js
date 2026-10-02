@@ -218,9 +218,14 @@ export function installServices(game, rt, backend) {
   market.PlayerOwnsAsset = () => false;
   market.PromptPurchase = () => {};
 
+  // Places: the game's id is its start place; other places have their own ids
+  // (see the Places list in Studio). GetPlaceId("Name") finds one by name.
   const tp = game.GetService('TeleportService');
-  tp.Teleport = (placeId, player) => { if (backend.teleport) backend.teleport(player, +placeId); };
-  tp.TeleportAsync = (placeId, players) => { for (const p of Array.isArray(players) ? players : [players]) tp.Teleport(placeId, p); };
+  tp.Teleport = (placeId, player) => { if (backend.teleport) backend.teleport([player], +placeId, false); };
+  // A group goes together into a fresh server of that place (like DOORS' elevator).
+  tp.TeleportPartyAsync = (placeId, players) => { if (backend.teleport) backend.teleport(Array.isArray(players) ? players : [players], +placeId, true); };
+  tp.TeleportAsync = (placeId, players) => tp.TeleportPartyAsync(placeId, players);
+  tp.GetPlaceId = (name) => (backend.placeId ? backend.placeId(String(name)) : 0);
 
   const hunt = game.GetService('HuntService');
   hunt.GetProgress = (userId) => {
