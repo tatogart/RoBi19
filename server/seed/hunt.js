@@ -32,7 +32,7 @@ export function buildHuntHub(games, prizes = []) {
   // ---------------------------------------------------------------- central plaza
   const plaza = model(ws, 'Plaza');
   part(plaza, { name: 'Plaza', size: [1, 84, 84], pos: [0, 0.5, 0], color: '#3b3157', material: 'Marble', shape: 'Cylinder', rot: [0, 0, 90] });
-  part(plaza, { name: 'PlazaRing', size: [1.2, 90, 90], pos: [0, 0.45, 0], color: GOLD, material: 'Metal', shape: 'Cylinder', rot: [0, 0, 90] });
+  part(plaza, { name: 'PlazaRing', size: [1, 90, 90], pos: [0, 0.4, 0], color: GOLD, material: 'Metal', shape: 'Cylinder', rot: [0, 0, 90] });
   part(plaza, { name: 'Inlay', size: [1.1, 30, 30], pos: [0, 0.55, 0], color: '#4a3a78', material: 'Marble', shape: 'Cylinder', rot: [0, 0, 90] });
   // star rays in the floor
   for (let i = 0; i < 8; i++) {
@@ -45,7 +45,7 @@ export function buildHuntHub(games, prizes = []) {
   part(fountain, { name: 'Water', size: [0.4, 19, 19], pos: [0, 3.1, 0], color: '#3aa0ff', material: 'Glass', transparency: 0.35, shape: 'Cylinder', rot: [0, 0, 90], canCollide: false });
   part(fountain, { name: 'Pillar', size: [10, 3, 3], pos: [0, 7, 0], color: '#d9d4e8', material: 'Marble', shape: 'Cylinder', rot: [0, 0, 90] });
   const coin = part(fountain, { name: 'GiantToken', size: [1.6, 11, 11], pos: [0, 17, 0], color: GOLD, material: 'Neon', shape: 'Cylinder', canCollide: false });
-  part(fountain, { name: 'CoinStar', size: [1.8, 4, 4], pos: [0, 17, 0], color: '#fff3b0', material: 'Neon', canCollide: false });
+  part(fountain, { name: 'CoinStar', size: [1.8, 4, 4], pos: [0, 17, 0], color: '#fff3b0', material: 'Neon', shape: 'Cylinder', canCollide: false });
   inst(coin, 'BillboardText', { Text: 'THE HUNT', StudsOffset: new Vector3(0, 9, 0) });
   inst(coin, 'Sparkles', { SparkleColor: Color3.fromHex(GOLD) });
   light(coin, GOLD, 50, 2.5);
@@ -128,22 +128,18 @@ export function buildHuntHub(games, prizes = []) {
     part(nature, { name: 'Rock', size: [4 + (i % 3), 2.5 + (i % 2), 3.5], pos: [Math.sin(a) * r, 1, Math.cos(a) * r], rot: [0, i * 47, 0], color: '#5c5470', material: 'Slate' });
   }
 
-  // ---------------------------------------------------------------- prize hall (behind the spawn)
+  // ---------------------------------------------------------------- prizes around the fountain
   if (prizes.length) {
-    const hall = model(ws, 'PrizeHall');
-    const hz = Math.min(R - 16, 56);
-    const w = prizes.length * 6 + 6;
-    part(hall, { name: 'HallFloor', size: [w, 1, 12], pos: [0, 1.1, hz], color: '#2a2140', material: 'Marble' });
-    part(hall, { name: 'HallBack', size: [w, 12, 1], pos: [0, 7, hz + 6], color: '#1b1430', material: 'Marble' });
-    part(hall, { name: 'HallTrim', size: [w, 0.6, 1.4], pos: [0, 12.8, hz + 6], color: GOLD, material: 'Neon', canCollide: false });
-    const title = part(hall, { name: 'HallTitle', size: [4, 1, 1], pos: [0, 13, hz + 5], transparency: 1, canCollide: false });
-    inst(title, 'BillboardText', { Text: 'PRIZES', StudsOffset: new Vector3(0, 2, 0) });
+    const hall = model(ws, 'Prizes');
     prizes.forEach((p, i) => {
-      const px = -w / 2 + 6 + i * 6;
-      part(hall, { name: 'Pedestal', size: [3.4, 3, 3.4], pos: [px, 3.1, hz + 2], color: '#d9d4e8', material: 'Marble' });
-      const orb = part(hall, { name: 'Prize', size: [2.4, 2.4, 2.4], pos: [px, 6, hz + 2], color: COLORS[i % COLORS.length], material: 'Neon', shape: 'Ball', canCollide: false });
-      inst(orb, 'BillboardText', { Text: `${p.name}  (${p.need})`, StudsOffset: new Vector3(0, 2.4, 0) });
-      light(orb, COLORS[i % COLORS.length], 10, 1);
+      const a = ((i + 0.5) / prizes.length) * Math.PI * 2;
+      const px = Math.sin(a) * 33, pz = Math.cos(a) * 33;
+      const col = COLORS[i % COLORS.length];
+      part(hall, { name: 'Pedestal', size: [3.4, 3, 3.4], pos: [px, 2.5, pz], rot: [0, (a * 180) / Math.PI, 0], color: '#d9d4e8', material: 'Marble' });
+      part(hall, { name: 'PedestalTrim', size: [3.8, 0.4, 3.8], pos: [px, 4.1, pz], rot: [0, (a * 180) / Math.PI, 0], color: GOLD, material: 'Metal' });
+      const orb = part(hall, { name: 'Prize', size: [2.2, 2.2, 2.2], pos: [px, 5.9, pz], color: col, material: 'Neon', shape: 'Ball', canCollide: false });
+      inst(orb, 'BillboardText', { Text: `${p.need}: ${p.name}`, StudsOffset: new Vector3(0, 2.3, 0) });
+      light(orb, col, 10, 1);
     });
   }
 

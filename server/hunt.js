@@ -119,7 +119,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     let hub = D.games[H.hubId];
     const games = eventGames();
     const prizes = prizeList(games.length);
-    const key = JSON.stringify([2, games.map((g) => [g.id, g.name, g.creator]), prizes.map((p) => [p.name, p.need])]);
+    const key = JSON.stringify([3, games.map((g) => [g.id, g.name, g.creator]), prizes.map((p) => [p.name, p.need])]);
     if (!hub) {
       const id = db.nextId('game');
       hub = D.games[id] = {
