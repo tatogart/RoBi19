@@ -16,6 +16,7 @@ const NAV = [
   ['inventory', 'Inventory', '/inventory'],
   ['trade', 'Trade', '/trades'],
   ['groups', 'Groups', '/groups'],
+  ['promocodes', 'Promo Codes', '/promocodes'],
   ['blog', 'Blog', '/blog'],
 ];
 

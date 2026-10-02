@@ -44,6 +44,7 @@ const ICONS = {
   play: '<path d="M7 4v16l13-8z"/>',
   logout: '<path d="M10 4H4v16h6M15 8l4 4-4 4M9 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   trade: '<path d="M4 8h14l-4-4m6 12H6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  promocodes: '<path d="M3 10h18v11H3zM2 6.5h20V10H2z"/><path d="M12 6.5V21" stroke="#fff" stroke-width="1.6"/><path d="M12 6.5C10 3 6.5 2.5 6.5 4.6S10 6.5 12 6.5zm0 0c2-3.5 5.5-4 5.5-1.9S14 6.5 12 6.5z" fill="none" stroke="currentColor" stroke-width="1.6"/>',
   groups: '<circle cx="12" cy="7" r="3"/><circle cx="5" cy="11" r="2.5"/><circle cx="19" cy="11" r="2.5"/><path d="M6 21c.5-4 3-6 6-6s5.5 2 6 6zM0 19c.3-2.5 2-4 4.5-4l-1 4zm24 0c-.3-2.5-2-4-4.5-4l1 4z"/>',
   blog: '<path d="M4 3h12l4 4v14H4z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11h8M8 15h8M8 7h5" stroke="currentColor" stroke-width="2"/>',
   studio: '<path d="M3 3h18v18H3z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8h8v8H8z"/>',

@@ -20,7 +20,8 @@ app.append(el('h1', { text: 'Robits' }),
   el('div', { class: 'panel row wrap', style: { gap: '24px' } },
     el('div', { class: 'row', style: { fontSize: '34px', fontWeight: 700, color: '#02b757' } }, icon('robits', 'robits-icon big'), balance),
     el('div', { class: 'spacer' }, el('div', { text: 'Robits are the currency of Robis. Spend them in the Catalog!' }),
-      el('div', { class: 'small muted', text: 'Earn Robits with the daily stipend and from the admins. Robits and Builders Club can\'t be bought.' })),
+      el('div', { class: 'small muted', text: 'Earn Robits with the daily stipend and from the admins. Robits and Builders Club can\'t be bought.' }),
+      el('a', { class: 'small', href: '/promocodes', text: 'Have a promo code? Redeem it here' })),
     claim));
 
 // ---------------------------------------------------------------- Builders Club

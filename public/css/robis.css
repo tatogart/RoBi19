@@ -466,3 +466,16 @@ html[data-theme="dark"] .group-card { background: #2b2d2f; }
 .holder-chip img { width: 22px; height: 22px; border-radius: 50%; }
 .holder-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; opacity: .6; }
 .holder-chip button:hover { opacity: 1; color: #d0021b; }
+
+/* Admin Panel: promo codes */
+.promo-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0 12px; }
+.promo-found, .promo-chosen { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.promo-chosen .holder-chip { padding: 3px 4px 3px 10px; }
+.promo-made { margin-top: 14px; border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+.promo-codes { margin: 8px 0 0; max-height: 220px; overflow: auto; font-size: 15px; letter-spacing: 1px; user-select: all; }
+.promo-table code { font-size: 14px; letter-spacing: .5px; }
+.promo-state.on { background: #02b757; color: #fff; }
+.promo-state.off { background: #8a8a8a; color: #fff; }
+.promo-actions { white-space: nowrap; }
+.promo-actions .btn + .btn { margin-left: 4px; }
+.promo-items-field { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; max-width: 420px; }

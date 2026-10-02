@@ -808,3 +808,40 @@ test('pets: buy one, wear one at a time, it shows in the game avatar', async () 
   assert.equal(worn.length, 1); // one pet at a time
   assert.equal(worn[0].data.model, 'cat');
 });
+
+test('promo codes: staff generate them, players redeem each once', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'PromoKid', password: 'secret123' })).cookie;
+  const pal = (await call('POST', '/auth/signup', { username: 'PromoPal', password: 'secret123' })).cookie;
+  // only staff with the Economy right
+  assert.equal((await call('POST', '/admin/promocodes', { robits: 10 }, kid)).status, 403);
+  assert.equal((await call('POST', '/admin/promocodes', {}, admin)).status, 400); // nothing to give
+  const item = (await call('GET', '/catalog?q=Puppy')).data.items[0];
+  const batch = (await call('POST', '/admin/promocodes', { robits: 300, items: [item.id], count: 3, maxUses: 1 }, admin)).data.codes;
+  assert.equal(batch.length, 3);
+  assert.match(batch[0].code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  const custom = (await call('POST', '/admin/promocodes', { robits: 50, code: 'party2019', maxUses: 0 }, admin)).data.codes[0];
+  assert.equal(custom.code, 'PARTY2019');
+  assert.equal((await call('POST', '/admin/promocodes', { robits: 5, code: 'PARTY2019' }, admin)).status, 400); // taken
+  const before = (await call('GET', '/auth/me', null, kid)).data.user.robits;
+  const r = await call('POST', '/promocodes/redeem', { code: ' ' + batch[0].code.toLowerCase() + ' ' }, kid);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.robits, 300);
+  assert.deepEqual(r.data.items.map((i) => i.id), [item.id]);
+  assert.equal((await call('GET', '/auth/me', null, kid)).data.user.robits, before + 300);
+  assert.ok((await call('GET', '/users/' + (await call('GET', '/auth/me', null, kid)).data.user.id + '/inventory')).data.items.some((i) => i.id === item.id));
+  assert.equal((await call('POST', '/promocodes/redeem', { code: batch[0].code }, kid)).data.error, 'You already used this code.');
+  assert.equal((await call('POST', '/promocodes/redeem', { code: batch[0].code }, pal)).data.error, 'This code has been used up.');
+  // an unlimited code works for everyone, once each
+  assert.equal((await call('POST', '/promocodes/redeem', { code: 'party2019' }, kid)).status, 200);
+  assert.equal((await call('POST', '/promocodes/redeem', { code: 'party2019' }, pal)).status, 200);
+  // turned off codes don't work
+  await call('POST', '/admin/promocodes/edit', { code: batch[1].code, op: 'off' }, admin);
+  assert.equal((await call('POST', '/promocodes/redeem', { code: batch[1].code }, pal)).data.error, 'That code is not valid.');
+  // wrong guesses are limited
+  for (let i = 0; i < 7; i++) await call('POST', '/promocodes/redeem', { code: 'WRONG-' + i }, pal); // + the turned-off one = 8
+  assert.equal((await call('POST', '/promocodes/redeem', { code: batch[2].code }, pal)).status, 429);
+  const list = (await call('GET', '/admin/promocodes', null, admin)).data.codes;
+  assert.equal(list.find((c) => c.code === 'PARTY2019').uses, 2);
+  assert.equal(list.find((c) => c.code === batch[1].code).state, 'off');
+});

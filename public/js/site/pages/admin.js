@@ -55,11 +55,12 @@ function drawAnnouncement() {
 const TABS = {
   players: { label: 'Players', draw: drawPlayers },
   badges: { label: 'Badges', draw: drawBadges, admin: true },
+  promo: { label: 'Promo Codes', draw: drawPromo, perm: 'economy' },
   games: { label: 'Games', draw: drawGames },
   items: { label: 'Items', draw: drawItems },
   log: { label: 'Admin Log', draw: drawLog },
 };
-if (!me.isAdmin) for (const [id, t] of Object.entries(TABS)) if (t.admin) delete TABS[id];
+for (const [id, t] of Object.entries(TABS)) if ((t.admin && !me.isAdmin) || (t.perm && !perm(t.perm))) delete TABS[id];
 let current = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'players';
 function openTab(id) {
   current = id;
@@ -318,6 +319,100 @@ function drawBadges() {
       choice,
       el('div', { class: 'row wrap', style: { marginTop: '10px' } }, who, names, el('button', { class: 'btn btn-primary', text: 'Give', onclick: give }))),
     el('div', { class: 'badge-cards' }, cards));
+}
+
+// ---------------------------------------------------------------- promo codes
+// Generator: Robits and/or items, how many codes, uses per code, expiry, or one custom code.
+const promo = { robits: 100, items: [], count: 1, uses: 1, days: 0, code: '', note: '', made: [] };
+async function drawPromo() {
+  const num = (key, attrs) => {
+    const i = el('input', { class: 'input', type: 'number', value: promo[key], ...attrs });
+    i.addEventListener('input', () => { promo[key] = +i.value || 0; });
+    return i;
+  };
+  const txt = (key, attrs) => {
+    const i = el('input', { class: 'input', value: promo[key], ...attrs });
+    i.addEventListener('input', () => { promo[key] = i.value; if (key === 'code') countField.classList.toggle('hidden', !!i.value.trim()); });
+    return i;
+  };
+  // items: search the catalog, click to add
+  const chosen = el('div', { class: 'promo-chosen' });
+  const drawChosen = () => chosen.replaceChildren(...promo.items.map((it) => el('span', { class: 'holder-chip' },
+    el('span', { text: it.name }), el('button', { title: 'Remove', text: '×', onclick: () => { promo.items = promo.items.filter((x) => x.id !== it.id); drawChosen(); } }))));
+  drawChosen();
+  const found = el('div', { class: 'promo-found' });
+  const q = el('input', { class: 'input', placeholder: 'Search items to add (name)' });
+  let t = null;
+  q.addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      const text = q.value.trim();
+      if (!text) { found.replaceChildren(); return; }
+      const { items } = await api.get(`/catalog?q=${encodeURIComponent(text)}`);
+      found.replaceChildren(...items.slice(0, 8).map((it) => el('button', { class: 'btn btn-small', text: `+ ${it.name}`, onclick: () => {
+        if (promo.items.length >= 10) { toast('Up to 10 items per code.', 'error'); return; }
+        if (!promo.items.some((x) => x.id === it.id)) promo.items.push({ id: it.id, name: it.name });
+        drawChosen();
+      } })));
+    }, 250);
+  });
+  const countField = el('label', { class: 'field' }, 'How many codes', num('count', { min: 1, max: 200 }));
+  countField.classList.toggle('hidden', !!promo.code.trim());
+  const madeBox = el('div');
+  const drawMade = () => {
+    if (!promo.made.length) { madeBox.replaceChildren(); return; }
+    const all = promo.made.map((c) => c.code).join('\n');
+    madeBox.replaceChildren(el('div', { class: 'promo-made' },
+      el('div', { class: 'row' }, el('b', { text: `New codes (${promo.made.length})` }), el('span', { class: 'spacer' }),
+        el('button', { class: 'btn btn-small', text: 'Copy all', onclick: () => navigator.clipboard?.writeText(all).then(() => toast('Copied', 'success')).catch(() => {}) })),
+      el('pre', { class: 'promo-codes no-i18n', text: all })));
+  };
+  drawMade();
+  const make = async () => {
+    try {
+      const r = await api.post('/admin/promocodes', { robits: promo.robits, items: promo.items.map((i) => i.id), count: promo.count, maxUses: promo.uses, days: promo.days, code: promo.code.trim(), note: promo.note });
+      promo.made = r.codes;
+      promo.code = '';
+      toast(r.codes.length === 1 ? 'Code made' : `${r.codes.length} codes made`, 'success');
+      drawPromo();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  const listBox = el('div', {}, spinner());
+  body.replaceChildren(
+    el('div', { class: 'badge-give' },
+      el('h3', { text: 'Make promo codes' }),
+      el('p', { class: 'small muted', text: 'Players type codes on the Promo Codes page. Each player can use a code once.' }),
+      el('div', { class: 'promo-form' },
+        el('label', { class: 'field' }, 'Robits', num('robits', { min: 0, max: 1000000 })),
+        countField,
+        el('label', { class: 'field' }, 'Uses per code (0 = no limit)', num('uses', { min: 0 })),
+        el('label', { class: 'field' }, 'Expires in days (0 = never)', num('days', { min: 0, max: 3650 })),
+        el('label', { class: 'field' }, 'Custom code (optional)', txt('code', { placeholder: 'e.g. ROBIS2019', maxlength: 30 })),
+        el('label', { class: 'field' }, 'Note (only staff see it)', txt('note', { placeholder: 'e.g. YouTube giveaway', maxlength: 100 }))),
+      el('div', { class: 'promo-items-field' }, el('b', { text: 'Items' }), q), found, chosen,
+      el('button', { class: 'btn btn-green', style: { marginTop: '10px' }, text: 'Generate', onclick: make }),
+      madeBox),
+    el('h3', { text: 'All codes' }), listBox);
+  let codes = [];
+  try { ({ codes } = await api.get('/admin/promocodes')); } catch (e) { listBox.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const edit = async (c, op) => {
+    if (op === 'delete' && !confirm(`Delete code ${c.code}?`)) return;
+    try { await api.post('/admin/promocodes/edit', { code: c.code, op }); drawPromo(); } catch (e) { toast(e.message, 'error'); }
+  };
+  const STATE_CLASS = { active: 'on', off: 'off', expired: 'off', 'used up': 'off' };
+  listBox.replaceChildren(codes.length ? el('table', { class: 'list promo-table' },
+    el('tr', {}, ['Code', 'Gives', 'Used', 'Expires', 'Status', ''].map((h) => el('th', { text: h }))),
+    codes.map((c) => el('tr', {},
+      el('td', {}, el('code', { class: 'no-i18n', text: c.code }), c.note ? el('div', { class: 'small muted', text: c.note }) : null),
+      el('td', { class: 'small', text: [c.robits ? `R$ ${fmtFull(c.robits)}` : '', ...c.items.map((i) => i.name)].filter(Boolean).join(' + ') }),
+      el('td', { class: 'small', title: c.lastUsers.join(', '), text: `${c.uses}${c.maxUses ? ' / ' + c.maxUses : ''}` }),
+      el('td', { class: 'small', text: c.expires ? new Date(c.expires).toLocaleDateString() : 'Never' }),
+      el('td', {}, el('span', { class: 'pill promo-state ' + STATE_CLASS[c.state], text: c.state })),
+      el('td', { class: 'promo-actions' },
+        el('button', { class: 'btn btn-small', text: 'Copy', onclick: () => navigator.clipboard?.writeText(c.code).then(() => toast('Copied', 'success')).catch(() => {}) }),
+        c.state === 'off' ? el('button', { class: 'btn btn-small', text: 'Turn on', onclick: () => edit(c, 'on') }) : c.state === 'active' ? el('button', { class: 'btn btn-small', text: 'Turn off', onclick: () => edit(c, 'off') }) : null,
+        el('button', { class: 'btn btn-small btn-red', text: 'Delete', onclick: () => edit(c, 'delete') })))))
+    : el('div', { class: 'empty', text: 'No codes yet.' }));
 }
 
 // Admins give other players rights (see PERMISSIONS in server/api.js).

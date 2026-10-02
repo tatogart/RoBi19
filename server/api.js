@@ -1527,6 +1527,7 @@ export function createApi(db, manager, opts = {}) {
     logout: () => 'Logged out everywhere',
     announcement: (b) => (String(b.text || '').trim() ? `Announcement: ${String(b.text).trim().slice(0, 120)}` : 'Cleared announcement'),
     gamedelete: () => 'Deleted game',
+    promocodes: (b) => (b.op ? `Promo code ${String(b.code || '').toUpperCase()}: ${b.op}` : `Made ${b.code ? 'promo code ' + String(b.code).toUpperCase() : (Math.trunc(+b.count || 1)) + ' promo code(s)'}: R$${Math.trunc(+b.robits || 0)}${(b.items || []).length ? ' + ' + b.items.length + ' item(s)' : ''}`),
   };
   api.use('/admin', (req, res, next) => {
     if (req.method !== 'POST' || !req.user) return next();
@@ -1565,6 +1566,106 @@ export function createApi(db, manager, opts = {}) {
     if (text) for (const srv of manager.allServers()) srv.broadcast({ t: 'sys', text: `[Announcement] ${text}` });
     db.save();
     res.json({ announcement: D.announcement });
+  });
+
+  // ------------------------------------------------------------ promo codes
+  // Staff with the Economy right make codes (Robits and/or items); players
+  // redeem them on the Promo Codes page, each code once per player.
+  // D.promocodes[CODE] = { code, robits, items, maxUses (0 = no limit), usedBy, expires (0 = never), active, created, byName, note }
+  if (!D.promocodes) D.promocodes = {};
+  const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I
+  const normCode = (c) => String(c || '').trim().toUpperCase().replace(/\s+/g, '');
+  const newCode = () => {
+    for (;;) {
+      const r = crypto.randomBytes(8);
+      const bytes = r.bytes || r;
+      let c = '';
+      for (let i = 0; i < 8; i++) c += CODE_CHARS[bytes[i] % CODE_CHARS.length] + (i === 3 ? '-' : '');
+      if (!D.promocodes[c]) return c;
+    }
+  };
+  const promoState = (p) => (!p.active ? 'off' : p.expires && Date.now() > p.expires ? 'expired' : p.maxUses && p.usedBy.length >= p.maxUses ? 'used up' : 'active');
+  const publicPromo = (p) => ({
+    code: p.code, robits: p.robits, items: p.items.map((id) => D.items[id]).filter(Boolean).map((it) => ({ id: it.id, name: it.name, type: it.type })),
+    maxUses: p.maxUses, uses: p.usedBy.length, expires: p.expires, created: p.created, byName: p.byName, note: p.note || '', state: promoState(p),
+    lastUsers: p.usedBy.slice(-5).map((id) => D.users[id]?.username).filter(Boolean),
+  });
+
+  api.get('/admin/promocodes', requirePerm('economy'), (req, res) => {
+    res.json({ codes: Object.values(D.promocodes).sort((a, b) => b.created - a.created).slice(0, 500).map(publicPromo) });
+  });
+
+  // Makes one custom code (code: 'ROBIS2019') or a batch of random ones (count).
+  api.post('/admin/promocodes', requirePerm('economy'), (req, res) => {
+    const b = req.body || {};
+    const robits = Math.trunc(+b.robits || 0);
+    if (robits < 0 || robits > 1e6) return bad(res, 'Robits must be between 0 and 1,000,000.');
+    const items = [...new Set((Array.isArray(b.items) ? b.items : []).map(toInt))].filter((id) => D.items[id]).slice(0, 10);
+    if (!robits && !items.length) return bad(res, 'Add Robits or at least one item.');
+    const maxUses = Math.trunc(+b.maxUses || 0);
+    if (maxUses < 0 || maxUses > 1e6) return bad(res, 'Uses must be between 0 (no limit) and 1,000,000.');
+    const days = +b.days || 0;
+    if (days < 0 || days > 3650) return bad(res, 'Expiry must be between 0 (never) and 3650 days.');
+    const custom = normCode(b.code);
+    let codes;
+    if (custom) {
+      if (!/^[A-Z0-9-]{3,30}$/.test(custom)) return bad(res, 'A code is 3-30 letters, digits or dashes.');
+      if (D.promocodes[custom]) return bad(res, 'That code already exists.');
+      codes = [custom];
+    } else {
+      const count = Math.trunc(+b.count || 1);
+      if (count < 1 || count > 200) return bad(res, 'Make between 1 and 200 codes at a time.');
+      codes = Array.from({ length: count }, () => { const c = newCode(); D.promocodes[c] = { code: c }; return c; });
+    }
+    const now = Date.now();
+    for (const code of codes) {
+      D.promocodes[code] = { code, robits, items, maxUses, usedBy: [], expires: days ? now + days * 86400e3 : 0, active: true, created: now, by: req.user.id, byName: req.user.username, note: String(b.note || '').slice(0, 100) };
+    }
+    db.save();
+    res.json({ codes: codes.map((c) => publicPromo(D.promocodes[c])) });
+  });
+
+  // { code, op: 'off' | 'on' | 'delete' }
+  api.post('/admin/promocodes/edit', requirePerm('economy'), (req, res) => {
+    const p = D.promocodes[normCode(req.body?.code)];
+    if (!p) return bad(res, 'Code not found.', 404);
+    const op = req.body?.op;
+    if (op === 'delete') delete D.promocodes[p.code];
+    else if (op === 'off' || op === 'on') p.active = op === 'on';
+    else return bad(res, 'Unknown action.');
+    db.save();
+    res.json({ ok: true, code: op === 'delete' ? null : publicPromo(p) });
+  });
+
+  // Players redeem codes. Wrong guesses are limited so codes can't be brute-forced.
+  const promoFails = new Map(); // userId -> [times]
+  api.post('/promocodes/redeem', requireUser, (req, res) => {
+    const u = req.user;
+    const now = Date.now();
+    const fails = (promoFails.get(u.id) || []).filter((t) => now - t < 10 * 60e3);
+    if (fails.length >= 8) return bad(res, 'Too many wrong codes. Try again in a few minutes.', 429);
+    const p = D.promocodes[normCode(req.body?.code)];
+    const fail = (msg) => { fails.push(now); promoFails.set(u.id, fails); bad(res, msg); };
+    if (!p) return fail('That code is not valid.');
+    if (p.usedBy.includes(u.id)) return bad(res, 'You already used this code.');
+    const st = promoState(p);
+    if (st === 'off') return fail('That code is not valid.');
+    if (st === 'expired') return bad(res, 'This code has expired.');
+    if (st === 'used up') return bad(res, 'This code has been used up.');
+    p.usedBy.push(u.id);
+    const inv = D.inventory[u.id] || (D.inventory[u.id] = []);
+    const got = [];
+    for (const id of p.items) {
+      const it = D.items[id];
+      if (!it || inv.includes(id)) continue;
+      inv.push(id);
+      giveSerial(it, u.id);
+      got.push({ id: it.id, name: it.name, type: it.type });
+    }
+    if (p.robits) u.robits += p.robits;
+    log(u.id, p.robits, `Promo code ${p.code}` + (got.length ? ` (${got.map((i) => i.name).join(', ')})` : ''));
+    db.save();
+    res.json({ robits: p.robits, items: got, balance: u.robits });
   });
 
   api.get('/admin/overview', requireStaff, (req, res) => {
