@@ -4,8 +4,11 @@ import { el } from '../ui.js';
 await initPage({ active: 'blog', requireAuth: false });
 const app = document.getElementById('app');
 const POSTS = [
+  ['January 2020', 'The Hunt: Another Dimension', 'Part 2 of The Hunt is here! A rift to another dimension has opened above Robis. Jump through the wormholes, follow your shard scanner to the dimension shard hidden in every game, and win 10 space prizes: the Astronaut Helmet, Zib the Alien, the Mini UFO, the Dimension Saber and the Crown of the Cosmos. The hub floats in space with low gravity, launch pads, a rocket to the moon base, meteor showers and 6 star fragments to find. Find shards together with everyone to open the Rift!'],
+  ['January 2020', 'Robis is on VK!', 'Join our VK group for news and giveaways - the link is in the menu and at the bottom of every page.'],
+  ['January 2020', 'Places: games with more worlds', 'A game can now have more places, like in DOORS: the lobby and the hotel. Make them in Studio (Places button) and send players between them with TeleportService.'],
   ['December 2019', 'Robis is on Telegram!', 'Join our Telegram channel for news, updates, events and giveaways — the link is in the menu, on the Home page and at the bottom of every page.'],
-  ['December 2019', 'The Hunt is here', 'Step through the portals in The Hunt hub, find the golden token hidden in every game and win 8 exclusive prizes, from The Hunt Tee to the Hunter\'s Golden Crown. Every token gives Robits too!'],
+  ['December 2019', 'The Hunt is here (part 1, over)', 'Step through the portals in The Hunt hub, find the golden token hidden in every game and win 8 exclusive prizes, from The Hunt Tee to the Hunter\'s Golden Crown. Every token gives Robits too!'],
   ['December 2019', 'Game Passes and Private Servers', 'Game owners can now sell game passes (with built-in perks like speed, super jump and flying) and let players buy their own private servers. Invite your friends with a link!'],
   ['December 2019', 'Gift Cards and Promo Codes', 'Redeem promo codes on the new Promo Codes page and give Robits or Builders Club to a friend with a Gift Card.'],
   ['December 2019', 'Create your own items (BETA)', 'Players with the Item Creator right can now design T-shirts and faces (draw them or upload a picture), shirts, pants, hats and hair. Your creations go on sale in the Catalog and you get 70% of every sale. Find it on the Create page!'],

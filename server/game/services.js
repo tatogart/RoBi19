@@ -232,6 +232,17 @@ export function installServices(game, rt, backend) {
     const p = backend.hunt ? backend.hunt.progress(+userId) : null;
     return p ? { Collected: p.count, Total: p.total, Games: p.games.map((x) => ({ PlaceId: x.id, Name: x.name, Found: x.found })) } : { Collected: 0, Total: 0, Games: [] };
   };
+  // Only works in the event hub: a star fragment found by a player.
+  hunt.CollectFragment = (userId, n) => {
+    const r = backend.hunt && backend.hunt.fragment ? backend.hunt.fragment(+userId, +n) : null;
+    return r ? { New: r.new, Count: r.count, Total: r.total, Prize: r.prize || '' } : { New: false, Count: 0, Total: 0, Prize: '' };
+  };
+  hunt.GetFragments = (userId) => {
+    const r = backend.hunt && backend.hunt.fragment ? backend.hunt.fragment(+userId, 0) : null;
+    return r ? r.list : [];
+  };
+  // Shards found by everyone together (the rift in the hub fills up).
+  hunt.GetGlobal = () => (backend.hunt && backend.hunt.global ? backend.hunt.global() : { Shards: 0, Goal: 1 });
 
   const chat = game.GetService('Chat');
   chat.Chat = (part, msg) => backend.bubble && backend.bubble(part, String(msg));

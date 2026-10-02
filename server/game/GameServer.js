@@ -173,6 +173,13 @@ export class GameServer {
       this.teleport(inst._parent, inst.CFrame);
       return;
     }
+    // A script setting the character's Velocity (jump pads, launchers) pushes the player.
+    if (prop === 'Velocity' && inst._parent && inst._parent._isCharacter && inst.Name === 'HumanoidRootPart') {
+      const session = [...this.sessions.values()].find((s) => s.character === inst._parent);
+      const v = inst._p.Velocity;
+      if (session && v.Magnitude > 0) this.send(session, { t: 'impulse', v: [v.X, v.Y, v.Z], set: true });
+      return;
+    }
     if (!this.isReplicated(inst)) return;
     const d = inst.constructor.schema[prop];
     if (!d || d.noReplicate || d.derived) return;
@@ -286,12 +293,42 @@ export class GameServer {
     this._huntEnsure();
     const p = h.progress(session.user.id);
     const found = p && p.games.some((g) => g.id === this.gameId && g.found);
+    session.huntFound = !!found;
+    session.huntLevel = 0;
+    if (!this.huntScan) this.huntScan = setInterval(() => { try { this._huntScanTick(); } catch (e) { this.log('warn', 'The Hunt: ' + e.message); } }, 1200);
     setTimeout(() => {
       if (!this.sessions.has(session.user.id)) return;
       this.send(session, { t: 'sys', text: found
-        ? `The Hunt: you already found the token in this game (${p.count}/${p.total}).`
-        : 'The Hunt: a golden token is hidden somewhere in this game. Find it!' });
+        ? `The Hunt: you already found the shard in this game (${p.count}/${p.total}).`
+        : 'The Hunt: a dimension shard is hidden somewhere in this game. Follow your scanner!' });
     }, 1500);
+  }
+
+  // The scanner: players still looking get the shard's signal strength (1-5).
+  // The first time someone gets close, the shard may jump to another spot once.
+  _huntScanTick() {
+    const t = this.huntToken;
+    const hunting = [...this.sessions.values()].filter((s) => s.huntFound === false);
+    if (!hunting.length) return;
+    if (!t || t._destroyed) { for (const s of hunting) if (s.huntLevel !== 0) { s.huntLevel = 0; this.send(s, { t: 'huntSignal', level: 0 }); } return; }
+    const pos = t.Position;
+    for (const s of hunting) {
+      const [x, y, z] = s.state.p;
+      const d = Math.hypot(x - pos.X, y - pos.Y, z - pos.Z);
+      if (d < 9 && !this.huntBlinked && this._huntPlace) {
+        this.huntBlinked = true;
+        if (Math.random() < 0.5) {
+          (t.Parent || t).Destroy();
+          this.huntToken = null;
+          if (this._huntPlace(25) || this._huntPlace(0)) {
+            for (const o of hunting) this.send(o, { t: 'sys', text: 'The Hunt: the shard slipped into another dimension... follow the signal!' });
+            return;
+          }
+        }
+      }
+      const level = d < 15 ? 5 : d < 40 ? 4 : d < 80 ? 3 : d < 150 ? 2 : 1;
+      if (level !== s.huntLevel) { s.huntLevel = level; this.send(s, { t: 'huntSignal', level }); }
+    }
   }
 
   _huntCleanup() {
@@ -299,6 +336,8 @@ export class GameServer {
     if ([...this.sessions.values()].some((s) => h && h.eligible(s.user.id))) return;
     clearInterval(this.huntTimer);
     this.huntTimer = null;
+    clearInterval(this.huntScan);
+    this.huntScan = null;
     if (!this.huntToken || this.huntToken._destroyed) return;
     (this.huntToken.Parent || this.huntToken).Destroy();
     this.huntToken = null;
@@ -314,6 +353,7 @@ export class GameServer {
       if (pos) this.huntToken = this._spawnHuntToken(pos);
       return !!pos;
     };
+    this._huntPlace = place;
     const tick = () => {
       if (this.closed) return;
       try { step(); } catch (e) { this.log('warn', 'The Hunt: ' + e.message); }
@@ -345,22 +385,24 @@ export class GameServer {
     });
   }
 
-  // The token itself, at a spot from huntspot.js.
-  _spawnHuntToken(pos) {    const folder = createInstance('Folder');
+  // The shard itself (a purple crystal), at a spot from huntspot.js.
+  _spawnHuntToken(pos) {
+    const folder = createInstance('Folder');
     folder.Name = 'TheHunt';
     const t = createInstance('Part');
     t.Name = 'HuntToken';
-    t.Shape = 'Ball';
-    t.Size = new Vector3(1.6, 1.6, 1.6);
+    t.Size = new Vector3(1.2, 1.2, 1.2);
     t.Material = 'Neon';
-    t.Color = Color3.fromHex('#ffc400');
+    t.Color = Color3.fromHex('#b45cff');
     t.Anchored = true;
     t.CanCollide = false;
-    t.CFrame = CFrame.fromPosition(pos);
+    const cf = CFrame.fromOrientation(45, 0, 45);
+    cf.x = pos.X; cf.y = pos.Y + 0.3; cf.z = pos.Z;
+    t.CFrame = cf;
     t.Parent = folder;
     // a faint glow only - no label to give it away
     const light = createInstance('PointLight');
-    light.Color = Color3.fromHex('#ffc400');
+    light.Color = Color3.fromHex('#b45cff');
     light.Range = 6;
     light.Brightness = 0.6;
     light.Parent = t;
@@ -373,8 +415,10 @@ export class GameServer {
     if (!h || !h.eligible(session.user.id)) return;
     const r = h.collect(session.user.id);
     if (!r || !r.new) return;
+    session.huntFound = true;
+    this.send(session, { t: 'huntSignal', level: -1 });
     this.send(session, { t: 'hunt', count: r.count, total: r.total, reward: r.reward || null, robits: r.robits || 0 });
-    this.log('info', `${session.user.username} found The Hunt token (${r.count}/${r.total})`);
+    this.log('info', `${session.user.username} found The Hunt shard (${r.count}/${r.total})`);
   }
 
   // TeleportService: the players' clients move to another place (of this game
@@ -437,9 +481,15 @@ export class GameServer {
     const INFO = ['players', 'cmds'];
     if (![...FUN, ...MODERATE, ...MOD, ...INFO].includes(c)) return false;
     // Admins: everything. Moderators: kick/mute/ban. Game owners: fun commands and kick/mute in their game.
+    // a moderator's fine settings (Admin Panel -> Permissions)
+    const modOpt = (key) => isAdmin || !!(hooks0 && hooks0.opt ? hooks0.opt(session.user, 'moderator', key) : true);
+    const modMay = { kick: modOpt('kick'), mute: modOpt('mute'), unmute: modOpt('mute'), ban: modOpt('ban'), unban: modOpt('ban'), hardban: modOpt('ban') && modOpt('deviceBan') };
     const allowed = isAdmin || (INFO.includes(c) && (isMod || isOwner)) || (FUN.includes(c) && isOwner)
-      || (MODERATE.includes(c) && (isMod || isOwner)) || (MOD.includes(c) && isMod);
-    if (!allowed) return false;
+      || (MODERATE.includes(c) && (isOwner || (isMod && modMay[c]))) || (MOD.includes(c) && isMod && modMay[c]);
+    if (!allowed) {
+      if (isMod && (MODERATE.includes(c) || MOD.includes(c))) { say('Your rights don\'t include this.'); return true; }
+      return false;
+    }
     if (c === 'cmds') {
       say(':kill :respawn :heal :god :ungod :fly :unfly :speed n :jump n :freeze :thaw :explode :fire :sparkles :ff :unff :invisible :visible :clean :tp a b :bring :to :mute :unmute :kick · :announce text · :hint text · :time 0-24 · :players'
         + (isMod ? ' · :ban name [1h|1d|7d|30d] reason · :hardban (also device) · :unban name' : '')
@@ -470,6 +520,10 @@ export class GameServer {
       if (!isAdmin && hooks.can && (hooks.can(target, 'moderator') || hooks.can(target, 'economy'))) { say('Only admins can ban other staff.'); return true; }
       if (c === 'unban') { hooks.ban(target, false); say(`Unbanned ${target.username}.`); return true; }
       const dur = hooks.banTimes[parts[1]] ? parts[1] : '';
+      if (!isAdmin && hooks.opt && hooks.banSteps) {
+        const max = hooks.opt(session.user, 'moderator', 'maxBan');
+        if (hooks.banSteps.indexOf(dur || 'forever') > hooks.banSteps.indexOf(max)) { say(`Your longest ban is ${max}.`); return true; }
+      }
       const reason = parts.slice(dur ? 2 : 1).join(' ').slice(0, 200);
       hooks.ban(target, true, reason, { device: c === 'hardban', ms: hooks.banTimes[dur] || 0 });
       say(`Banned ${target.username}${dur ? ' for ' + dur : ''}${c === 'hardban' ? ' (account + device)' : ''}.`);
@@ -1079,6 +1133,7 @@ export class GameServer {
     this.closed = true;
     clearInterval(this.timer);
     clearInterval(this.huntTimer);
+    clearInterval(this.huntScan);
     for (const s of [...this.sessions.values()]) {
       this.send(s, { t: 'shutdown', msg });
       try { s.ws.close(); } catch { /* ignore */ }

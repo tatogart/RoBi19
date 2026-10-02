@@ -169,6 +169,8 @@ function syncSubPlaces(db, game, sg, now) {
   }
 }
 
+const REMOVED_SEEDS = ['kart'];
+
 // Adds showcase games this world doesn't have yet (so older worlds get new
 // places too), and updates the ones nobody has edited to the newest version.
 // Returns how many were added.
@@ -184,6 +186,12 @@ export function addSeedGames(db) {
     visits: [48213, 125903, 8721, 67390, 3321][i], up: [912, 2210, 144, 1398, 67][i], down: [48, 190, 21, 120, 9][i],
     favorites: [3002, 9120, 311, 5120, 82][i], copyable: g.key !== 'obby', age: 40 - i * 7,
   })), ...MORE_GAMES.map((g) => ({ ...g, copyable: true, age: 3 })), ...TEAM_GAMES.map((g) => ({ ...g, copyable: true, age: 1 })), ...NOSTALGIA_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...NEW_GAMES.map((g) => ({ ...g, copyable: true, age: 0 }))];
+  // Showcase games that were taken out of Robis (Kart Racing).
+  for (const g of Object.values(D.games)) {
+    if (!REMOVED_SEEDS.includes(g.seedKey)) continue;
+    delete D.games[g.id];
+    for (const p of Object.values(D.places || {})) if (p.gameId === g.id) delete D.places[p.id];
+  }
   for (const sg of all) {
     const existing = Object.values(D.games).find((g) => g.seedKey === sg.key)
       || Object.values(D.games).find((g) => g.creatorId === robis.id && g.name === sg.name && !g.seedKey);

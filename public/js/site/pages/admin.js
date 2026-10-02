@@ -479,7 +479,7 @@ async function drawHunt() {
   body.replaceChildren(
     el('div', { class: 'badge-give' },
       el('h3', { text: 'The Hunt' }),
-      el('p', { class: 'small muted', text: 'A hub with portals to every game in the event. A golden token is hidden in each game (placed automatically, even in player games). Every token gives 15 R$; 8 prizes from the first token up to the Hunter\'s Golden Crown for all of them.' }),
+      el('p', { class: 'small muted', text: 'The Hunt: Another Dimension (part 2). A space hub with wormholes to every game in the event. A dimension shard is hidden in each game (placed automatically, even in player games) and players follow their scanner to it. Every shard gives 20 R$; 8 prizes up to the Crown of the Cosmos, plus bonus prizes for the 6 star fragments in the hub and for opening the Rift together (300 shards by everyone).' }),
       el('label', { class: 'perm-row' }, pub, el('b', { text: 'Open for everyone' }), el('span', { class: 'small muted', text: ' (off: only admins can see the page, play the hub and find tokens)' })),
       el('div', { class: 'row wrap', style: { gap: '12px', margin: '10px 0' } },
         el('a', { class: 'btn', href: '/hunt', text: 'Open the event page' }),
@@ -505,9 +505,9 @@ function huntPlayerBox() {
         el('span', { text: `${p.count} / ${p.total} tokens` }),
         el('button', { class: 'btn btn-small btn-green', text: 'Give all tokens', onclick: () => send({ all: true }) }),
         el('button', { class: 'btn btn-small btn-red', text: 'Take all tokens', onclick: () => { if (confirm('Take all tokens? Prizes stay.')) send({ all: true, take: true }); } })),
-      el('div', { class: 'small muted', style: { marginBottom: '6px' }, text: 'Click a game to give or take its token.' }),
+      el('div', { class: 'small muted', style: { marginBottom: '6px' }, text: 'Click a game to give or take its shard.' }),
       el('div', { class: 'badge-picker' }, p.games.map((g) => el('button', {
-        class: 'badge-toggle' + (g.found ? ' on' : ''), title: g.found ? 'Take this token' : 'Give this token',
+        class: 'badge-toggle' + (g.found ? ' on' : ''), title: g.found ? 'Take this shard' : 'Give this shard',
         onclick: () => send({ gameId: g.id, take: g.found }),
       }, el('span', { class: 'hunt-dot-mini' + (g.found ? ' got' : '') }), el('span', { class: 'no-i18n', text: g.name })))));
   };
@@ -686,17 +686,52 @@ async function drawSettings() {
     el('button', { class: 'btn btn-primary btn-large', text: 'Save settings', onclick: save }));
 }
 
-// Admins give other players rights (see PERMISSIONS in server/api.js).
+// Admins give other players rights (see PERMISSIONS in server/api.js), and
+// set exactly what each right allows (PERM_OPTIONS: item types, limits...).
+const TYPE_LABELS = { TShirt: 'T-Shirts', Shirt: 'Shirts', Pants: 'Pants', Face: 'Faces', Hat: 'Hats', Hair: 'Hair', Pet: 'Pets' };
+const BAN_LABELS = { '1h': '1 hour', '1d': '1 day', '3d': '3 days', '7d': '7 days', '30d': '30 days', forever: 'Forever' };
 function permsDialog(u) {
-  const boxes = data.permissions.map((p) => {
+  const opts = JSON.parse(JSON.stringify(u.permOpts || {}));
+  const val = (perm, o) => (opts[perm] && opts[perm][o.key] !== undefined ? opts[perm][o.key] : o.default);
+  const set = (perm, key, v) => { (opts[perm] || (opts[perm] = {}))[key] = v; };
+  const control = (perm, o) => {
+    if (o.type === 'bool') {
+      const cb = el('input', { type: 'checkbox', checked: !!val(perm, o), onchange: () => set(perm, o.key, cb.checked) });
+      return el('label', { class: 'perm-opt' }, cb, el('span', { text: o.label }));
+    }
+    if (o.type === 'number') {
+      const inp = el('input', { class: 'input', type: 'number', min: o.min, max: o.max, value: val(perm, o), onchange: () => set(perm, o.key, +inp.value) });
+      return el('label', { class: 'perm-opt perm-num' }, el('span', { text: o.label }), inp);
+    }
+    if (o.type === 'choice') {
+      const sel = el('select', { class: 'input', onchange: () => set(perm, o.key, sel.value) }, o.choices.map((c) => el('option', { value: c, text: BAN_LABELS[c] || c, selected: c === val(perm, o) })));
+      return el('label', { class: 'perm-opt perm-num' }, el('span', { text: o.label }), sel);
+    }
+    // list: chips to switch on and off
+    const cur = new Set(val(perm, o));
+    return el('div', { class: 'perm-opt' }, el('span', { text: o.label }),
+      el('div', { class: 'perm-chips' }, o.choices.map((c) => {
+        const chip = el('button', { class: 'badge-toggle' + (cur.has(c) ? ' on' : ''), text: TYPE_LABELS[c] || c, onclick: () => {
+          if (cur.has(c)) cur.delete(c); else cur.add(c);
+          chip.classList.toggle('on', cur.has(c));
+          set(perm, o.key, o.choices.filter((x) => cur.has(x)));
+        } });
+        return chip;
+      })));
+  };
+  const rows = data.permissions.map((p) => {
     const cb = el('input', { type: 'checkbox', checked: (u.perms || []).includes(p.id) });
     cb.dataset.perm = p.id;
-    return el('label', { class: 'perm-row' }, cb, el('span', { text: p.label }));
+    const more = (p.options || []).length ? el('div', { class: 'perm-opts' }, p.options.map((o) => control(p.id, o))) : null;
+    const sync = () => { if (more) more.style.display = cb.checked ? '' : 'none'; };
+    cb.addEventListener('change', sync);
+    sync();
+    return { cb, node: el('div', { class: 'perm-block' }, el('label', { class: 'perm-row' }, cb, el('span', { text: p.label })), more) };
   });
   modal({
     title: `Permissions for ${u.username}`,
-    body: el('div', {}, el('p', { class: 'small muted', text: 'Admins have every right. Give other players only what they need.' }), boxes),
-    buttons: [{ text: 'Save', cls: 'btn-primary', onClick: () => act(`/admin/users/${u.id}/perms`, { perms: boxes.map((b) => b.firstChild).filter((c) => c.checked).map((c) => c.dataset.perm) }, 'Permissions saved') }, { text: 'Cancel' }],
+    body: el('div', { class: 'perm-dialog' }, el('p', { class: 'small muted', text: 'Admins have every right. Give other players only what they need, and set exactly what each right allows.' }), rows.map((r) => r.node)),
+    buttons: [{ text: 'Save', cls: 'btn-primary', onClick: () => act(`/admin/users/${u.id}/perms`, { perms: rows.filter((r) => r.cb.checked).map((r) => r.cb.dataset.perm), permOpts: opts }, 'Permissions saved') }, { text: 'Cancel' }],
   });
 }
 

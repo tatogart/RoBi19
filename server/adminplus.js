@@ -4,7 +4,7 @@
 import { setExtraWords } from './game/chatfilter.js';
 import { officialAccount } from './seed/seed.js';
 
-export const DEFAULT_SOCIALS = [{ type: 'telegram', label: 'Telegram', url: 'https://t.me/Robisgame' }];
+export const DEFAULT_SOCIALS = [{ type: 'telegram', label: 'Telegram', url: 'https://t.me/Robisgame' }, { type: 'vk', label: 'VK', url: 'https://vk.ru/club241960834' }];
 const SOCIAL_TYPES = ['telegram', 'youtube', 'discord', 'tiktok', 'vk', 'other'];
 
 const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
@@ -27,6 +27,8 @@ export function countPlay(D, uid) {
 export function siteSettings(D) {
   const S = D.settings || (D.settings = {});
   if (!S.socials) S.socials = DEFAULT_SOCIALS.map((x) => ({ ...x }));
+  // the VK group came later: add it once to worlds that already had socials
+  if (!S.vkAdded) { S.vkAdded = true; if (!S.socials.some((x) => x.type === 'vk')) S.socials.push({ ...DEFAULT_SOCIALS[1] }); }
   if (S.signups === undefined) S.signups = true;
   if (S.startRobits === undefined) S.startRobits = 100;
   if (!S.maintenance) S.maintenance = { on: false, message: '' };

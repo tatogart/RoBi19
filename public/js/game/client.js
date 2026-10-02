@@ -206,9 +206,10 @@ export class GameClient {
         return;
       case 'hunt':
         this.hud.huntBanner(m.count, m.total, m.reward, m.robits);
-        this.hud.addChat('', `The Hunt: token found! ${m.count}/${m.total}` + (m.reward ? ` - you won ${m.reward.name}!` : ''), { system: true });
+        this.hud.addChat('', `The Hunt: shard found! ${m.count}/${m.total}` + (m.reward ? ` - you won ${m.reward.name}!` : ''), { system: true });
         sound.coin();
         return;
+      case 'huntSignal': this.hud.huntScanner(m.level); return;
       case 'passList': this.hud.showPassList(m.passes || []); return;
       case 'passResult':
         if (m.ok) this.hud.dialog('Purchase complete', `You bought ${m.pass.name}! Your balance: R$ ${m.robits}.`, [{ text: 'OK', primary: true }]);
@@ -228,7 +229,7 @@ export class GameClient {
         this.input.jumpTap = false;
         if (m.on) this.hud.addChat('', 'You are driving! WASD / joystick to steer, Space or Jump to get out.', { system: true });
         return;
-      case 'impulse': if (this.local) { this.local.vx += m.v[0]; this.local.vy = m.v[1]; this.local.vz += m.v[2]; this.local.grounded = false; } return;
+      case 'impulse': if (this.local) { if (m.set) { this.local.vx = m.v[0]; this.local.vz = m.v[2]; } else { this.local.vx += m.v[0]; this.local.vz += m.v[2]; } this.local.vy = m.v[1]; this.local.grounded = false; } return;
       case 'output':
         if (this.opts.onOutput) this.opts.onOutput(m); else this.hud.log(m);
         return;

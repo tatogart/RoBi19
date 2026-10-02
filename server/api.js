@@ -51,6 +51,65 @@ export const FLAGS = {
 export const userFlags = (u) => Object.keys(FLAGS).filter((f) => u && u.flags && u.flags[f]);
 export const can = (u, perm) => !!u && (u.isAdmin || (u.perms || []).includes(perm));
 
+// Fine settings for each right (Admin Panel -> Permissions): what exactly a
+// player with the right may do. Unset = the default (everything, like before).
+export const CREATE_TYPES = ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair', 'Pet'];
+export const BAN_STEPS = ['1h', '1d', '3d', '7d', '30d', 'forever'];
+const B = (key, label) => ({ key, label, type: 'bool', default: true });
+export const PERM_OPTIONS = {
+  moderator: [
+    B('kick', 'Kick players'), B('mute', 'Mute players in games'), B('ban', 'Ban players'),
+    { key: 'maxBan', label: 'Longest ban', type: 'choice', choices: BAN_STEPS, default: 'forever' },
+    B('deviceBan', 'Ban devices too (alt accounts)'), B('rename', 'Rename players'), B('password', 'Reset passwords and log players out'),
+    B('deleteUsers', 'Delete accounts'), B('deleteGames', 'Delete games'), B('announce', 'Site announcement'), B('groups', 'Moderate groups and player items'),
+  ],
+  economy: [
+    B('robits', 'Give and take Robits'),
+    { key: 'maxRobits', label: 'Most Robits at once', type: 'number', min: 1, max: 1e9, default: 1e9 },
+    B('membership', 'Give Builders Club'), B('giveItems', 'Give items'), B('takeItems', 'Take items away'),
+    B('promocodes', 'Make promo codes'), B('donate', 'Change donate prices'),
+  ],
+  items: [
+    { key: 'types', label: 'Item types they can make', type: 'list', choices: CREATE_TYPES, default: CREATE_TYPES },
+    { key: 'maxPrice', label: 'Highest price (R$)', type: 'number', min: 0, max: 100000, default: 100000 },
+    { key: 'maxItems', label: 'Most items in total', type: 'number', min: 1, max: 1000, default: 100 },
+    { key: 'perDay', label: 'Items per day (0 = no limit)', type: 'number', min: 0, max: 1000, default: 0 },
+    B('free', 'Can make free items (R$ 0)'),
+  ],
+  limiteds: [
+    { key: 'types', label: 'Limited types they can make', type: 'list', choices: CREATE_TYPES, default: CREATE_TYPES },
+    { key: 'maxStock', label: 'Biggest stock', type: 'number', min: 1, max: 100000, default: 100000 },
+    { key: 'maxPrice', label: 'Highest price (R$)', type: 'number', min: 0, max: 100000, default: 100000 },
+    B('convert', 'Turn catalog items into Limiteds'),
+  ],
+  games: [B('feature', 'Feature games on the front page'), B('unfeature', 'Take games off Featured')],
+};
+// The value of one fine setting for a player (admins: always the default, i.e. everything).
+export function popt(u, perm, key) {
+  const o = (PERM_OPTIONS[perm] || []).find((x) => x.key === key);
+  if (!o) return undefined;
+  const v = !u || u.isAdmin ? undefined : u.permOpts?.[perm]?.[key];
+  return v === undefined ? o.default : v;
+}
+// Checks and cleans settings sent by the Admin Panel.
+function cleanPermOpts(input) {
+  const out = {};
+  for (const [perm, list] of Object.entries(PERM_OPTIONS)) {
+    const src = input && typeof input[perm] === 'object' ? input[perm] : {};
+    const o = {};
+    for (const x of list) {
+      const v = src[x.key];
+      if (v === undefined) continue;
+      if (x.type === 'bool') o[x.key] = !!v;
+      else if (x.type === 'number') { const n = Math.trunc(+v); if (Number.isFinite(n)) o[x.key] = Math.min(x.max, Math.max(x.min, n)); }
+      else if (x.type === 'choice') { if (x.choices.includes(v)) o[x.key] = v; }
+      else if (x.type === 'list' && Array.isArray(v)) o[x.key] = x.choices.filter((c) => v.includes(c));
+    }
+    if (Object.keys(o).length) out[perm] = o;
+  }
+  return out;
+}
+
 // opts.firstUserIsAdmin: the first account on a fresh server becomes admin (shared server).
 // opts.adminCodeHash: sha256 of a secret admin code; entering it makes any account an admin.
 // opts.requireAdminCode: only code-verified accounts may stay admins (phone build, where
@@ -204,6 +263,8 @@ export function createApi(db, manager, opts = {}) {
     ban: (u, banned, reason, opts) => setBan(u, banned, reason, opts),
     banTimes: BAN_TIMES,
     can: (u, perm) => can(D.users[u.id] || u, perm),
+    opt: (u, perm, key) => popt(D.users[u.id] || u, perm, key),
+    banSteps: BAN_STEPS,
   };
 
   // ------------------------------------------------------------ helpers
@@ -217,6 +278,12 @@ export function createApi(db, manager, opts = {}) {
     if (!can(req.user, perm)) return bad(res, 'You don\'t have permission to do that.', 403);
     next();
   };
+  // A right's fine setting (see PERM_OPTIONS) must be on.
+  const requireOpt = (perm, key) => (req, res, next) => {
+    if (!popt(req.user, perm, key)) return bad(res, 'Your rights don\'t include this.', 403);
+    next();
+  };
+  const modCan = (u, key) => can(u, 'moderator') && !!popt(u, 'moderator', key);
   const staff = (u) => can(u, 'moderator') || can(u, 'economy');
   const requireStaff = (req, res, next) => {
     if (!req.user) return bad(res, 'You must be logged in.', 401);
@@ -645,7 +712,7 @@ export function createApi(db, manager, opts = {}) {
   const ROLE_RANK = { owner: 255, admin: 200, member: 1 };
   if (!D.groups) D.groups = {};
   const groupRole = (gr, uid) => (gr && gr.members[uid]) || null;
-  const isGroupAdmin = (gr, u) => !!u && (['owner', 'admin'].includes(groupRole(gr, u.id)) || can(u, 'moderator'));
+  const isGroupAdmin = (gr, u) => !!u && (['owner', 'admin'].includes(groupRole(gr, u.id)) || modCan(u, 'groups'));
   const groupsOf = (uid) => Object.values(D.groups).filter((gr) => gr.members[uid]);
   const publicGroup = (gr, viewer, full = false) => {
     const owner = D.users[gr.ownerId];
@@ -727,7 +794,7 @@ export function createApi(db, manager, opts = {}) {
 
   api.delete('/groups/:id', requireUser, (req, res) => {
     const gr = groupFor(req, res); if (!gr) return;
-    if (gr.ownerId !== req.user.id && !can(req.user, 'moderator')) return bad(res, 'Only the owner can delete the group.', 403);
+    if (gr.ownerId !== req.user.id && !modCan(req.user, 'groups')) return bad(res, 'Only the owner can delete the group.', 403);
     delete D.groups[gr.id];
     for (const u of Object.values(D.users)) if (u.primaryGroup === gr.id) u.primaryGroup = null;
     db.save();
@@ -1078,7 +1145,15 @@ export function createApi(db, manager, opts = {}) {
   };
 
   api.get('/create/options', requireUser, (req, res) => {
-    res.json({ types: ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair', 'Pet'], models: MODELS, patterns: PATTERNS, allowed: can(req.user, 'items') || can(req.user, 'limiteds'), limiteds: can(req.user, 'limiteds'), onlyLimiteds: !can(req.user, 'items') });
+    const u = req.user;
+    const normal = can(u, 'items') ? popt(u, 'items', 'types') : [];
+    const lim = can(u, 'limiteds') ? popt(u, 'limiteds', 'types') : [];
+    res.json({
+      types: CREATE_TYPES.filter((t) => normal.includes(t) || lim.includes(t)), normalTypes: normal, limitedTypes: lim,
+      models: MODELS, patterns: PATTERNS, allowed: !!(normal.length || lim.length), limiteds: can(u, 'limiteds'), onlyLimiteds: !can(u, 'items'),
+      maxPrice: Math.max(can(u, 'items') ? popt(u, 'items', 'maxPrice') : 0, can(u, 'limiteds') ? popt(u, 'limiteds', 'maxPrice') : 0),
+      maxStock: can(u, 'limiteds') ? popt(u, 'limiteds', 'maxStock') : 0,
+    });
   });
 
   // Limited items: a fixed stock; once it sells out the item can only be traded.
@@ -1097,8 +1172,18 @@ export function createApi(db, manager, opts = {}) {
     if (name.length < 3) return bad(res, 'The name needs at least 3 characters.');
     const price = Math.trunc(+b.price || 0);
     if (price < 0 || price > 100000) return bad(res, 'The price must be between 0 and 100,000.');
-    const mine = Object.values(D.items).filter((i) => i.creatorId === req.user.id && i.custom).length;
-    if (mine >= 100 && !req.user.isAdmin) return bad(res, 'You have reached the maximum number of items.');
+    // the fine settings of the right used (Item Creator or Limited Creator)
+    const right = limited ? 'limiteds' : 'items';
+    if (!popt(req.user, right, 'types').includes(type)) return bad(res, 'You are not allowed to make this type of item.', 403);
+    const maxPrice = popt(req.user, right, 'maxPrice');
+    if (price > maxPrice) return bad(res, `Your highest price is R$ ${maxPrice.toLocaleString('en-US')}.`);
+    if (limited && stock > popt(req.user, 'limiteds', 'maxStock')) return bad(res, `Your biggest stock is ${fmtStock(popt(req.user, 'limiteds', 'maxStock'))}.`);
+    if (!limited && price === 0 && !popt(req.user, 'items', 'free')) return bad(res, 'You are not allowed to make free items.');
+    const mineList = Object.values(D.items).filter((i) => i.creatorId === req.user.id && i.custom);
+    const mine = mineList.length;
+    if (!req.user.isAdmin && mine >= (limited ? 100 : popt(req.user, 'items', 'maxItems'))) return bad(res, 'You have reached the maximum number of items.');
+    const perDay = limited ? 0 : popt(req.user, 'items', 'perDay');
+    if (perDay && mineList.filter((i) => i.created > Date.now() - 86400e3).length >= perDay) return bad(res, `You can make ${perDay} item${perDay === 1 ? '' : 's'} a day. Try again tomorrow.`);
     let data;
     try { data = cleanItemData(type, b.data); } catch (e) { return bad(res, e.message); }
     const id = db.nextId('item');
@@ -1117,8 +1202,8 @@ export function createApi(db, manager, opts = {}) {
     const it = D.items[toInt(req.params.id)];
     if (!it) return bad(res, 'Item not found', 404);
     if (!it.custom) return bad(res, 'Built-in items can\'t be deleted.');
-    if (it.creatorId !== req.user.id && !can(req.user, 'moderator')) return bad(res, 'You don\'t have permission to do that.', 403);
-    if (it.limited && it.sales > 0 && !can(req.user, 'moderator')) return bad(res, 'Players already own this Limited, so it can\'t be deleted.');
+    if (it.creatorId !== req.user.id && !modCan(req.user, 'groups')) return bad(res, 'You don\'t have permission to do that.', 403);
+    if (it.limited && it.sales > 0 && !modCan(req.user, 'groups')) return bad(res, 'Players already own this Limited, so it can\'t be deleted.');
     delete D.items[it.id];
     delete D.serials[it.id];
     for (const list of Object.values(D.inventory)) { const i = list.indexOf(it.id); if (i >= 0) list.splice(i, 1); }
@@ -1129,7 +1214,7 @@ export function createApi(db, manager, opts = {}) {
 
   // Turns any item into a Limited with a stock (0 = off sale right away, trade only),
   // or back into a normal item.
-  api.post('/catalog/:id/limited', requirePerm('limiteds'), (req, res) => {
+  api.post('/catalog/:id/limited', requirePerm('limiteds'), requireOpt('limiteds', 'convert'), (req, res) => {
     const it = D.items[toInt(req.params.id)];
     if (!it) return bad(res, 'Item not found', 404);
     if (req.body?.limited === false) {
@@ -1327,7 +1412,7 @@ export function createApi(db, manager, opts = {}) {
     res.json({ robits: u.robits, membership: u.membership, until: r.until || u.membershipUntil });
   });
 
-  api.post('/admin/donate', requirePerm('economy'), (req, res) => {
+  api.post('/admin/donate', requirePerm('economy'), requireOpt('economy', 'donate'), (req, res) => {
     const b = req.body || {};
     const prices = {};
     for (const [k, v] of Object.entries(b.prices || {})) {
@@ -1841,6 +1926,7 @@ export function createApi(db, manager, opts = {}) {
   api.post('/games/:id/feature', requirePerm('games'), (req, res) => {
     const g = D.games[toInt(req.params.id)];
     if (!g) return bad(res, 'Game not found', 404);
+    if (!popt(req.user, 'games', req.body?.featured ? 'feature' : 'unfeature')) return bad(res, 'Your rights don\'t include this.', 403);
     g.featured = !!req.body?.featured;
     db.save();
     res.json({ game: publicGame(g, req.user) });
@@ -1884,7 +1970,7 @@ export function createApi(db, manager, opts = {}) {
     next();
   };
   const adminUser = (u) => ({
-    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, perms: u.perms || [], banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
+    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, perms: u.perms || [], permOpts: u.permOpts || {}, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
     items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
   });
   const target = (req, res) => {
@@ -1945,7 +2031,7 @@ export function createApi(db, manager, opts = {}) {
 
   // ---- site-wide announcement (a banner on every page and a message in every game)
   api.get('/announcement', (req, res) => res.json({ announcement: D.announcement || null }));
-  api.post('/admin/announcement', requirePerm('moderator'), (req, res) => {
+  api.post('/admin/announcement', requirePerm('moderator'), requireOpt('moderator', 'announce'), (req, res) => {
     const text = String(req.body?.text || '').trim().slice(0, 300);
     const color = ['blue', 'green', 'orange', 'red'].includes(req.body?.color) ? req.body.color : 'blue';
     D.announcement = text ? { text, color, by: req.user.username, time: Date.now() } : null;
@@ -1978,12 +2064,12 @@ export function createApi(db, manager, opts = {}) {
     lastUsers: p.usedBy.slice(-5).map((id) => D.users[id]?.username).filter(Boolean),
   });
 
-  api.get('/admin/promocodes', requirePerm('economy'), (req, res) => {
+  api.get('/admin/promocodes', requirePerm('economy'), requireOpt('economy', 'promocodes'), (req, res) => {
     res.json({ codes: Object.values(D.promocodes).sort((a, b) => b.created - a.created).slice(0, 500).map(publicPromo) });
   });
 
   // Makes one custom code (code: 'ROBIS2019') or a batch of random ones (count).
-  api.post('/admin/promocodes', requirePerm('economy'), (req, res) => {
+  api.post('/admin/promocodes', requirePerm('economy'), requireOpt('economy', 'promocodes'), (req, res) => {
     const b = req.body || {};
     const robits = Math.trunc(+b.robits || 0);
     if (robits < 0 || robits > 1e6) return bad(res, 'Robits must be between 0 and 1,000,000.');
@@ -2017,7 +2103,7 @@ export function createApi(db, manager, opts = {}) {
   });
 
   // { code, op: 'off' | 'on' | 'delete' }
-  api.post('/admin/promocodes/edit', requirePerm('economy'), (req, res) => {
+  api.post('/admin/promocodes/edit', requirePerm('economy'), requireOpt('economy', 'promocodes'), (req, res) => {
     const p = D.promocodes[normCode(req.body?.code)];
     if (!p) return bad(res, 'Code not found.', 404);
     const op = req.body?.op;
@@ -2102,22 +2188,24 @@ export function createApi(db, manager, opts = {}) {
       announcement: D.announcement || null,
       users: users.sort((a, b) => b.lastOnline - a.lastOnline).map(adminUser),
       memberships: Object.entries(MEMBERSHIPS).map(([id, m]) => ({ id, name: m.name })),
-      permissions: Object.entries(PERMISSIONS).map(([id, label]) => ({ id, label })),
+      permissions: Object.entries(PERMISSIONS).map(([id, label]) => ({ id, label, options: PERM_OPTIONS[id] || [] })),
       flags: Object.entries(FLAGS).map(([id, label]) => ({ id, label })),
     });
   });
 
-  api.post('/admin/users/:id/robits', requirePerm('economy'), (req, res) => {
+  api.post('/admin/users/:id/robits', requirePerm('economy'), requireOpt('economy', 'robits'), (req, res) => {
     const u = target(req, res); if (!u) return;
     const amount = Math.trunc(+req.body?.amount || 0);
     if (!amount || Math.abs(amount) > 1e9) return bad(res, 'Enter an amount.');
+    const maxR = popt(req.user, 'economy', 'maxRobits');
+    if (Math.abs(amount) > maxR) return bad(res, `You can give or take at most R$ ${maxR.toLocaleString('en-US')} at once.`, 403);
     u.robits = Math.max(0, u.robits + amount);
     log(u.id, amount, amount > 0 ? `Gift from ${req.user.username}` : `Removed by ${req.user.username}`);
     db.save();
     res.json({ user: adminUser(u) });
   });
 
-  api.post('/admin/users/:id/membership', requirePerm('economy'), (req, res) => {
+  api.post('/admin/users/:id/membership', requirePerm('economy'), requireOpt('economy', 'membership'), (req, res) => {
     const u = target(req, res); if (!u) return;
     if (!MEMBERSHIPS[req.body?.tier]) return bad(res, 'Unknown membership.');
     u.membership = req.body.tier;
@@ -2128,7 +2216,7 @@ export function createApi(db, manager, opts = {}) {
     res.json({ user: adminUser(u) });
   });
 
-  api.post('/admin/users/:id/items', requirePerm('economy'), (req, res) => {
+  api.post('/admin/users/:id/items', requirePerm('economy'), requireOpt('economy', 'giveItems'), (req, res) => {
     const u = target(req, res); if (!u) return;
     const ids = req.body?.all ? Object.keys(D.items).filter((k) => !D.items[k].offsale).map(Number) : [toInt(req.body?.itemId)].filter((i) => D.items[i]);
     if (!ids.length) return bad(res, 'Item not found.');
@@ -2139,7 +2227,7 @@ export function createApi(db, manager, opts = {}) {
   });
 
   // Takes one item (or every item) away from a player.
-  api.post('/admin/users/:id/items/remove', requirePerm('economy'), (req, res) => {
+  api.post('/admin/users/:id/items/remove', requirePerm('economy'), requireOpt('economy', 'takeItems'), (req, res) => {
     const u = target(req, res); if (!u) return;
     const owned = [...(D.inventory[u.id] || [])];
     const ids = req.body?.all ? owned : [toInt(req.body?.itemId)].filter((i) => owned.includes(i));
@@ -2179,6 +2267,7 @@ export function createApi(db, manager, opts = {}) {
     const u = target(req, res); if (!u) return;
     const perms = Array.isArray(req.body?.perms) ? req.body.perms.filter((p) => PERMISSIONS[p]) : [];
     u.perms = [...new Set(perms)];
+    if (req.body?.permOpts) u.permOpts = cleanPermOpts(req.body.permOpts);
     log(u.id, 0, `Permissions set by ${req.user.username}: ${u.perms.join(', ') || 'none'}`);
     db.save();
     res.json({ user: adminUser(u) });
@@ -2221,7 +2310,7 @@ export function createApi(db, manager, opts = {}) {
     db.save();
   };
 
-  api.post('/admin/users/:id/delete', requirePerm('moderator'), (req, res) => {
+  api.post('/admin/users/:id/delete', requirePerm('moderator'), requireOpt('moderator', 'deleteUsers'), (req, res) => {
     const u = target(req, res); if (!u) return;
     if (u.id === req.user.id) return bad(res, 'Delete your own account in Settings.');
     if (u.isAdmin && !req.user.isAdmin) return bad(res, 'Only admins can delete an admin.', 403);
@@ -2264,7 +2353,7 @@ export function createApi(db, manager, opts = {}) {
     return true;
   };
   const logoutEverywhere = (u) => { for (const [t, x] of Object.entries(D.sessions)) if (x.userId === u.id) delete D.sessions[t]; };
-  api.post('/admin/users/:id/password', requirePerm('moderator'), (req, res) => {
+  api.post('/admin/users/:id/password', requirePerm('moderator'), requireOpt('moderator', 'password'), (req, res) => {
     const u = target(req, res); if (!u || !staffGuard(req, res, u)) return;
     const typed = String(req.body?.password || '');
     if (typed && typed.length < 6) return bad(res, 'Password must be at least 6 characters.');
@@ -2275,14 +2364,14 @@ export function createApi(db, manager, opts = {}) {
     res.json({ password, user: adminUser(u) });
   });
 
-  api.post('/admin/users/:id/logout', requirePerm('moderator'), (req, res) => {
+  api.post('/admin/users/:id/logout', requirePerm('moderator'), requireOpt('moderator', 'password'), (req, res) => {
     const u = target(req, res); if (!u || !staffGuard(req, res, u)) return;
     logoutEverywhere(u);
     db.save();
     res.json({ user: adminUser(u) });
   });
 
-  api.post('/admin/users/:id/rename', requirePerm('moderator'), (req, res) => {
+  api.post('/admin/users/:id/rename', requirePerm('moderator'), requireOpt('moderator', 'rename'), (req, res) => {
     const u = target(req, res); if (!u) return;
     if (u.isAdmin && !req.user.isAdmin && u.id !== req.user.id) return bad(res, 'Only admins can do that to an admin.', 403);
     const name = String(req.body?.username || '').trim();
@@ -2296,7 +2385,7 @@ export function createApi(db, manager, opts = {}) {
     res.json({ user: adminUser(u) });
   });
 
-  api.post('/admin/users/:id/kick', requirePerm('moderator'), (req, res) => {
+  api.post('/admin/users/:id/kick', requirePerm('moderator'), requireOpt('moderator', 'kick'), (req, res) => {
     const u = target(req, res); if (!u || !staffGuard(req, res, u)) return;
     const f = manager.findUser(u.id);
     if (!f) return bad(res, 'This player is not in a game.');
@@ -2314,7 +2403,7 @@ export function createApi(db, manager, opts = {}) {
     }));
     res.json({ games });
   });
-  api.post('/admin/games/:id/delete', requirePerm('moderator'), (req, res) => {
+  api.post('/admin/games/:id/delete', requirePerm('moderator'), requireOpt('moderator', 'deleteGames'), (req, res) => {
     const g = D.games[toInt(req.params.id)];
     if (!g) return bad(res, 'Game not found', 404);
     for (const srv of manager.serversFor(g.id)) srv.close();
@@ -2336,6 +2425,13 @@ export function createApi(db, manager, opts = {}) {
     if (u.id === req.user.id) return bad(res, 'You can\'t ban yourself.');
     if (u.isAdmin && req.body?.banned) return bad(res, 'Remove admin rights before banning an admin.');
     if (!req.user.isAdmin && staff(u) && req.body?.banned) return bad(res, 'Only admins can ban other staff.');
+    if (!popt(req.user, 'moderator', 'ban')) return bad(res, 'Your rights don\'t include this.', 403);
+    if (req.body?.banned) {
+      if (req.body?.device && !popt(req.user, 'moderator', 'deviceBan')) return bad(res, 'You can\'t ban devices.', 403);
+      const max = popt(req.user, 'moderator', 'maxBan');
+      const step = BAN_TIMES[req.body?.duration] ? req.body.duration : 'forever';
+      if (BAN_STEPS.indexOf(step) > BAN_STEPS.indexOf(max)) return bad(res, `Your longest ban is ${max === '1h' ? '1 hour' : max.replace('d', ' days').replace(/^1 days$/, '1 day')}.`, 403);
+    }
     setBan(u, !!req.body?.banned, req.body?.reason, { device: !!req.body?.device, ms: BAN_TIMES[req.body?.duration] || 0 });
     res.json({ user: adminUser(u) });
   });

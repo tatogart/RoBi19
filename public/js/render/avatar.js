@@ -333,6 +333,33 @@ function M(geo, material, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
 }
 
 const HATS = {
+  // The Hunt: Another Dimension
+  astronaut(d) {
+    const g = new THREE.Group();
+    const glass = new THREE.MeshStandardMaterial({ color: d.accent || '#9fe8ff', transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.3, depthWrite: false });
+    const dome = M(new THREE.SphereGeometry(0.98, 28, 18), glass, 0, 0.05, 0);
+    dome.castShadow = false;
+    g.add(dome);
+    g.add(M(new THREE.TorusGeometry(0.82, 0.13, 10, 28), mat(d.color, { metalness: 0.5, roughness: 0.35 }), 0, -0.62, 0, Math.PI / 2, 0, 0));
+    g.add(M(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 6), mat('#bbbbbb', { metalness: 0.8 }), 0.45, 1.05, 0.1));
+    const tip = new THREE.MeshBasicMaterial({ color: '#ff3355' }); tip.toneMapped = false;
+    g.add(M(new THREE.SphereGeometry(0.07, 8, 6), tip, 0.45, 1.32, 0.1));
+    return g;
+  },
+  planet(d) {
+    const g = new THREE.Group();
+    const orb = new THREE.Group();
+    orb.position.set(0, 1.55, 0);
+    orb.rotation.x = Math.PI / 2; // so the spin (rotation.z) turns it around the vertical
+    orb.add(M(new THREE.SphereGeometry(0.34, 20, 14), mat(d.color, { roughness: 0.5, emissive: d.color, emissiveIntensity: 0.15 })));
+    const ringM = new THREE.MeshBasicMaterial({ color: d.accent || '#ffe0a0', side: THREE.DoubleSide, transparent: true, opacity: 0.85 }); ringM.toneMapped = false;
+    const ring = M(new THREE.RingGeometry(0.48, 0.66, 32), ringM, 0, 0, 0, 0.4, 0, 0);
+    ring.castShadow = false;
+    orb.add(ring);
+    g.add(orb);
+    g.userData.spin = orb;
+    return g;
+  },
   cap(d) {
     const g = new THREE.Group();
     g.add(M(new THREE.SphereGeometry(0.66, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat(d.color), 0, 0.28, 0));
@@ -583,6 +610,14 @@ function hairShell(material, { front = 0.35, back = -0.3, sides = 0, thick = 0.0
 }
 
 const GEARS = {
+  saber(d) {
+    const g = new THREE.Group();
+    const glow = new THREE.MeshBasicMaterial({ color: d.color }); glow.toneMapped = false;
+    g.add(M(new THREE.CylinderGeometry(0.11, 0.11, 3.2, 10), glow, 0, 0, -2.2, Math.PI / 2, 0, 0));
+    g.add(M(new THREE.CylinderGeometry(0.16, 0.16, 1, 12), mat('#c8c8c8', { metalness: 0.9, roughness: 0.25 }), 0, 0, -0.1, Math.PI / 2, 0, 0));
+    g.add(M(new THREE.BoxGeometry(0.1, 0.12, 0.2), mat('#1b1b1b'), 0, 0.16, -0.1));
+    return g;
+  },
   sword(d) {
     const g = new THREE.Group();
     const blade = mat(d.color, { metalness: 0.9, roughness: 0.2 });
@@ -764,6 +799,51 @@ function buildKart(color) {
 // Small blocky companions. They face -Z like avatars; the feet are at y = 0.
 // userData: fly (hovers), parts to animate (tail, wings, ears).
 const PETS = {
+  ufo(d) {
+    const g = new THREE.Group();
+    const hull = mat(d.color, { metalness: 0.7, roughness: 0.3 });
+    const disc = M(new THREE.SphereGeometry(0.85, 24, 10), hull, 0, 0.9, 0);
+    disc.scale.set(1, 0.28, 1);
+    g.add(disc);
+    const glass = new THREE.MeshStandardMaterial({ color: '#9fe8ff', transparent: true, opacity: 0.55, roughness: 0.05 });
+    g.add(M(new THREE.SphereGeometry(0.38, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), glass, 0, 1.05, 0));
+    g.add(M(new THREE.SphereGeometry(0.16, 10, 8), mat('#5bd65b'), 0, 1.15, 0));
+    const glow = new THREE.MeshBasicMaterial({ color: d.accent || '#7dffb0' }); glow.toneMapped = false;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      g.add(M(new THREE.SphereGeometry(0.07, 6, 4), glow, Math.sin(a) * 0.72, 0.86, Math.cos(a) * 0.72));
+    }
+    const beam = new THREE.MeshBasicMaterial({ color: d.accent || '#7dffb0', transparent: true, opacity: 0.18, depthWrite: false }); beam.toneMapped = false;
+    const ray = M(new THREE.ConeGeometry(0.5, 0.75, 16, 1, true), beam, 0, 0.4, 0);
+    ray.castShadow = false;
+    g.add(ray);
+    g.userData = { fly: true, sway: true, jet: ray };
+    return g;
+  },
+  alien(d) {
+    const g = new THREE.Group();
+    const skin = mat(d.color, { roughness: 0.5 });
+    const black = mat('#0b0b12', { roughness: 0.1, metalness: 0.3 });
+    g.add(M(new THREE.BoxGeometry(0.6, 0.7, 0.45), skin, 0, 0.75, 0));
+    const head = new THREE.Group();
+    head.position.set(0, 1.4, 0);
+    const skull = M(new THREE.SphereGeometry(0.5, 16, 12), skin);
+    skull.scale.set(1, 1.15, 0.95);
+    head.add(skull);
+    for (const s of [-1, 1]) {
+      const eye = M(new THREE.SphereGeometry(0.17, 12, 8), black, s * 0.2, 0, -0.38, 0, 0, s * 0.5);
+      eye.scale.set(1, 0.6, 0.5);
+      head.add(eye);
+      const ant = M(new THREE.CylinderGeometry(0.025, 0.025, 0.45, 6), skin, s * 0.2, 0.68, 0, 0, 0, -s * 0.3);
+      ant.add(M(new THREE.SphereGeometry(0.07, 8, 6), mat(d.accent || '#ff66cc', { emissive: d.accent || '#ff66cc', emissiveIntensity: 0.6 }), 0, 0.25, 0));
+      head.add(ant);
+    }
+    g.add(head);
+    for (const x of [-0.17, 0.17]) g.add(M(new THREE.BoxGeometry(0.18, 0.42, 0.18), skin, x, 0.21, 0));
+    const arms = [-1, 1].map((s) => { const a = M(new THREE.BoxGeometry(0.12, 0.5, 0.12), skin, s * 0.38, 0.75, 0, 0, 0, s * 0.25); g.add(a); return a; });
+    g.userData = { head, flippers: arms, waddle: true };
+    return g;
+  },
   dog(d) {
     const g = new THREE.Group();
     const fur = mat(d.color, { roughness: 0.9 }), white = mat(d.accent || '#f8f8f8', { roughness: 0.9 }), black = mat('#1b1b1b');

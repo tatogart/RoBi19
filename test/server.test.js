@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 22); // 21 showcase games + The Hunt hub
+  assert.equal(data.games, 21); // 20 showcase games + The Hunt hub
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -440,7 +440,7 @@ test('players trade items and Robits', async () => {
   if (free) assert.equal((await call('POST', '/trades', { toUserId: bid, give: [free.id], get: [shirt.id] }, a)).status, 400);
   assert.equal((await call('POST', '/trades', { toUserId: aid, give: [hat.id], get: [] }, a)).status, 400);
   const r = await call('POST', '/trades', { toUserId: bid, give: [hat.id], get: [shirt.id], getRobits: 100 }, a);
-  assert.equal(r.status, 200);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal((await call('GET', '/trades/count', null, b)).data.inbound, 1);
   assert.equal((await call('GET', '/trades?type=outbound', null, a)).data.trades.length, 1);
   assert.equal((await call('POST', `/trades/${r.data.trade.id}/accept`, {}, a)).status, 403); // only the receiver accepts
@@ -1026,10 +1026,10 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   c.ws.send(JSON.stringify({ t: 'move', p: [x, y, z], ry: 0, a: 'idle' }));
   const got = await c.wait((m) => m.t === 'hunt');
   assert.deepEqual([got.count, got.total], [1, 2]);
-  assert.equal(got.robits, 15);
+  assert.equal(got.robits, 20);
   // the first token's prize (the Hunt Dragon needs 60% now)
-  assert.deepEqual(got.reward.items.map((i) => i.name), ['The Hunt Tee']);
-  assert.equal((await call('GET', '/hunt', null, admin)).data.rewards.length, 8);
+  assert.equal(got.reward.items[0].name, 'Dimension Explorer Tee'); // 1 of 2 shards: also half (the Mini UFO)
+  assert.equal((await call('GET', '/hunt', null, admin)).data.rewards.length, 10);
   c.ws.close();
   // players without access get no token
   await call('POST', '/admin/hunt', {}, admin);
@@ -1092,14 +1092,14 @@ test('The Hunt: admins give and take a player\'s tokens', async () => {
   const before = (await call('GET', '/auth/me', null, kid)).data.user.robits;
   p = (await call('POST', '/admin/hunt/tokens', { user: 'TokenKid', gameId: g.id }, admin)).data;
   assert.equal(p.count, 1);
-  assert.deepEqual(p.newPrizes.map((x) => x.name), ['The Hunt Tee']);
-  assert.equal((await call('GET', '/auth/me', null, kid)).data.user.robits, before + 15);
+  assert.equal(p.newPrizes[0].name, 'Dimension Explorer Tee');
+  assert.equal((await call('GET', '/auth/me', null, kid)).data.user.robits, before + 20);
   p = (await call('POST', '/admin/hunt/tokens', { user: 'TokenKid', all: true }, admin)).data;
   assert.equal(p.count, p.total);
-  assert.ok(p.prizes.includes('all'));
+  assert.ok(p.prizes.includes('cosmos'));
   p = (await call('POST', '/admin/hunt/tokens', { user: 'TokenKid', all: true, take: true }, admin)).data;
   assert.equal(p.count, 0);
-  assert.ok(p.prizes.includes('all')); // prizes stay
+  assert.ok(p.prizes.includes('cosmos')); // prizes stay
   assert.equal((await call('POST', '/admin/hunt/tokens', { user: 'Nobody_xyz', all: true }, admin)).status, 404);
 });
 
@@ -1203,4 +1203,65 @@ test('places: a game has more places, scripts teleport between them (DOORS lobby
   assert.equal(hw.serverId, tp.serverId);
   assert.ok(hw.snapshot.find((s) => s.c === 'Workspace').ch.some((n) => n.p.Name === 'Rooms'));
   h.ws.close();
+});
+
+test('The Hunt: Another Dimension: hub star fragments, launch pads, the old event is put away', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  await call('POST', '/admin/hunt', { public: true }, admin);
+  const kid = (await call('POST', '/auth/signup', { username: 'SpaceKid', password: 'secret123' })).cookie;
+  const h = (await call('GET', '/hunt', null, kid)).data;
+  assert.equal(h.name, 'The Hunt: Another Dimension');
+  assert.equal(h.fragments.total, 6);
+  assert.ok(h.rift.goal > 0);
+  assert.ok(h.rewards.some((r) => r.bonus && r.name === 'Stardust Halo'));
+  const hub = (await call('GET', `/games/${h.hubId}`, null, kid)).data.game;
+  assert.equal(hub.name, 'The Hunt: Another Dimension');
+  const c = await join(kid, { placeId: h.hubId });
+  const w = await c.wait((m) => m.t === 'welcome');
+  const wsNode = w.snapshot.find((s) => s.c === 'Workspace');
+  assert.equal(wsNode.p.Gravity, 75); // low gravity
+  const frag = wsNode.ch.find((n) => n.p.Name === 'StarFragments').ch[0];
+  const pad = wsNode.ch.find((n) => n.p.Name === 'LaunchPads').ch[0];
+  await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  // a launch pad throws you up
+  c.ws.send(JSON.stringify({ t: 'move', p: [pad.p.CFrame[0], pad.p.CFrame[1] + 2.5, pad.p.CFrame[2]], ry: 0, a: 'idle' }));
+  const up = await c.wait((m) => m.t === 'impulse');
+  assert.ok(up.v[1] > 50);
+  // a star fragment counts once
+  c.ws.send(JSON.stringify({ t: 'move', p: [frag.p.CFrame[0], frag.p.CFrame[1], frag.p.CFrame[2]], ry: 0, a: 'idle' }));
+  assert.match((await c.wait((m) => m.t === 'sys' && /Star fragment/.test(m.text))).text, /Star fragment 1\/6/);
+  c.ws.close();
+  assert.equal((await call('GET', '/hunt', null, kid)).data.fragments.count, 1);
+});
+
+test('permissions: fine settings for each right (item types, limits, bans, Robits)', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const helper = await call('POST', '/auth/signup', { username: 'FineHelper', password: 'secret123' });
+  const hc = helper.cookie;
+  const id = helper.data.user.id;
+  const victim = (await call('POST', '/auth/signup', { username: 'FineVictim', password: 'secret123' })).data.user;
+  await call('POST', `/admin/users/${id}/perms`, {
+    perms: ['items', 'moderator', 'economy'],
+    permOpts: { items: { types: ['Hat', 'Pet'], maxPrice: 50, perDay: 1 }, moderator: { maxBan: '1d', deviceBan: false, deleteUsers: false }, economy: { maxRobits: 100, membership: false } },
+  }, admin);
+  const o = (await call('GET', '/create/options', null, hc)).data;
+  assert.deepEqual(o.types, ['Hat', 'Pet']);
+  const hat = { type: 'Hat', name: 'Fine Hat', price: 10, data: { model: 'beanie', color: '#ffcc00' } };
+  assert.equal((await call('POST', '/catalog/create', { ...hat, type: 'Shirt', data: { color: '#ff0000' } }, hc)).status, 403);
+  assert.match((await call('POST', '/catalog/create', { ...hat, price: 500 }, hc)).data.error, /highest price/);
+  assert.equal((await call('POST', '/catalog/create', hat, hc)).status, 200);
+  assert.match((await call('POST', '/catalog/create', { ...hat, name: 'Second Hat' }, hc)).data.error, /a day/);
+  // bans up to a day, no device bans
+  assert.equal((await call('POST', `/admin/users/${victim.id}/ban`, { banned: true, duration: '7d' }, hc)).status, 403);
+  assert.equal((await call('POST', `/admin/users/${victim.id}/ban`, { banned: true, duration: '1d', device: true }, hc)).status, 403);
+  assert.equal((await call('POST', `/admin/users/${victim.id}/ban`, { banned: true, duration: '1d' }, hc)).status, 200);
+  await call('POST', `/admin/users/${victim.id}/ban`, { banned: false }, hc);
+  assert.equal((await call('POST', `/admin/users/${victim.id}/delete`, {}, hc)).status, 403);
+  // Robits: at most 100 at once, no Builders Club
+  assert.equal((await call('POST', `/admin/users/${victim.id}/robits`, { amount: 1000 }, hc)).status, 403);
+  assert.equal((await call('POST', `/admin/users/${victim.id}/robits`, { amount: 100 }, hc)).status, 200);
+  assert.equal((await call('POST', `/admin/users/${victim.id}/membership`, { tier: 'BuildersClub' }, hc)).status, 403);
+  // the settings come back in the Admin Panel
+  const u = (await call('GET', '/admin/overview', null, admin)).data.users.find((x) => x.id === id);
+  assert.deepEqual(u.permOpts.items.types, ['Hat', 'Pet']);
 });

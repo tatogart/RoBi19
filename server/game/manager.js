@@ -57,6 +57,9 @@ export class GameManager {
         inEvent: () => this.hunt.inEvent(gameId),
         collect: (userId) => this.hunt.collect(userId, gameId),
         progress: (userId) => this.hunt.progress(userId),
+        // the hub's own little quests (star fragments) and the shared rift counter
+        fragment: (userId, n) => this.hunt.fragment(userId, n, gameId),
+        global: () => this.hunt.global(),
       } : null,
     };
   }

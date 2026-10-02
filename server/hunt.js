@@ -8,21 +8,33 @@
 import { buildHuntHub } from './seed/hunt.js';
 import { officialAccount } from './seed/seed.js';
 
-// Prize ladder: count = a number of tokens, share = a part of all tokens.
+// The Hunt: Another Dimension (part 2). Part 1 (the golden tokens) is over:
+// its progress is kept in D.hunt.past and its prizes stay in inventories.
+export const HUNT_NAME = 'The Hunt: Another Dimension';
+// Prize ladder: count = a number of shards, share = a part of all shards.
 const REWARDS = {
-  tee: { count: 1, name: 'The Hunt Tee', type: 'TShirt', data: { graphic: 'star' }, description: 'A prize from The Hunt: find your first token.' },
-  cap: { count: 4, name: "Hunter's Cap", type: 'Hat', data: { model: 'cap', color: '#2b2340', accent: '#ffc400' }, description: 'A prize from The Hunt: find 4 tokens.' },
-  shades: { count: 7, name: 'Golden Hunt Shades', type: 'Hat', data: { model: 'shades', color: '#ffc400', accent: '#b37f00' }, description: 'A prize from The Hunt: find 7 tokens.' },
-  kitty: { count: 10, name: 'Golden Hunt Kitty', type: 'Pet', data: { model: 'cat', color: '#ffc400', accent: '#2b2340' }, description: 'A prize from The Hunt: find 10 tokens.' },
-  half: { share: 0.6, name: 'Hunt Dragon', type: 'Pet', data: { model: 'dragon', color: '#1b1b1b', accent: '#ffc400' }, description: 'A prize from The Hunt: find 60% of the tokens.' },
-  wings: { share: 0.8, name: "Hunter's Golden Wings", type: 'Hat', data: { model: 'wings', color: '#ffc400', accent: '#fff3b0' }, description: 'A prize from The Hunt: find 80% of the tokens.' },
-  sword: { share: 0.95, name: 'Golden Hunt Sword', type: 'Gear', data: { model: 'sword', color: '#ffc400' }, description: 'A prize from The Hunt: find almost every token.' },
-  all: { share: 1, name: "Hunter's Golden Crown", type: 'Hat', data: { model: 'crown', color: '#ffc400', accent: '#e8002a' }, description: 'The grand prize of The Hunt: find every token.' },
+  dtee: { count: 1, name: 'Dimension Explorer Tee', type: 'TShirt', data: { graphic: 'star' }, description: 'The Hunt: Another Dimension - find your first shard.' },
+  helmet: { count: 3, name: 'Astronaut Helmet', type: 'Hat', data: { model: 'astronaut', color: '#f2f2f2', accent: '#9fe8ff' }, description: 'The Hunt: Another Dimension - find 3 shards.' },
+  alien: { count: 6, name: 'Zib the Alien', type: 'Pet', data: { model: 'alien', color: '#5bd65b', accent: '#ff66cc' }, description: 'The Hunt: Another Dimension - find 6 shards.' },
+  planet: { count: 9, name: 'Pocket Planet', type: 'Hat', data: { model: 'planet', color: '#a347ff', accent: '#ffd27a' }, description: 'The Hunt: Another Dimension - find 9 shards.' },
+  ufo: { share: 0.5, name: 'Mini UFO', type: 'Pet', data: { model: 'ufo', color: '#b8c4d6', accent: '#7dffb0' }, description: 'The Hunt: Another Dimension - find half of the shards.' },
+  saber: { share: 0.75, name: 'Dimension Saber', type: 'Gear', data: { model: 'saber', color: '#b45cff' }, description: 'The Hunt: Another Dimension - find 75% of the shards.' },
+  nwings: { share: 0.9, name: 'Nebula Wings', type: 'Hat', data: { model: 'wings', color: '#5a2bd6', accent: '#00e5ff' }, description: 'The Hunt: Another Dimension - find 90% of the shards.' },
+  cosmos: { share: 1, name: 'Crown of the Cosmos', type: 'Hat', data: { model: 'crown', color: '#9fe8ff', accent: '#b45cff' }, description: 'The grand prize of The Hunt: Another Dimension - find every shard.' },
 };
-const ROBITS_PER_TOKEN = 15;
+// Extra prizes that aren't on the ladder.
+const BONUS = {
+  stardust: { how: 'Collect all 6 star fragments in the hub', name: 'Stardust Halo', type: 'Hat', data: { model: 'halo', color: '#7df9ff' }, description: 'The Hunt: Another Dimension - collect every star fragment in the hub.' },
+  rift: { how: 'Everyone together opens the Rift (find at least 1 shard)', name: 'Rift Walker Planet', type: 'Hat', data: { model: 'planet', color: '#ff4d8d', accent: '#7df9ff' }, description: 'The Hunt: Another Dimension - the players opened the Rift together.' },
+};
+const ALL_PRIZES = { ...REWARDS, ...BONUS };
+const FRAGMENTS = 6;
+const ROBITS_PER_TOKEN = 20;
+const HUB_DESCRIPTION = 'Part 2 of The Hunt! A rift to another dimension has opened. Jump through the wormholes, follow your scanner to the dimension shard hidden in every game, collect star fragments in the low-gravity hub and open the Rift together with everyone. 10 prizes, up to the Crown of the Cosmos.';
+const RIFT_GOAL = 300;
 // Games that are never in the event (nothing to hunt in a house).
 const EXCLUDED_KEYS = ['happyhome'];
-// tokens needed for a prize when the event has `total` tokens
+// shards needed for a prize when the event has `total` shards
 const needFor = (key, total) => {
   const r = REWARDS[key];
   return Math.max(1, Math.min(total, r.count || Math.ceil(total * r.share)));
@@ -44,10 +56,22 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     H.public = true;
     H.version = 2;
   }
+  // Version 3: part 2 starts. Part 1's tokens and prizes are put away.
+  if (H.version < 3) {
+    H.past = [...(H.past || []), { name: 'The Hunt', progress: H.progress, rewarded: H.rewarded, rewards: H.rewards }];
+    H.progress = {};
+    H.rewarded = {};
+    H.rewards = {};
+    H.fragments = {};
+    H.riftOpen = false;
+    H.hubKey = '';
+    H.version = 3;
+  }
+  H.fragments = H.fragments || {};
 
   // Prize items: not for sale, only given by the event.
   H.rewards = H.rewards || {};
-  for (const [k, r] of Object.entries(REWARDS)) {
+  for (const [k, r] of Object.entries(ALL_PRIZES)) {
     if (H.rewards[k] && D.items[H.rewards[k]]) continue;
     const id = db.nextId('item');
     D.items[id] = { id, name: r.name, type: r.type, price: 0, data: r.data, description: r.description, creatorId: official()?.id || 0, created: Date.now(), sales: 0, offsale: true, limited: false };
@@ -55,7 +79,17 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   }
   // prizes in ladder order
   const prizeKeys = () => Object.keys(REWARDS).filter((k) => D.items[H.rewards[k]]);
-  const prizeList = (total) => prizeKeys().map((k) => ({ key: k, id: H.rewards[k], name: D.items[H.rewards[k]].name, need: needFor(k, total) }));
+  const prizeList = (total) => [
+    ...prizeKeys().map((k) => ({ key: k, id: H.rewards[k], name: D.items[H.rewards[k]].name, need: needFor(k, total) })),
+    ...Object.keys(BONUS).filter((k) => D.items[H.rewards[k]]).map((k) => ({ key: k, id: H.rewards[k], name: D.items[H.rewards[k]].name, how: BONUS[k].how, bonus: true })),
+  ];
+  // Shards found by everyone together; at RIFT_GOAL the Rift opens for all finders.
+  const globalShards = () => Object.values(H.progress).reduce((n, l) => n + l.length, 0);
+  const riftCheck = (uid) => {
+    if (!H.riftOpen && globalShards() >= RIFT_GOAL) H.riftOpen = true;
+    if (H.riftOpen && uid && (H.progress[uid] || []).length) return giveReward(uid, 'rift');
+    return null;
+  };
   const eligible = (uid) => {
     if (H.public) return true;
     const u = D.users[uid];
@@ -103,16 +137,33 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const p = progress(uid);
     const rewards = [];
     for (const k of prizeKeys()) if (p.count >= needFor(k, p.total)) { const r = giveReward(uid, k); if (r) rewards.push(r); }
+    const rift = riftCheck(uid);
+    if (rift) rewards.push(rift);
     const reward = rewards.length ? { name: rewards.map((r) => r.name).join(', '), items: rewards } : null;
     const u = D.users[uid];
     if (u) { u.robits += ROBITS_PER_TOKEN; log(uid, ROBITS_PER_TOKEN, force ? `The Hunt token from the admins (${p.count}/${p.total})` : `The Hunt token (${p.count}/${p.total})`); }
     db.save();
     return { new: true, count: p.count, total: p.total, reward, robits: ROBITS_PER_TOKEN };
   };
+  // Star fragments: a little quest in the hub. n = 0 only asks.
+  const fragment = (uid, n, gameId) => {
+    if (!eligible(uid) || gameId !== H.hubId) return null;
+    const have = H.fragments[uid] || (H.fragments[uid] = []);
+    let isNew = false, prize = null;
+    if (n >= 1 && n <= FRAGMENTS && !have.includes(n)) {
+      have.push(n);
+      isNew = true;
+      if (have.length >= FRAGMENTS) prize = giveReward(uid, 'stardust');
+      db.save();
+    }
+    return { new: isNew, count: have.length, total: FRAGMENTS, list: [...have], prize: prize ? prize.name : '' };
+  };
   manager.hunt = {
     eligible,
     inEvent: (gameId) => eventGames().some((g) => g.id === gameId),
     collect,
+    fragment,
+    global: () => ({ Shards: globalShards(), Goal: RIFT_GOAL, Open: !!H.riftOpen }),
     progress: (uid) => (eligible(uid) ? progress(uid) : null),
   };
 
@@ -123,21 +174,23 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     let hub = D.games[H.hubId];
     const games = eventGames();
     const prizes = prizeList(games.length);
-    const key = JSON.stringify([5, games.map((g) => [g.id, g.name, g.creator]), prizes.map((p) => [p.name, p.need])]);
+    const key = JSON.stringify([6, games.map((g) => [g.id, g.name, g.creator]), prizes.map((p) => [p.name, p.need])]);
     if (!hub) {
       const id = db.nextId('game');
       hub = D.games[id] = {
-        id, name: 'The Hunt', description: 'The Hunt is here! Step through the portals, find the golden token hidden in every game, get Robits for every token and win 8 prizes, up to the Hunter\'s Golden Crown.',
+        id, name: HUNT_NAME, description: HUB_DESCRIPTION,
         creatorId: off.id, genre: 'Adventure', created: Date.now(), updated: Date.now(), visits: 0, maxPlayers: 20,
         isPublic: !!H.public, featured: false, copyable: false, upVotes: 0, downVotes: 0, favorites: 0, huntHub: true,
       };
       H.hubId = id;
       H.hubKey = '';
     }
+    hub.name = HUNT_NAME;
+    hub.description = HUB_DESCRIPTION;
     hub.isPublic = !!H.public;
     hub.featured = !!H.public;
     if (H.hubKey !== key || !db.readPlace(hub.id)) {
-      db.writePlace(hub.id, buildHuntHub(games, prizes));
+      db.writePlace(hub.id, buildHuntHub(games, prizes, { fragments: FRAGMENTS, goal: RIFT_GOAL }));
       hub.updated = Date.now();
       H.hubKey = key;
       // empty hub servers restart with the new portals
@@ -151,10 +204,13 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   timer.unref?.();
 
   const status = (u) => {
+    if (u && riftCheck(u.id)) db.save();
     const p = u ? progress(u.id) : { games: eventGames().map((g) => ({ ...g, found: false })), count: 0, total: eventGames().length };
     return {
-      public: !!H.public, hubId: syncHub()?.id || null, ...p,
+      name: HUNT_NAME, public: !!H.public, hubId: syncHub()?.id || null, ...p,
       robitsPerToken: ROBITS_PER_TOKEN,
+      rift: { shards: globalShards(), goal: RIFT_GOAL, open: !!H.riftOpen },
+      fragments: { count: u ? (H.fragments[u.id] || []).length : 0, total: FRAGMENTS },
       rewards: prizeList(p.total).map((r) => ({ ...r, type: D.items[r.id].type, data: D.items[r.id].data, got: !!u && (H.rewarded[u.id] || []).includes(r.key) })),
     };
   };

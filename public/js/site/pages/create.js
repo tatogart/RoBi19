@@ -22,7 +22,9 @@ if (!opts.allowed) {
 
 const TYPE_NAMES = { TShirt: 'T-Shirt', Shirt: 'Shirt', Pants: 'Pants', Face: 'Face', Hat: 'Hat', Hair: 'Hair', Pet: 'Pet' };
 const PET_NAMES = { dog: 'Puppy', cat: 'Kitty', bunny: 'Bunny', penguin: 'Penguin', robot: 'Robot', ghost: 'Ghost', dragon: 'Dragon' };
-let type = 'TShirt';
+// Types this player may make (the admins choose, per right): normal items or Limiteds.
+const typesNow = () => (limitedIn.checked ? opts.limitedTypes || opts.types : opts.normalTypes || opts.types);
+let type = opts.types.includes('TShirt') ? 'TShirt' : opts.types[0];
 const state = { color: '#c4281c', accent: '#f8f8f8', pattern: 'stripes', model: opts.models.Hat[0] };
 
 // ---------------------------------------------------------------- pixel editor
@@ -103,21 +105,26 @@ const typeTabs = el('div', { class: 'tabs create-tabs' });
 const editor = el('div', { class: 'panel' });
 const nameIn = el('input', { class: 'input', maxlength: 50, placeholder: 'Item name' });
 const descIn = el('textarea', { class: 'input', rows: 2, maxlength: 500, placeholder: 'Description (optional)' });
-const priceIn = el('input', { class: 'input', type: 'number', min: 0, max: 100000, value: 10 });
+const priceIn = el('input', { class: 'input', type: 'number', min: 0, max: opts.maxPrice || 100000, value: Math.min(10, opts.maxPrice ?? 10) });
 const preview = el('div', { class: 'create-preview' }, spinner());
 // Limited Creator right: a fixed stock; when it sells out the item can only be traded.
 const limitedIn = el('input', { type: 'checkbox', checked: !!opts.onlyLimiteds, disabled: !!opts.onlyLimiteds });
-const stockIn = el('input', { class: 'input', type: 'number', min: 1, max: 100000, value: 100 });
+const stockIn = el('input', { class: 'input', type: 'number', min: 1, max: opts.maxStock || 100000, value: Math.min(100, opts.maxStock || 100) });
 const stockField = el('label', { class: 'field' }, 'Stock (how many can be sold)', stockIn);
 const syncLimited = () => stockField.classList.toggle('hidden', !limitedIn.checked);
-limitedIn.onchange = syncLimited;
+limitedIn.onchange = () => {
+  syncLimited();
+  if (!typesNow().includes(type)) { type = typesNow()[0] || type; }
+  drawEditor();
+  changed();
+};
 syncLimited();
 const colorRow = () => el('div', { class: 'row wrap' },
   el('label', { class: 'field' }, 'Main colour', el('input', { type: 'color', value: state.color, oninput: (e) => { state.color = e.target.value; changed(); } })),
   el('label', { class: 'field' }, 'Second colour', el('input', { type: 'color', value: state.accent, oninput: (e) => { state.accent = e.target.value; changed(); } })));
 
 function drawEditor() {
-  typeTabs.replaceChildren(...opts.types.map((t) => el('button', { class: t === type ? 'active' : '', text: TYPE_NAMES[t], onclick: () => { type = t; if (MODELS()[0] && !MODELS().includes(state.model)) state.model = MODELS()[0]; drawEditor(); changed(); } })));
+  typeTabs.replaceChildren(...typesNow().map((t) => el('button', { class: t === type ? 'active' : '', text: TYPE_NAMES[t], onclick: () => { type = t; if (MODELS()[0] && !MODELS().includes(state.model)) state.model = MODELS()[0]; drawEditor(); changed(); } })));
   const parts = [];
   if (type === 'TShirt' || type === 'Face') {
     painter.reset(type);

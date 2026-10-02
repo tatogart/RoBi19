@@ -404,8 +404,22 @@ export class HUD {
   }
 
   // The Hunt: a big banner when you find a token.
+  // The Hunt scanner: how strong the hidden shard's signal is (level 1-5,
+  // 0 = no shard right now, -1 = found: the scanner goes away).
+  huntScanner(level) {
+    if (level < 0) { if (this.scanner) this.scanner.remove(); this.scanner = null; return; }
+    if (!this.scanner) {
+      this.scanner = h('div', 'hunt-scanner', `<div class="hs-title">SHARD SCANNER</div><div class="hs-bars">${'<i></i>'.repeat(5)}</div><div class="hs-text"></div>`);
+      this.root.append(this.scanner);
+    }
+    const words = ['Searching...', 'Very weak', 'Weak', 'Getting closer', 'Strong', 'VERY STRONG!'];
+    this.scanner.querySelectorAll('.hs-bars i').forEach((b, i) => b.classList.toggle('on', i < level));
+    this.scanner.querySelector('.hs-text').textContent = words[level] || '';
+    this.scanner.dataset.level = level;
+  }
+
   huntBanner(count, total, reward, robits) {
-    const b = h('div', 'hunt-banner', `<div class="hunt-token"></div><div><div class="hunt-title">TOKEN FOUND!</div>
+    const b = h('div', 'hunt-banner', `<div class="hunt-token"></div><div><div class="hunt-title">SHARD FOUND!</div>
       <div class="hunt-count">${count} / ${total}${robits ? `<span class="hunt-robits">+${robits} R$</span>` : ''}</div>${reward ? `<div class="hunt-reward">You won: ${esc(reward.name)}!</div>` : ''}</div>`);
     this.root.append(b);
     setTimeout(() => b.classList.add('out'), 4500);
