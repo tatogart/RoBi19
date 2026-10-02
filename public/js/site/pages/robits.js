@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, icon, fmtFull, timeAgo, toast, modal } from '../ui.js';
+import { el, icon, fmtFull, timeAgo, toast } from '../ui.js';
 import { LANG } from '../../i18n.js';
 
 const me = await initPage({ active: 'robits' });
@@ -81,30 +81,14 @@ const plans = el('div', { class: 'plans' }, store.memberships.map((m) => {
     current ? el('div', { class: 'plan-tag', text: me.membershipUntil ? `Your plan until ${new Date(me.membershipUntil).toLocaleDateString()}` : 'Your plan' }) : null,
     m.id !== 'None' ? planBuy(m, current) : null);
 }));
-// Builders Club: for Robits right here (30 days), or in Telegram.
+// Builders Club: bought in Telegram.
 function planBuy(m, current) {
   const d = donate.memberships.find((x) => x.id === m.id) || {};
   return el('div', { class: 'plan-buy' },
-    el('div', { class: 'plan-cost' }, icon('robits', 'robits-icon'), el('span', { text: `${fmtFull(d.cost)} / ${d.days} days` })),
-    el('button', { class: 'btn btn-small btn-green', text: current ? `Extend for R$ ${fmtFull(d.cost)}` : `Buy for R$ ${fmtFull(d.cost)}`, onclick: () => buyPlan(m, d) }),
-    el('button', { class: 'btn btn-small', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(m.name) }));
-}
-function buyPlan(m, d) {
-  modal({
-    title: `Buy ${m.name}`,
-    body: el('p', { text: `${m.name} for ${d.days} days for R$ ${fmtFull(d.cost)}. If you have a lower plan, it is upgraded; the same plan is extended.` }),
-    buttons: [{ text: 'Buy', cls: 'btn-green', onClick: async () => {
-      try {
-        const r = await api.post('/economy/membership', { tier: m.id });
-        updateBalance(r.robits);
-        toast(`You have ${m.name} until ${new Date(r.until).toLocaleDateString()}!`, 'success');
-        setTimeout(() => location.reload(), 900);
-      } catch (e) { toast(e.message, 'error'); return false; }
-    } }, { text: 'Cancel' }],
-  });
+    el('button', { class: 'btn btn-small btn-green', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(current ? `${m.name} (extend)` : m.name) }));
 }
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Builders Club' }),
-  el('p', { class: 'muted small', text: 'Buy a membership for Robits (30 days) or in Telegram, or get one from a promo code.' }), plans);
+  el('p', { class: 'muted small', text: 'Buy a membership in Telegram or get one from a promo code.' }), plans);
 
 // ---------------------------------------------------------------- transactions
 const tx = el('div', { class: 'panel' });

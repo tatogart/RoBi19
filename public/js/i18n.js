@@ -270,7 +270,7 @@ const RU = {
   'Give or take tokens by hand. Given tokens bring their 15 R$ and unlock prizes like found ones; taking tokens keeps the prizes.': 'Выдавай и забирай токены вручную. Выданные токены дают свои 15 R$ и открывают призы, как найденные; если забрать токены, призы останутся.',
   'That game is not in The Hunt.': 'Этой игры нет в The Hunt.',
   'Give Robits or Builders Club to a friend. Gift cards are sold in Telegram: you get a code, your friend redeems it on the Promo Codes page.': 'Подари другу Robits или Builders Club. Подарочные карты продаются в Telegram: ты получаешь код, а друг активирует его на странице «Промокоды».',
-  'Buy a membership for Robits (30 days) or in Telegram, or get one from a promo code.': 'Купи членство за Robits (30 дней) или в Telegram, либо получи по промокоду.',
+  'Buy a membership in Telegram or get one from a promo code.': 'Купи членство в Telegram или получи по промокоду.',
   'Promo Codes': 'Промокоды', 'Enter code': 'Введи код', 'Redeem': 'Активировать', 'Code redeemed!': 'Код активирован!', 'New in your inventory:': 'Новое в инвентаре:',
   'You already own everything this code gives.': 'У тебя уже есть всё, что даёт этот код.',
   'Got a code from the admins, an event or a video? Type it here to get Robits, Builders Club and free items.': 'Есть код от админов, с ивента или из видео? Введи его здесь и получи Robits, Builders Club и бесплатные предметы.',
