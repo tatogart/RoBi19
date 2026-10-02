@@ -1,3 +1,4 @@
+import { siteSettings, isStaffUser, countPlay } from './adminplus.js';
 // One player's game connection. `ws` is anything with send(string), close(),
 // readyState and on('message' | 'close') — a real WebSocket on the Node server,
 // or an in-memory socket in the standalone (phone) build.
@@ -24,6 +25,8 @@ export function handleConnection(ws, user, { db, manager }) {
           const gameId = +msg.placeId;
           const game = db.data.games[gameId];
           if (!game) throw new Error('This game is unavailable.');
+          const S = siteSettings(db.data);
+          if (S.maintenance.on && !isStaffUser(user)) throw new Error(S.maintenance.message || 'Robis is under maintenance. Please come back soon!');
           if (!game.isPublic && game.creatorId !== user.id && !user.isAdmin && !(game.collaborators || []).includes(user.id)) throw new Error('This game is private.');
           if (msg.privateId) {
             const why = manager.privateAccess ? manager.privateAccess(user, +msg.privateId, gameId) : 'Private servers are not available.';
@@ -31,6 +34,7 @@ export function handleConnection(ws, user, { db, manager }) {
             gameServer = manager.serverForPrivate(gameId, +msg.privateId);
           } else gameServer = manager.serverForGame(gameId, msg.serverId);
           game.visits++;
+          countPlay(db.data, user.id);
           user.recentGames = [gameId, ...(user.recentGames || []).filter((g) => g !== gameId)].slice(0, 20);
           db.save();
         }

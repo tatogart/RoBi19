@@ -1062,13 +1062,13 @@ export class GameServer {
     };
   }
 
-  close() {
+  close(msg = 'This game has shut down') {
     if (this.closed) return;
     this.closed = true;
     clearInterval(this.timer);
     clearInterval(this.huntTimer);
     for (const s of [...this.sessions.values()]) {
-      this.send(s, { t: 'shutdown', msg: 'This game has shut down' });
+      this.send(s, { t: 'shutdown', msg });
       try { s.ws.close(); } catch { /* ignore */ }
     }
     this.sessions.clear();

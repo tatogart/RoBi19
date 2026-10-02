@@ -20,8 +20,35 @@ const NAV = [
   ['blog', 'Blog', '/blog'],
 ];
 
+// Social links (Admin Panel → Settings): small brand marks.
+const SOCIAL_SVG = {
+  telegram: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#29a9eb"/><path fill="#fff" d="M5.4 11.8l11.6-4.5c.5-.2 1 .1.8.9l-2 9.3c-.1.6-.5.8-1 .5l-3-2.2-1.4 1.4c-.2.2-.3.3-.6.3l.2-3.1 5.6-5.1c.2-.2 0-.3-.4-.1l-6.9 4.4-3-.9c-.6-.2-.7-.6.1-.9z"/></svg>',
+  youtube: '<svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="5" fill="#ff0033"/><path fill="#fff" d="M10 8.5v7l6-3.5z"/></svg>',
+  discord: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#5865f2"/><path fill="#fff" d="M16.9 8.2a11 11 0 00-2.7-.8l-.3.6a10 10 0 00-3.8 0l-.3-.6a11 11 0 00-2.7.8C5.4 10.8 5 13.3 5.2 15.8a11 11 0 003.3 1.7l.7-1.1-1.1-.5.3-.2a7.8 7.8 0 006.8 0l.3.2-1.1.5.7 1.1a11 11 0 003.3-1.7c.3-2.9-.4-5.4-1.5-7.6zM9.8 14.3c-.6 0-1.1-.6-1.1-1.3s.5-1.3 1.1-1.3 1.1.6 1.1 1.3-.5 1.3-1.1 1.3zm4.4 0c-.6 0-1.1-.6-1.1-1.3s.5-1.3 1.1-1.3 1.1.6 1.1 1.3-.5 1.3-1.1 1.3z"/></svg>',
+  tiktok: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#111"/><path fill="#fff" d="M13.5 5h2.2c.2 1.5 1.2 2.6 2.8 2.8v2.2c-1 0-2-.3-2.8-.9v4.6a4 4 0 11-4-4v2.2a1.8 1.8 0 101.8 1.8z"/></svg>',
+  vk: '<svg viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#0077ff"/><path fill="#fff" d="M12.8 16.5c-4.6 0-7.3-3.2-7.4-8.5h2.3c.1 3.9 1.8 5.6 3.2 5.9V8h2.2v3.4c1.3-.1 2.7-1.7 3.2-3.4h2.1a6.3 6.3 0 01-2.9 4.1 6.6 6.6 0 013.4 4.4h-2.4a4.2 4.2 0 00-3.4-3.1v3.1z"/></svg>',
+  other: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#888"/><path fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" d="M10.5 13.5l3-3M9 11l-1.5 1.5a2.5 2.5 0 003.5 3.5L12.5 14.5M15 13l1.5-1.5A2.5 2.5 0 0013 8L11.5 9.5"/></svg>',
+};
+export function socialLinks(site, cls = 'social-links') {
+  const list = (site && site.socials) || [];
+  if (!list.length) return null;
+  return el('div', { class: cls }, list.map((s) => el('a', { class: 'social-link', href: s.url, target: '_blank', rel: 'noopener', title: s.label },
+    el('span', { class: 'social-icon', html: SOCIAL_SVG[s.type] || SOCIAL_SVG.other }), el('span', { class: 'no-i18n', text: s.label }))));
+}
+// A big "join us" card for the home page.
+export function socialBanner(site) {
+  const tg = ((site && site.socials) || [])[0];
+  if (!tg) return null;
+  return el('a', { class: 'social-banner', href: tg.url, target: '_blank', rel: 'noopener' },
+    el('span', { class: 'social-banner-icon', html: SOCIAL_SVG[tg.type] || SOCIAL_SVG.other }),
+    el('span', { class: 'social-banner-text' }, el('b', { text: `Join Robis on ${tg.label}!` }), el('span', { text: 'News, updates, events and giveaways first.' })),
+    el('span', { class: 'btn btn-primary', text: 'Join' }));
+}
+export let SITE = null;
+
 export async function initPage({ requireAuth = true, active = '', nav = true } = {}) {
-  const me = await getMe();
+  const [me, site] = await Promise.all([getMe(), api.get('/site').catch(() => null)]);
+  SITE = site;
   if (requireAuth && !me) {
     location.href = '/?returnUrl=' + encodeURIComponent(location.pathname + location.search);
     return new Promise(() => {});
@@ -35,7 +62,16 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
   const content = document.querySelector('.rbx-content');
   if (content) {
     if (!nav || !me) content.classList.add('no-nav');
-    content.append(buildFooter());
+    content.append(buildFooter(site));
+  }
+  // Maintenance (Admin Panel → Settings): only staff get past this.
+  if (site && site.maintenance && !site.staff && content) {
+    content.replaceChildren(el('div', { class: 'maintenance' },
+      el('img', { src: '/img/icon.svg', alt: '' }),
+      el('h1', { text: 'Robis is under maintenance' }),
+      el('p', { text: site.maintenance.message || 'We are making Robis better. Please come back soon!' }),
+      socialLinks(site)), buildFooter(site));
+    return new Promise(() => {});
   }
   if (me) refreshCounts(me);
   showAnnouncement();
@@ -136,6 +172,10 @@ function buildNav(me, active) {
     nav.append(el('a', { href, class: 'mobile-only' + (active === key ? ' active' : '') }, icon(ic), el('span', { text: label })));
   }
   if (isStaff(me)) nav.append(el('a', { href: '/admin', class: active === 'admin' ? 'active' : '' }, icon('settings'), el('span', { text: 'Admin Panel' })));
+  if (SITE && SITE.socials && SITE.socials.length) {
+    nav.append(el('div', { class: 'section-label', text: 'Community' }));
+    for (const s of SITE.socials) nav.append(el('a', { href: s.url, target: '_blank', rel: 'noopener', class: 'nav-social' }, el('span', { class: 'social-icon', html: SOCIAL_SVG[s.type] || SOCIAL_SVG.other }), el('span', { class: 'no-i18n', text: s.label })));
+  }
   nav.append(el('div', { class: 'section-label', text: 'Events' }));
   if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-dot' }), el('span', { text: 'The Hunt' })));
   nav.append(el('a', { href: '/game?id=2' }, icon('star'), el('span', { text: 'Obby Week!' })));
@@ -179,8 +219,9 @@ export function setRobits(n) {
   if (e) e.textContent = fmtNum(n);
 }
 
-function buildFooter() {
+function buildFooter(site) {
   return el('footer', { class: 'footer' },
+    socialLinks(site, 'social-links footer-socials'),
     el('div', { class: 'links' },
       el('a', { href: '/help', text: 'About Us' }), el('a', { href: '/help', text: 'Help' }),
       el('a', { href: '/develop', text: 'Create' }), el('a', { href: '/blog', text: 'Blog' }),

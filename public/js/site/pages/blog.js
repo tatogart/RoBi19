@@ -4,6 +4,10 @@ import { el } from '../ui.js';
 await initPage({ active: 'blog', requireAuth: false });
 const app = document.getElementById('app');
 const POSTS = [
+  ['December 2019', 'Robis is on Telegram!', 'Join our Telegram channel for news, updates, events and giveaways — the link is in the menu, on the Home page and at the bottom of every page.'],
+  ['December 2019', 'The Hunt is here', 'Step through the portals in The Hunt hub, find the golden token hidden in every game and win 8 exclusive prizes, from The Hunt Tee to the Hunter\'s Golden Crown. Every token gives Robits too!'],
+  ['December 2019', 'Game Passes and Private Servers', 'Game owners can now sell game passes (with built-in perks like speed, super jump and flying) and let players buy their own private servers. Invite your friends with a link!'],
+  ['December 2019', 'Gift Cards and Promo Codes', 'Redeem promo codes on the new Promo Codes page and give Robits or Builders Club to a friend with a Gift Card.'],
   ['December 2019', 'Create your own items (BETA)', 'Players with the Item Creator right can now design T-shirts and faces (draw them or upload a picture), shirts, pants, hats and hair. Your creations go on sale in the Catalog and you get 70% of every sale. Find it on the Create page!'],
   ['December 2019', 'Invite friends to your game', 'Open the menu in any game, go to Players and press Invite Friends. Your friends get a popup with a Join button wherever they are on Robis.'],
   ['November 2019', 'Dark Theme and Russian', 'Robis now has a Dark Theme — easy on the eyes at night — and speaks Russian! Change both in Settings.'],

@@ -1,4 +1,4 @@
-import { initPage, setRobits } from '../layout.js';
+import { initPage, setRobits, socialBanner, SITE } from '../layout.js';
 import { api } from '../api.js';
 import { el, gameCard, avatarCard, headshotImg, toast, spinner, MEMBERSHIP, joinFriendDialog, nameBadges } from '../ui.js';
 
@@ -13,6 +13,7 @@ const greeting = el('div', { class: 'section row greet', style: { gap: '20px' } 
     me.isAdmin ? el('a', { class: 'pill', href: '/admin', style: { background: '#00a2ff', color: '#fff', marginLeft: '6px' }, text: 'ADMIN PANEL' }) : null,
     window.ROBIS_STANDALONE ? el('div', { style: { marginTop: '10px' } }, el('button', { class: 'btn btn-green', text: 'Join a friend', onclick: joinFriendDialog })) : null));
 app.append(greeting);
+{ const b = socialBanner(SITE); if (b) app.append(b); }
 
 if (me.canClaimStipend) {
   const banner = el('div', { class: 'panel section row stipend-banner' },

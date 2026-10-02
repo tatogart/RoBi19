@@ -1102,3 +1102,56 @@ test('The Hunt: admins give and take a player\'s tokens', async () => {
   assert.ok(p.prizes.includes('all')); // prizes stay
   assert.equal((await call('POST', '/admin/hunt/tokens', { user: 'Nobody_xyz', all: true }, admin)).status, 404);
 });
+
+test('admin panel update: dashboard, servers, settings, broadcast, alts, socials', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'PanelKid', password: 'secret123' })).cookie;
+  // socials: the Telegram channel by default
+  const site = (await call('GET', '/site')).data;
+  assert.equal(site.socials[0].url, 'https://t.me/Robisgame');
+  assert.equal(site.maintenance, null);
+  // dashboard
+  assert.equal((await call('GET', '/admin/dashboard', null, kid)).status, 403);
+  const dash = (await call('GET', '/admin/dashboard', null, admin)).data;
+  assert.equal(dash.days.length, 14);
+  assert.ok(dash.kpis.users > 1 && dash.topGames.length > 0);
+  // servers: one running, message and shut down
+  const game = (await call('GET', '/games?sort=popular')).data.games[0];
+  const c = await join(kid, { placeId: game.id });
+  const w = await c.wait((m) => m.t === 'welcome');
+  const servers = (await call('GET', '/admin/servers', null, admin)).data.servers;
+  assert.ok(servers.some((s) => s.id === w.serverId && s.players.some((p) => p.name === 'PanelKid')));
+  await call('POST', `/admin/servers/${w.serverId}/message`, { text: 'hello all' }, admin);
+  assert.equal((await c.wait((m) => m.t === 'sys' && m.text.includes('hello all'))).text, '[Admin] hello all');
+  await call('POST', `/admin/servers/${w.serverId}/shutdown`, { reason: 'Update time' }, admin);
+  assert.equal((await c.wait((m) => m.t === 'shutdown')).msg, 'Update time');
+  // settings: starting Robits, closed sign-ups, chat words, maintenance, socials
+  assert.equal((await call('POST', '/admin/settings', { startRobits: 777 }, kid)).status, 403);
+  await call('POST', '/admin/settings', { startRobits: 777, bannedWords: ['bananas'], socials: [{ type: 'telegram', label: 'Telegram', url: 'https://t.me/Robisgame' }, { type: 'youtube', label: 'YouTube', url: 'https://youtube.com/@robis' }] }, admin);
+  assert.equal((await call('POST', '/auth/signup', { username: 'RichNewbie', password: 'secret123' })).data.user.robits, 777);
+  assert.equal((await call('GET', '/site')).data.socials.length, 2);
+  assert.equal((await call('POST', '/admin/settings', { socials: [{ url: 'javascript:alert(1)' }] }, admin)).status, 400);
+  await call('POST', '/admin/settings', { signups: false }, admin);
+  assert.equal((await call('POST', '/auth/signup', { username: 'LateNewbie', password: 'secret123' })).status, 403);
+  await call('POST', '/admin/settings', { signups: true, maintenance: { on: true, message: 'Back at 5!' } }, admin);
+  assert.equal((await call('GET', '/site')).data.maintenance.message, 'Back at 5!');
+  const blocked = await join(kid, { placeId: game.id });
+  assert.equal((await blocked.wait((m) => m.t === 'error')).msg, 'Back at 5!');
+  const staff = await join(admin, { placeId: game.id }); // staff can still play
+  const sw = await staff.wait((m) => m.t === 'welcome' || m.t === 'error');
+  assert.equal(sw.t, 'welcome');
+  staff.ws.send(JSON.stringify({ t: 'chat', text: 'I love bananas' }));
+  assert.equal((await staff.wait((m) => m.t === 'chat')).text, 'I love #######');
+  staff.ws.close();
+  await call('POST', '/admin/settings', { maintenance: { on: false, message: '' }, startRobits: 100, bannedWords: [] }, admin);
+  // broadcast: a message in every inbox, Robits for everyone
+  const sent = (await call('POST', '/admin/broadcast', { subject: 'Big update', body: 'Hello everyone!' }, admin)).data.sent;
+  assert.ok(sent > 2);
+  assert.ok((await call('GET', '/messages', null, kid)).data.messages.some((m) => m.subject === 'Big update'));
+  const before = (await call('GET', '/auth/me', null, kid)).data.user.robits;
+  await call('POST', '/admin/broadcast/robits', { amount: 50 }, admin);
+  assert.equal((await call('GET', '/auth/me', null, kid)).data.user.robits, before + 50);
+  // alt accounts: same device cookie
+  const kidId = (await call('GET', '/auth/me', null, kid)).data.user.id;
+  assert.ok(Array.isArray((await call('GET', `/admin/users/${kidId}/alts`, null, admin)).data.alts));
+});

@@ -14,21 +14,16 @@ if (!perm('moderator') && !perm('economy')) {
   await new Promise(() => {});
 }
 
-app.append(el('h1', { text: 'Admin Panel' }));
-const statsBox = el('div', { class: 'stat-grid' });
+app.append(el('div', { class: 'admin-title' }, el('h1', { text: 'Admin Panel' }),
+  el('span', { class: 'admin-role', text: me.isAdmin ? 'Administrator' : 'Staff' })));
 const announceBox = el('div');
 const tabs = el('div', { class: 'tabs admin-tabs' });
 const body = el('div', { class: 'panel admin-body' }, spinner());
-app.append(statsBox, announceBox, tabs, body);
+app.append(tabs, body);
 
 let data;
 async function load() {
   data = await api.get('/admin/overview');
-  const s = data.stats;
-  statsBox.replaceChildren(...[
-    ['Players', s.users], ['Online now', s.online], ['Playing now', s.playing], ['New today', s.newToday], ['Banned players', s.banned],
-    ['Games', s.games], ['Catalog items', s.items], ['Robits in circulation', fmtNum(s.robits)], ['Open trades', s.trades], ['Items for sale', s.resales],
-  ].map(([l, v]) => el('div', { class: 'panel stat' }, el('div', { class: 'value', text: v }), el('div', { class: 'label', text: l }))));
   drawAnnouncement();
   TABS[current].draw();
 }
@@ -53,16 +48,20 @@ function drawAnnouncement() {
 
 // ---------------------------------------------------------------- tabs
 const TABS = {
+  dashboard: { label: 'Dashboard', draw: drawDashboard },
   players: { label: 'Players', draw: drawPlayers },
+  servers: { label: 'Servers', draw: drawServers },
   badges: { label: 'Badges', draw: drawBadges, admin: true },
   promo: { label: 'Promo Codes', draw: drawPromo, perm: 'economy' },
   hunt: { label: 'The Hunt', draw: drawHunt, admin: true },
   games: { label: 'Games', draw: drawGames },
   items: { label: 'Items', draw: drawItems },
+  broadcast: { label: 'Broadcast', draw: drawBroadcast, admin: true },
+  settings: { label: 'Settings', draw: drawSettings, admin: true },
   log: { label: 'Admin Log', draw: drawLog },
 };
 for (const [id, t] of Object.entries(TABS)) if ((t.admin && !me.isAdmin) || (t.perm && !perm(t.perm))) delete TABS[id];
-let current = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'players';
+let current = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard';
 function openTab(id) {
   current = id;
   [...tabs.children].forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
@@ -193,6 +192,14 @@ async function manage(u0) {
     section('Moderation',
       canMod ? el('button', { class: 'btn btn-small' + (u.banned ? '' : ' btn-red'), text: u.banned ? 'Unban' : 'Ban', onclick: go(ban) }) : null,
       canMod ? el('button', { class: 'btn btn-small btn-red', text: 'Delete account', onclick: go(deleteAccount) }) : null),
+    el('div', { class: 'manage-section' }, el('h4', { text: 'Alt accounts (same device or IP)' }), (() => {
+      const box = el('div', { class: 'promo-chosen' }, el('span', { class: 'muted small', text: 'Loading...' }));
+      api.get(`/admin/users/${u.id}/alts`).then(({ alts }) => box.replaceChildren(...(alts.length ? alts.map((a) => el('span', { class: 'holder-chip' + (a.banned ? ' banned-chip' : '') },
+        el('a', { class: 'no-i18n', href: `/profile?id=${a.id}`, text: a.username }),
+        el('span', { class: 'muted small', text: [a.device ? 'device' : '', a.ip ? 'IP' : ''].filter(Boolean).join(' + ') + (a.banned ? ' · banned' : '') })))
+        : [el('span', { class: 'muted small', text: 'None found.' })]))).catch(() => box.replaceChildren());
+      return box;
+    })()),
     el('div', { class: 'manage-cols' },
       el('div', {}, el('h4', { text: 'Recent transactions' }),
         info.transactions.length ? el('div', { class: 'mini-list' }, info.transactions.map((t) => el('div', { class: 'mini-row' },
@@ -520,6 +527,163 @@ function huntPlayerBox() {
     el('p', { class: 'small muted', text: 'Give or take tokens by hand. Given tokens bring their 15 R$ and unlock prizes like found ones; taking tokens keeps the prizes.' }),
     el('div', { class: 'row wrap' }, who, names, el('button', { class: 'btn btn-primary', text: 'Show', onclick: load })),
     out);
+}
+
+// ---------------------------------------------------------------- dashboard
+const fmtUptime = (s) => (s >= 86400 ? `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h` : s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}m`);
+// A 14-day bar chart of one number: hover a bar for its value; the last day and
+// the best day are labelled.
+function dayChart(title, days, key) {
+  const vals = days.map((d) => d[key]);
+  const max = Math.max(1, ...vals);
+  const best = vals.indexOf(Math.max(...vals));
+  return el('div', { class: 'dash-chart' },
+    el('div', { class: 'dash-chart-head' }, el('b', { text: title }), el('span', { class: 'muted small', text: `today: ${vals[vals.length - 1]}` })),
+    el('div', { class: 'dash-bars' }, days.map((d, i) => {
+      const v = d[key];
+      const label = new Date(d.day + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      return el('div', { class: 'dash-bar-col', title: `${label}: ${v}` },
+        (i === best || i === days.length - 1) && v ? el('div', { class: 'dash-bar-val', text: String(v) }) : el('div', { class: 'dash-bar-val' }),
+        el('div', { class: 'dash-bar', style: { height: `${Math.max(v ? 4 : 0, (v / max) * 100)}%` } }),
+        el('div', { class: 'dash-bar-day', text: i % 2 === days.length % 2 ? label : '' }));
+    })));
+}
+async function drawDashboard() {
+  body.replaceChildren(spinner());
+  let d;
+  try { d = await api.get('/admin/dashboard'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const k = d.kpis;
+  const tile = (label, value, sub, cls = '') => el('div', { class: 'dash-tile ' + cls }, el('div', { class: 'dash-value', text: String(value) }), el('div', { class: 'dash-label', text: label }), sub ? el('div', { class: 'dash-sub', text: sub }) : null);
+  const list = (title, rows) => el('div', { class: 'dash-card' }, el('h3', { text: title }), rows.length ? el('div', { class: 'mini-list' }, rows) : el('div', { class: 'muted small', text: 'Nothing yet.' }));
+  body.replaceChildren(
+    el('div', { class: 'dash-tiles' },
+      tile('Players', fmtFull(k.users), `+${k.newToday} today`, 'blue'),
+      tile('Online now', k.online, `${k.activeToday} visited today`, 'green'),
+      tile('Playing now', k.playing, `${k.servers} servers`, 'green'),
+      tile('Games', k.games),
+      tile('Catalog items', k.items),
+      tile('Robits in circulation', fmtNum(k.robits)),
+      tile('Robits earned (7 days)', fmtNum(k.earned7)),
+      tile('Robits spent (7 days)', fmtNum(k.spent7)),
+      tile('Banned', k.banned, null, k.banned ? 'red' : ''),
+      tile('Server', `${k.memory} MB`, `up ${fmtUptime(k.uptime)}${k.version ? ' · ' + k.version : ''}`)),
+    el('div', { class: 'dash-charts' },
+      dayChart('New players', d.days, 'signups'),
+      dayChart('Players who visited', d.days, 'active'),
+      dayChart('Games played', d.days, 'plays')),
+    el('div', { class: 'dash-grid' },
+      list('Top games', d.topGames.map((g) => el('div', { class: 'mini-row' },
+        el('a', { class: 'mini-text no-i18n', href: `/game?id=${g.id}`, text: g.name }),
+        g.playing ? el('span', { class: 'pill online-pill', text: `${g.playing} playing` }) : null,
+        el('span', { class: 'muted small', text: `${fmtNum(g.visits)} visits` })))),
+      list('New players', d.newest.map((u) => el('div', { class: 'mini-row' },
+        el('a', { class: 'mini-text no-i18n', href: `/profile?id=${u.id}`, text: u.username }), el('span', { class: 'muted small', text: timeAgo(u.created) })))),
+      list('Richest players', d.richest.map((u) => el('div', { class: 'mini-row' },
+        el('a', { class: 'mini-text no-i18n', href: `/profile?id=${u.id}`, text: u.username }), el('span', { class: 'small', text: `R$ ${fmtFull(u.robits)}` })))),
+      list('Latest admin actions', d.recentLog.map((e) => el('div', { class: 'mini-row' },
+        el('span', { class: 'mini-text' }, el('b', { class: 'no-i18n', text: e.byName }), ' · ', el('span', { text: e.action }), e.targetName ? el('span', { class: 'muted no-i18n', text: ' · ' + e.targetName }) : null),
+        el('span', { class: 'muted small', text: timeAgo(e.time) }))))));
+}
+
+// ---------------------------------------------------------------- servers
+async function drawServers() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/servers'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (path, b, msg) => { try { await api.post(path, b); toast(msg, 'success'); drawServers(); } catch (e) { toast(e.message, 'error'); } };
+  body.replaceChildren(
+    el('div', { class: 'row wrap', style: { marginBottom: '12px', gap: '10px' } },
+      el('b', { text: `${r.servers.length} servers running` }),
+      el('span', { class: 'muted small', text: `${r.servers.reduce((a, s) => a + s.players.length, 0)} players` }),
+      el('span', { class: 'spacer' }),
+      el('button', { class: 'btn btn-small', text: 'Refresh', onclick: drawServers })),
+    r.servers.length ? el('div', {}, r.servers.map((s) => {
+      const msg = el('input', { class: 'input', placeholder: 'Message to everyone on this server', maxlength: 200 });
+      return el('div', { class: 'server-card' },
+        el('div', { class: 'row wrap', style: { gap: '8px' } },
+          el('a', { class: 'no-i18n', href: s.gameId ? `/game?id=${s.gameId}` : '#', style: { fontWeight: 700 }, text: s.name }),
+          s.privateName ? el('span', { class: 'pill', text: `Private: ${s.privateName}` }) : null,
+          s.isTest ? el('span', { class: 'pill', text: 'Studio test' }) : null,
+          el('span', { class: 'muted small', text: `${s.players.length}/${s.max} · up ${fmtUptime(Math.round((Date.now() - s.startedAt) / 1000))} · ${s.id.slice(0, 8)}` })),
+        el('div', { class: 'promo-chosen' }, s.players.length ? s.players.map((p) => el('span', { class: 'holder-chip' },
+          el('a', { class: 'no-i18n', href: `/profile?id=${p.userId}`, text: p.name }),
+          el('button', { title: 'Kick', text: '×', onclick: () => { if (confirm(`Kick ${p.name}?`)) post(`/admin/users/${p.userId}/kick`, { reason: 'Kicked by an admin' }, `${p.name} was kicked`); } })))
+          : [el('span', { class: 'muted small', text: 'Empty (closes by itself in a minute)' })]),
+        el('div', { class: 'row', style: { marginTop: '8px' } }, msg,
+          el('button', { class: 'btn btn-small btn-primary', text: 'Send', onclick: () => post(`/admin/servers/${s.id}/message`, { text: msg.value }, 'Message sent') }),
+          el('button', { class: 'btn btn-small btn-red', text: 'Shut down', onclick: () => { if (confirm('Shut this server down? Everyone on it is disconnected.')) post(`/admin/servers/${s.id}/shutdown`, {}, 'Server shut down'); } })));
+    })) : el('div', { class: 'empty', text: 'No game servers are running.' }));
+}
+
+// ---------------------------------------------------------------- broadcast
+function drawBroadcast() {
+  const subject = el('input', { class: 'input', maxlength: 100, placeholder: 'Subject' });
+  const text = el('textarea', { class: 'input', rows: 4, maxlength: 5000, placeholder: 'Message for every player' });
+  const live = el('input', { type: 'checkbox', checked: true });
+  const amount = el('input', { class: 'input', type: 'number', min: 1, max: 100000, value: 100, style: { width: '140px' } });
+  const reason = el('input', { class: 'input', maxlength: 80, placeholder: 'Reason (shown in their transactions)', style: { maxWidth: '320px' } });
+  const online = el('input', { type: 'checkbox' });
+  body.replaceChildren(
+    announceBox,
+    el('div', { class: 'badge-give', style: { marginTop: '16px' } },
+      el('h3', { text: 'Message to every player' }),
+      el('p', { class: 'small muted', text: 'Goes to every inbox (Messages), from the main account.' }),
+      subject, el('div', { style: { height: '8px' } }), text,
+      el('label', { class: 'perm-row' }, live, el('span', { text: 'Also show it in every running game' })),
+      el('button', { class: 'btn btn-primary', text: 'Send to everyone', onclick: async () => {
+        if (!confirm('Send this message to every player?')) return;
+        try { const r = await api.post('/admin/broadcast', { subject: subject.value, body: text.value, live: live.checked }); toast(`Sent to ${r.sent} players`, 'success'); subject.value = ''; text.value = ''; } catch (e) { toast(e.message, 'error'); }
+      } })),
+    el('div', { class: 'badge-give', style: { borderBottom: 0 } },
+      el('h3', { text: 'Robits for everyone' }),
+      el('div', { class: 'row wrap' }, amount, reason),
+      el('label', { class: 'perm-row' }, online, el('span', { text: 'Only players who are online now' })),
+      el('button', { class: 'btn btn-green', text: 'Give', onclick: async () => {
+        if (!confirm(`Give R$ ${amount.value} to ${online.checked ? 'everyone online' : 'every player'}?`)) return;
+        try { const r = await api.post('/admin/broadcast/robits', { amount: +amount.value, onlineOnly: online.checked, reason: reason.value }); toast(`${r.players} players got R$ ${amount.value}`, 'success'); load(); } catch (e) { toast(e.message, 'error'); }
+      } })));
+}
+
+// ---------------------------------------------------------------- settings
+async function drawSettings() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/settings'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const S = r.settings;
+  const maint = el('input', { type: 'checkbox', checked: S.maintenance.on });
+  const maintMsg = el('input', { class: 'input', maxlength: 300, value: S.maintenance.message, placeholder: 'Robis is under maintenance. Please come back soon!' });
+  const signups = el('input', { type: 'checkbox', checked: S.signups !== false });
+  const start = el('input', { class: 'input', type: 'number', min: 0, max: 1000000, value: S.startRobits, style: { width: '140px' } });
+  const words = el('textarea', { class: 'input', rows: 3, value: S.bannedWords.join(', '), placeholder: 'word1, word2, ...' });
+  const socialRows = el('div');
+  const socials = S.socials.map((x) => ({ ...x }));
+  const drawSocials = () => socialRows.replaceChildren(...socials.map((x, i) => el('div', { class: 'row wrap social-row' },
+    el('select', { class: 'input', style: { width: 'auto' }, onchange: (e) => { x.type = e.target.value; } }, r.socialTypes.map((t) => el('option', { value: t, text: t[0].toUpperCase() + t.slice(1), selected: t === x.type }))),
+    el('input', { class: 'input', value: x.label, placeholder: 'Name', style: { maxWidth: '160px' }, oninput: (e) => { x.label = e.target.value; } }),
+    el('input', { class: 'input', value: x.url, placeholder: 'https://t.me/...', oninput: (e) => { x.url = e.target.value; } }),
+    el('button', { class: 'btn btn-small', text: '×', title: 'Remove', onclick: () => { socials.splice(i, 1); drawSocials(); } }))),
+  el('button', { class: 'btn btn-small', text: '+ Add a link', onclick: () => { socials.push({ type: 'other', label: '', url: '' }); drawSocials(); } }));
+  drawSocials();
+  const save = async () => {
+    try {
+      await api.post('/admin/settings', {
+        maintenance: { on: maint.checked, message: maintMsg.value }, signups: signups.checked, startRobits: +start.value,
+        bannedWords: words.value.split(/[,\n]/), socials: socials,
+      });
+      toast('Settings saved', 'success');
+      drawSettings();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  const section = (title, hint, ...kids) => el('div', { class: 'settings-section' }, el('h3', { text: title }), hint ? el('p', { class: 'small muted', text: hint }) : null, ...kids);
+  body.replaceChildren(
+    section('Maintenance mode', 'Only staff can play and use the site; everyone else sees the message.',
+      el('label', { class: 'perm-row' }, maint, el('b', { text: 'Turn on maintenance mode' })), maintMsg),
+    section('Sign-ups', null,
+      el('label', { class: 'perm-row' }, signups, el('span', { text: 'New players can create accounts' })),
+      el('label', { class: 'row', style: { gap: '8px', marginTop: '6px' } }, el('span', { text: 'Robits for new accounts' }), start)),
+    section('Chat filter', 'Extra words to hide in chat (on top of the built-in list). Separate them with commas.', words),
+    section('Social links', 'Shown in the menu, on the home page and at the bottom of every page.', socialRows),
+    el('button', { class: 'btn btn-primary btn-large', text: 'Save settings', onclick: save }));
 }
 
 // Admins give other players rights (see PERMISSIONS in server/api.js).

@@ -11,6 +11,7 @@ import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES, CATALOG } from '../shared/ava
 import { PLACE_FORMAT } from '../shared/engine/serialize.js';
 import { filterChat } from './game/chatfilter.js';
 import { installHunt } from './hunt.js';
+import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
 const ONLINE_MS = 2 * 60 * 1000;
 const STIPEND_MS = 24 * 3600 * 1000;
@@ -365,12 +366,14 @@ export function createApi(db, manager, opts = {}) {
     if (password.toLowerCase() === username.toLowerCase()) return bad(res, 'Password cannot be your username.');
     // The very first person to sign up on a fresh server becomes its admin.
     const isFirst = firstUserIsAdmin && !Object.values(D.users).some((u) => !u.system);
+    if (!isFirst && siteSettings(D).signups === false) return bad(res, 'Sign-ups are closed right now. Try again later!', 403);
     if (nameTaken(username, null, isFirst)) {
       return bad(res, username.toLowerCase() === OWNER_NAME.toLowerCase()
         ? `${OWNER_NAME} is the main account. Sign up with another name, enter the admin code, then change your username to ${OWNER_NAME} in Settings.`
         : 'This username is already in use.');
     }
     const user = createUser(db, username, password, isFirst ? { isAdmin: true } : {});
+    if (!isFirst) user.robits = siteSettings(D).startRobits; // set in Admin Panel → Settings
     grantAdminPerks(user);
     if (isFirst) ensureOwner(db);
     noteClient(db, user, req.client);
@@ -408,7 +411,7 @@ export function createApi(db, manager, opts = {}) {
   api.get('/version', (req, res) => res.json({ version: opts.version || '' }));
 
   api.get('/auth/me', (req, res) => {
-    if (req.user) noteClient(db, req.user, req.client);
+    if (req.user) { noteClient(db, req.user, req.client); markActive(D, req.user.id); }
     res.json({ user: req.user ? me(req.user) : null });
   });
 
@@ -2256,6 +2259,7 @@ export function createApi(db, manager, opts = {}) {
   });
 
   installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial });
+  installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
 
   api.use((req, res) => bad(res, 'Not found', 404));
   return api;

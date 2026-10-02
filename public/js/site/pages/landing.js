@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { api, getMe } from '../api.js';
 import { el, toast } from '../ui.js';
 import { installButton } from '../install.js';
+import { socialLinks } from '../layout.js';
 import { DataModel } from '/shared/engine/instances.js';
 import { loadPlace } from '/shared/engine/serialize.js';
 import { SceneSync } from '../../render/scene.js';
@@ -46,6 +47,8 @@ if (window.ROBIS_ONLINE_URL) {
 }
 
 document.querySelector('.footer').innerHTML = '©2019 Robis — an open-source fan tribute to 2019-era game platforms. Not affiliated with Roblox Corporation.';
+// Social links (Admin Panel → Settings) under the sign-up box.
+api.get('/site').then((site) => { const l = socialLinks(site, 'social-links landing-socials'); if (l) document.querySelector('.footer').before(l); }).catch(() => {});
 
 // ---- live 3D background: slowly orbit around the Crossroads map
 async function hero() {

@@ -7,8 +7,15 @@ const PATTERNS = [
   /\d[\d\s-]{5,}\d/g, // phone numbers / long digit runs
 ];
 
+// Extra words the admins add in the Admin Panel (Settings).
+let EXTRA = [];
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function setExtraWords(words) {
+  EXTRA = (words || []).map((w) => String(w).trim()).filter(Boolean).slice(0, 300).map((w) => new RegExp(escapeRe(w), 'giu'));
+}
+
 export function filterChat(text) {
   let out = String(text);
-  for (const re of PATTERNS) out = out.replace(re, (m) => '#'.repeat(m.length));
+  for (const re of [...PATTERNS, ...EXTRA]) out = out.replace(re, (m) => '#'.repeat(m.length));
   return out;
 }
