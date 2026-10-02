@@ -387,12 +387,13 @@ spawn(function()
 	end
 end)
 
--- meteor showers: they push you around, nothing worse
+-- meteor showers: they push you around, nothing worse. Kept light: a few
+-- meteors at a time, each gone right when it lands.
 spawn(function()
 	while true do
 		wait(70)
 		say("METEOR SHOWER! Watch the sky!", 6)
-		for i = 1, 12 do
+		for i = 1, 8 do
 			local a = math.random() * math.pi * 2
 			local r = math.random() * 40
 			local target = Vector3.new(math.sin(a) * r, 2, math.cos(a) * r)
@@ -405,22 +406,22 @@ spawn(function()
 			m.Anchored = true
 			m.CanCollide = false
 			m.Position = target + Vector3.new(30, 120, 10)
+			local fire = Instance.new("Fire")
+			fire.Size = 3
+			fire.Parent = m
 			m.Parent = workspace
-			Instance.new("Fire", m)
 			TweenService:Create(m, TweenInfo.new(1.4, Enum.EasingStyle.Linear), {Position = target}):Play()
 			delay(1.4, function()
+				m:Destroy()
 				local e = Instance.new("Explosion")
 				e.Position = target
 				e.BlastRadius = 8
 				e.BlastPressure = 250000
 				e.DestroyJointRadiusPercent = 0
 				e.Parent = workspace
-				m.Transparency = 0.5
-				m.Size = Vector3.new(5, 0.4, 5)
-				m.Shape = Enum.PartType.Cylinder
-				Debris:AddItem(m, 3)
+				Debris:AddItem(e, 1)
 			end)
-			wait(0.35)
+			wait(0.6)
 		end
 	end
 end)

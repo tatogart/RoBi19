@@ -27,6 +27,8 @@ function spriteTexture(kind) {
 let TEX = null;
 const tex = () => TEX || (TEX = { soft: spriteTexture('soft'), star: spriteTexture('star') });
 
+let EXPLOSION_GEO = null;
+
 // A tiny sprite-based particle emitter for Fire / Smoke / Sparkles.
 class Emitter {
   constructor(kind, inst) {
@@ -46,10 +48,13 @@ class Emitter {
       this.group.add(s);
       this.parts.push(s);
     }
-    this.light = null;
+    // No real light here: adding or removing a light makes three.js rebuild the
+    // shaders of every material in the scene (a big freeze with many fires).
+    // A soft additive glow looks close enough.
+    this.glow = null;
     if (kind === 'Fire') {
-      this.light = new THREE.PointLight(0xff8a3c, 2, 14, 1.5);
-      this.group.add(this.light);
+      this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex().soft, color: 0xff8a3c, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.group.add(this.glow);
     }
   }
   update(dt) {
@@ -89,9 +94,13 @@ class Emitter {
         s.material.opacity = 1 - life;
       }
     }
-    if (this.light) this.light.intensity = 1.6 + Math.sin(performance.now() / 70) * 0.4 + Math.random() * 0.3;
+    if (this.glow) {
+      const k = size * (3 + Math.sin(performance.now() / 70) * 0.3);
+      this.glow.scale.set(k, k, k);
+      this.glow.position.set(0, size * 0.5, 0);
+    }
   }
-  dispose() { for (const s of this.parts) s.material.dispose(); }
+  dispose() { for (const s of this.parts) s.material.dispose(); if (this.glow) this.glow.material.dispose(); }
 }
 
 function textSprite(text, color = '#ffffff', size = 24) {
@@ -274,12 +283,14 @@ export class SceneSync {
     if (!p.Visible) return;
     const g = new THREE.Group();
     g.position.set(p.Position.X, p.Position.Y, p.Position.Z);
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffa640, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    if (!EXPLOSION_GEO) EXPLOSION_GEO = new THREE.SphereGeometry(1, 16, 10);
+    const ball = new THREE.Mesh(EXPLOSION_GEO, new THREE.MeshBasicMaterial({ color: 0xffa640, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
     g.add(ball);
-    const light = new THREE.PointLight(0xffaa55, 30, p.BlastRadius * 6, 1.5);
-    g.add(light);
+    // a flash sprite instead of a light (a new light would rebuild every shader)
+    const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex().soft, color: 0xffc070, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    g.add(flash);
     const sparks = [];
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 16; i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex().soft, color: i % 3 ? 0xff7a1a : 0xfff0a0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
       const v = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).normalize().multiplyScalar(p.BlastRadius * (1.5 + Math.random() * 2));
       s.userData.v = v;
@@ -294,7 +305,8 @@ export class SceneSync {
       const k = t / 0.8;
       ball.scale.setScalar(r * (0.3 + k * 1.2));
       ball.material.opacity = Math.max(0, 0.9 - k);
-      light.intensity = Math.max(0, 30 * (1 - k * 1.5));
+      flash.scale.setScalar(r * 6 * (0.5 + k));
+      flash.material.opacity = Math.max(0, 1 - k * 1.5);
       for (const s of sparks) {
         s.position.addScaledVector(s.userData.v, dt);
         s.userData.v.y -= 20 * dt;
@@ -337,7 +349,7 @@ export class SceneSync {
     if (this.anims) {
       this.anims = this.anims.filter(({ anim, g }) => {
         const alive = anim.update(dt);
-        if (!alive) { g.removeFromParent(); g.traverse((o) => { if (o.material) o.material.dispose(); if (o.geometry) o.geometry.dispose(); }); }
+        if (!alive) { g.removeFromParent(); g.traverse((o) => { if (o.material) o.material.dispose(); if (o.geometry && o.geometry !== EXPLOSION_GEO) o.geometry.dispose(); }); }
         return alive;
       });
     }
