@@ -184,7 +184,7 @@ export function toast(text, type = '') {
 export function spinner() { return el('div', { class: 'loading-spinner' }); }
 
 // The 2019 "Robis is now loading. Get ready to play!" dialog before launching.
-export function launchGame(gameId, serverId) {
+export function launchGame(gameId, serverId, privateId) {
   const logo = el('img', { src: '/img/icon.svg', class: 'spin-logo', alt: '' });
   const m = modal({
     body: el('div', { class: 'launch-dialog' }, logo,
@@ -193,7 +193,7 @@ export function launchGame(gameId, serverId) {
   });
   setTimeout(() => {
     m.close();
-    location.href = `/play?placeId=${gameId}${serverId ? '&serverId=' + serverId : ''}`;
+    location.href = `/play?placeId=${gameId}${serverId ? '&serverId=' + serverId : ''}${privateId ? '&private=' + privateId : ''}`;
   }, 1300);
 }
 

@@ -879,3 +879,103 @@ test('promo codes for Builders Club and donate prices', async () => {
   assert.equal(donate.packs.find((p) => p.robits === 400).price, '99 ₽');
   assert.equal(donate.memberships.find((m) => m.id === 'BuildersClub').price, '149 ₽');
 });
+
+test('game passes: owner sells them, perks and scripts see them, in-game purchase', async () => {
+  const owner = (await call('POST', '/auth/signup', { username: 'PassMaker', password: 'secret123' })).cookie;
+  const buyer = (await call('POST', '/auth/signup', { username: 'PassBuyer', password: 'secret123' })).cookie;
+  const ownerId = (await call('GET', '/auth/me', null, owner)).data.user.id;
+  const buyerId = (await call('GET', '/auth/me', null, buyer)).data.user.id;
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  await call('POST', `/admin/users/${buyerId}/robits`, { amount: 1000 }, admin);
+  const { data } = await call('POST', '/games', { name: 'Pass Game', template: 'baseplate' }, owner);
+  const gid = data.game.id;
+  await call('PATCH', `/games/${gid}`, { isPublic: true }, owner);
+  assert.equal((await call('POST', `/games/${gid}/passes`, { name: 'VIP', price: 50 }, buyer)).status, 403);
+  assert.equal((await call('POST', `/games/${gid}/passes`, { name: 'VIP', price: 0 }, owner)).status, 400);
+  const vip = (await call('POST', `/games/${gid}/passes`, { name: 'VIP', price: 100, icon: '👑', perk: 'speed' }, owner)).data.pass;
+  const fly = (await call('POST', `/games/${gid}/passes`, { name: 'Wings', price: 200, icon: '🪽', perk: 'fly' }, owner)).data.pass;
+  assert.equal(vip.perk, 'speed');
+  // buy VIP on the website: the owner gets 70%
+  const ownerBefore = (await call('GET', '/auth/me', null, owner)).data.user.robits;
+  const r = await call('POST', `/gamepasses/${vip.id}/buy`, {}, buyer);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal((await call('GET', '/auth/me', null, owner)).data.user.robits, ownerBefore + 70);
+  assert.equal((await call('POST', `/gamepasses/${vip.id}/buy`, {}, buyer)).data.error, 'You already own this pass.');
+  assert.ok((await call('GET', `/games/${gid}/passes`, null, buyer)).data.passes.find((p) => p.id === vip.id).owned);
+  assert.deepEqual((await call('GET', `/users/${buyerId}/passes`)).data.passes.map((p) => p.name), ['VIP']);
+  // passes that sold can't be deleted
+  assert.equal((await call('POST', `/gamepasses/${vip.id}`, { delete: true }, owner)).status, 400);
+  // a script checks passes; the speed perk works without scripts
+  const { place } = (await call('GET', `/games/${gid}/place`, null, owner)).data;
+  place.services.ServerScriptService.ch.push({ c: 'Script', p: { Name: 'Passes', Source: `
+    local MS = game:GetService("MarketplaceService")
+    game.Players.PlayerAdded:Connect(function(p)
+      p:Notify("owns " .. tostring(MS:UserOwnsGamePassAsync(p.UserId, ${vip.id})) .. " " .. tostring(MS:UserOwnsGamePassAsync(p.UserId, ${fly.id})))
+      p.CharacterAdded:Connect(function(c) wait(0.2) p:Notify("speed " .. c.Humanoid.WalkSpeed) end)
+      p.Chatted:Connect(function(m) if m == "buy" then MS:PromptGamePassPurchase(p, ${fly.id}) end end)
+    end)
+    MS.PromptGamePassPurchaseFinished:Connect(function(p, id, ok) p:Notify("finished " .. id .. " " .. tostring(ok) .. " " .. tostring(MS:UserOwnsGamePassAsync(p.UserId, id))) end)
+  ` } });
+  assert.equal((await call('PUT', `/games/${gid}/place`, { place }, owner)).status, 200);
+  const c = await join(buyer, { placeId: gid });
+  await c.wait((m) => m.t === 'sys' && /^owns/.test(m.text)).then((m) => assert.equal(m.text, 'owns true false'));
+  await c.wait((m) => m.t === 'sys' && /^speed/.test(m.text)).then((m) => assert.equal(m.text, 'speed 26'));
+  // in-game purchase from a script prompt
+  c.ws.send(JSON.stringify({ t: 'chat', text: 'buy' }));
+  const prompt = await c.wait((m) => m.t === 'promptPass');
+  assert.equal(prompt.pass.id, fly.id);
+  c.ws.send(JSON.stringify({ t: 'buyPass', id: fly.id, confirm: true }));
+  assert.equal((await c.wait((m) => m.t === 'passResult')).ok, true);
+  await c.wait((m) => m.t === 'sys' && /^finished/.test(m.text)).then((m) => assert.equal(m.text, `finished ${fly.id} true true`));
+  // the Store tab lists them
+  c.ws.send(JSON.stringify({ t: 'passList' }));
+  assert.equal((await c.wait((m) => m.t === 'passList')).passes.length, 2);
+  c.ws.close();
+  assert.ok((await call('GET', `/games/${gid}/passes`, null, buyer)).data.passes.every((p) => p.owned));
+  void ownerId;
+});
+
+test('private servers: buy, invite, only invited players join', async () => {
+  const owner = (await call('POST', '/auth/signup', { username: 'PrivOwner', password: 'secret123' })).cookie;
+  const host = (await call('POST', '/auth/signup', { username: 'PrivHost', password: 'secret123' })).cookie;
+  const guest = (await call('POST', '/auth/signup', { username: 'PrivGuest', password: 'secret123' })).cookie;
+  const stranger = (await call('POST', '/auth/signup', { username: 'PrivStranger', password: 'secret123' })).cookie;
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const hostId = (await call('GET', '/auth/me', null, host)).data.user.id;
+  await call('POST', `/admin/users/${hostId}/robits`, { amount: 500 }, admin);
+  const gid = (await call('POST', '/games', { name: 'Private Game', template: 'baseplate' }, owner)).data.game.id;
+  await call('PATCH', `/games/${gid}`, { isPublic: true }, owner);
+  // off until the owner turns them on
+  assert.equal((await call('POST', `/games/${gid}/private/buy`, {}, host)).status, 400);
+  assert.equal((await call('POST', `/games/${gid}/private/settings`, { enabled: true, price: 100 }, host)).status, 403);
+  await call('POST', `/games/${gid}/private/settings`, { enabled: true, price: 100 }, owner);
+  const bought = await call('POST', `/games/${gid}/private/buy`, { name: 'Our Server' }, host);
+  assert.equal(bought.status, 200, JSON.stringify(bought.data));
+  const ps = bought.data.server;
+  assert.equal(ps.name, 'Our Server');
+  assert.ok(ps.until > Date.now() + 29 * 86400e3);
+  assert.equal(bought.data.robits, 600 - 100);
+  // strangers can't join; the invite link adds you
+  const s1 = await join(stranger, { placeId: gid, privateId: ps.id });
+  assert.match((await s1.wait((m) => m.t === 'error')).msg, /not invited/);
+  assert.equal((await call('POST', '/private/join', { code: ps.code }, guest)).status, 200);
+  const h = await join(host, { placeId: gid, privateId: ps.id });
+  const hw = await h.wait((m) => m.t === 'welcome');
+  assert.equal(hw.privateName, 'Our Server');
+  const g = await join(guest, { placeId: gid, privateId: ps.id });
+  const gw = await g.wait((m) => m.t === 'welcome');
+  assert.equal(gw.serverId, hw.serverId); // same private instance
+  // private servers are not in the public list
+  assert.ok(!(await call('GET', `/games/${gid}/servers`)).data.servers.some((s) => s.id === hw.serverId));
+  const list = (await call('GET', `/games/${gid}/private`, null, guest)).data.servers;
+  assert.equal(list.length, 1);
+  assert.equal(list[0].code, undefined); // only the owner sees the code
+  // the owner removes the guest and renews
+  const guestId = (await call('GET', '/auth/me', null, guest)).data.user.id;
+  await call('POST', `/private/${ps.id}`, { remove: guestId, newCode: true }, host);
+  assert.equal((await call('GET', `/games/${gid}/private`, null, guest)).data.servers.length, 0);
+  assert.equal((await call('POST', '/private/join', { code: ps.code }, guest)).status, 400); // old link
+  const renewed = (await call('POST', `/private/${ps.id}`, { renew: true }, host)).data;
+  assert.ok(renewed.server.until > ps.until + 29 * 86400e3);
+  h.ws.close(); g.ws.close(); s1.ws.close();
+});

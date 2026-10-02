@@ -27,6 +27,8 @@ export class GameServer {
     this.creatorId = opts.creatorId || 0;
     this.maxPlayers = opts.maxPlayers || 12;
     this.isTest = !!opts.test;
+    this.privateId = opts.privateId || 0; // a private server (see manager.serverForPrivate)
+    this.privateName = opts.privateName || '';
     this.backend = opts.backend || {};
     this.onClose = opts.onClose || (() => {});
     this.manager = opts.manager || null;
@@ -56,6 +58,8 @@ export class GameServer {
       dataStore: this.backend.dataStore || memoryStore(),
       awardBadge: (uid, name) => this.backend.awardBadge ? this.backend.awardBadge(uid, name) : false,
       hasBadge: (uid, name) => this.backend.hasBadge ? this.backend.hasBadge(uid, name) : false,
+      passes: this.backend.passes || null,
+      promptPass: (player, passId) => this.promptPass(player, passId),
       bubble: (part, msg) => this.enqueue(['bubble', part.id, filterChat(msg)]),
     });
     setErrorReporter((e) => this.log('error', String(e && e.message || e)));
@@ -241,6 +245,7 @@ export class GameServer {
       gameId: this.gameId,
       name: this.name,
       isTest: this.isTest,
+      privateName: this.privateName || undefined,
       isDeveloper: session.isDeveloper,
       snapshot: this.snapshot(),
       players: [...this.sessions.values()].map((s) => this.playerInfo(s)),
@@ -465,8 +470,51 @@ export class GameServer {
         try { t.Clone().Parent = backpack; } catch { /* not cloneable */ }
       }
     }
+    this.applyPassPerks(session, hum);
     this.enqueue(['char', player.UserId, model.id, cf.toArray()]);
     player._fire('CharacterAdded', model);
+  }
+
+  // Built-in game pass perks (no scripting needed), on every spawn.
+  applyPassPerks(session, hum) {
+    const passes = this.backend.passes;
+    if (!passes || !hum) return;
+    for (const perk of passes.perks(session.user.id)) {
+      if (perk === 'speed') hum.WalkSpeed = Math.max(hum.WalkSpeed, 26);
+      if (perk === 'jump') hum.JumpPower = Math.max(hum.JumpPower, 80);
+      if (perk === 'fly') hum.Flying = true;
+    }
+  }
+
+  // MarketplaceService:PromptGamePassPurchase: the player sees a buy dialog.
+  promptPass(player, passId) {
+    const session = this.sessions.get(player._p ? player._p.UserId : player.UserId);
+    const passes = this.backend.passes;
+    if (!session || !passes) return;
+    const info = passes.info(+passId, session.user.id);
+    if (!info || info.gameId !== this.gameId) { this.log('warn', `PromptGamePassPurchase: no game pass ${passId} in this game`); return; }
+    this.send(session, { t: 'promptPass', pass: info, robits: session.user.robits });
+  }
+
+  // The player bought (or closed) a pass dialog in game.
+  buyPassInGame(session, passId, confirm) {
+    const passes = this.backend.passes;
+    const market = this.game.GetService('MarketplaceService');
+    if (!passes) return;
+    const info = passes.info(+passId, session.user.id);
+    if (!info || info.gameId !== this.gameId) return;
+    let bought = false;
+    if (confirm) {
+      const r = passes.buy(session.user.id, +passId);
+      if (r.error) this.send(session, { t: 'passResult', ok: false, msg: r.error, id: +passId });
+      else {
+        bought = true;
+        this.send(session, { t: 'passResult', ok: true, pass: r.pass, robits: r.robits });
+        const hum = session.character && session.character.FindFirstChildOfClass('Humanoid');
+        this.applyPassPerks(session, hum);
+      }
+    }
+    market._fire('PromptGamePassPurchaseFinished', session.player, +passId, bought);
   }
 
   removeCharacter(session) {
@@ -610,6 +658,8 @@ export class GameServer {
         break;
       }
       case 'exitVehicle': this.exitVehicle(session); break;
+      case 'buyPass': this.buyPassInGame(session, msg.id, !!msg.confirm); break;
+      case 'passList': this.send(session, { t: 'passList', passes: this.backend.passes ? this.backend.passes.list(session.user.id) : [] }); break;
       case 'reset': {
         const hum = session.character && session.character.FindFirstChildOfClass('Humanoid');
         if (hum) hum.Health = 0;
@@ -888,6 +938,7 @@ export class GameServer {
       maxPlayers: this.maxPlayers,
       startedAt: this.startedAt,
       isTest: this.isTest,
+      privateId: this.privateId || undefined,
     };
   }
 

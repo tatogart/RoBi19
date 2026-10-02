@@ -9,7 +9,8 @@ export class GameManager {
   }
 
   allServers() { return [...this.servers.values()].filter((s) => !s.closed); }
-  serversFor(gameId) { return this.allServers().filter((s) => !s.isTest && s.gameId === gameId); }
+  // Public servers only; private ones are reached through their own id.
+  serversFor(gameId) { return this.allServers().filter((s) => !s.isTest && !s.privateId && s.gameId === gameId); }
 
   findUser(userId) {
     for (const server of this.allServers()) {
@@ -41,6 +42,14 @@ export class GameManager {
         return true;
       },
       hasBadge: (userId, name) => (D.badges[userId] || []).some((b) => b.gameId === gameId && b.name === name),
+      // Game passes (set up by the API: see manager.passes in server/api.js).
+      passes: this.passes ? {
+        owns: (userId, passId) => this.passes.owns(userId, passId),
+        info: (passId, userId) => this.passes.info(passId, userId),
+        buy: (userId, passId) => this.passes.buy(userId, passId),
+        perks: (userId) => this.passes.perks(userId, gameId),
+        list: (userId) => this.passes.forGame(gameId, userId),
+      } : null,
     };
   }
 
@@ -63,6 +72,23 @@ export class GameManager {
     if (!place) throw new Error('Place file missing');
     return this._create({
       gameId, name: game.name, creatorId: game.creatorId, maxPlayers: game.maxPlayers, place,
+      backend: this.backendFor(gameId),
+    });
+  }
+
+  // A private server: one running instance per private server id.
+  serverForPrivate(gameId, privateId) {
+    const game = this.db.data.games[gameId];
+    if (!game) throw new Error('Game not found');
+    const running = this.allServers().find((s) => s.privateId === privateId && !s.isFull);
+    if (running) return running;
+    if (this.allServers().some((s) => s.privateId === privateId)) throw new Error('This private server is full.');
+    const place = this.db.readPlace(gameId);
+    if (!place) throw new Error('Place file missing');
+    const ps = this.db.data.privateServers?.[privateId];
+    return this._create({
+      gameId, name: game.name, creatorId: game.creatorId, maxPlayers: game.maxPlayers, place, privateId,
+      privateName: ps ? ps.name : 'Private server', privateOwnerId: ps ? ps.ownerId : 0,
       backend: this.backendFor(gameId),
     });
   }

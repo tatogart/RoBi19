@@ -25,7 +25,11 @@ export function handleConnection(ws, user, { db, manager }) {
           const game = db.data.games[gameId];
           if (!game) throw new Error('This game is unavailable.');
           if (!game.isPublic && game.creatorId !== user.id && !user.isAdmin && !(game.collaborators || []).includes(user.id)) throw new Error('This game is private.');
-          gameServer = manager.serverForGame(gameId, msg.serverId);
+          if (msg.privateId) {
+            const why = manager.privateAccess ? manager.privateAccess(user, +msg.privateId, gameId) : 'Private servers are not available.';
+            if (why) throw new Error(why);
+            gameServer = manager.serverForPrivate(gameId, +msg.privateId);
+          } else gameServer = manager.serverForGame(gameId, msg.serverId);
           game.visits++;
           user.recentGames = [gameId, ...(user.recentGames || []).filter((g) => g !== gameId)].slice(0, 20);
           db.save();

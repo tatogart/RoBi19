@@ -931,7 +931,7 @@ export const TweenService = defineClass('TweenService', Instance, { service: tru
 export const HttpService = defineClass('HttpService', Instance, { service: true, creatable: false, icon: 'service' });
 export const DataStoreService = defineClass('DataStoreService', Instance, { service: true, creatable: false, icon: 'service' });
 export const Chat = defineClass('Chat', Instance, { service: true, creatable: false, icon: 'service' });
-export const MarketplaceService = defineClass('MarketplaceService', Instance, { service: true, creatable: false, icon: 'service' });
+export const MarketplaceService = defineClass('MarketplaceService', Instance, { service: true, creatable: false, icon: 'service', events: ['PromptGamePassPurchaseFinished'] });
 export const BadgeService = defineClass('BadgeService', Instance, { service: true, creatable: false, icon: 'service' });
 
 // Services shown in the Explorer (in order) and saved with a place.

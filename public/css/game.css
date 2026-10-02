@@ -214,3 +214,16 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .fly-down-btn.down { background: rgba(255,255,255,.4); transform: scale(.94); }
 .game-root.touch .fly-down-btn:not(.hidden) { display: block; }
 @media (orientation: landscape) and (max-height: 500px) { .use-btn { right: calc(130px + env(safe-area-inset-right)); bottom: calc(28px + env(safe-area-inset-bottom)); } }
+
+/* Game passes: Store tab and buy dialog */
+.store-empty { text-align: center; color: #bbb; padding: 40px 0; font-size: 16px; }
+.store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.store-card { background: rgba(255,255,255,.06); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.store-card .pass-desc { font-size: 12px; color: #bbb; min-height: 30px; }
+.store-card button { width: 100%; border: 0; border-radius: 4px; padding: 8px; font: inherit; font-weight: 700; cursor: pointer; background: #02b757; color: #fff; }
+.store-card button.owned { background: #555; cursor: default; }
+.pass-icon { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; box-shadow: inset 0 0 0 3px rgba(255,255,255,.35); flex: none; }
+.pass-icon.big { width: 84px; height: 84px; font-size: 42px; }
+.pass-row { display: flex; gap: 14px; align-items: center; text-align: left; }
+.pass-row p { margin: 4px 0 0; }
+.pass-balance { font-size: 13px; }

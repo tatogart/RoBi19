@@ -274,10 +274,10 @@ export class HUD {
     this.menu.append(panel);
     this.el.append(this.menu);
     this.menu.addEventListener('mousedown', (e) => { if (e.target === this.menu) this.toggleMenu(false); });
-    const tabs = { Players: () => this._playersTab(), Settings: () => this._settingsTab(), Help: () => this._helpTab() };
+    const tabs = { Players: () => this._playersTab(), Store: () => this._storeTab(), Settings: () => this._settingsTab(), Help: () => this._helpTab() };
     for (const [name, fn] of Object.entries(tabs)) {
       const b = h('button', '', name);
-      b.onclick = () => { [...this.menuTabs.children].forEach((x) => x.classList.toggle('active', x === b)); this._restoreActions(); fn(); };
+      b.onclick = () => { [...this.menuTabs.children].forEach((x) => x.classList.toggle('active', x === b)); this.menuBody.dataset.tab = name; this._restoreActions(); fn(); };
       this.menuTabs.append(b);
     }
   }
@@ -401,6 +401,52 @@ export class HUD {
     const fps = h('select', '', `<option value="0">Off</option><option value="1" ${c.settings.showFps ? 'selected' : ''}>On</option>`);
     fps.onchange = () => { c.settings.showFps = fps.value === '1'; c.saveSettings(); };
     row('Show FPS', fps);
+  }
+
+  // Game passes of this game: buy them without leaving.
+  _storeTab() {
+    this.pendingConfirm = null;
+    this.menuBody.innerHTML = '<div class="store-empty">Loading...</div>';
+    this.client.send({ t: 'passList' });
+  }
+  showPassList(passes) {
+    if (!this.menuOpen || this.menuBody.dataset.tab !== 'Store') return;
+    if (!passes.length) { this.menuBody.innerHTML = '<div class="store-empty">This game has no game passes yet.</div>'; return; }
+    const grid = h('div', 'store-grid');
+    for (const p of passes) {
+      const card = h('div', 'store-card', `<div class="pass-icon" style="background:${esc(p.color)}">${esc(p.icon)}</div>
+        <b>${esc(p.name)}</b><div class="pass-desc">${esc(p.description || p.perkName || '')}</div>`);
+      const btn = h('button', p.owned ? 'owned' : 'primary', p.owned ? 'Owned' : `R$ ${p.price}`);
+      btn.disabled = p.owned;
+      btn.onclick = () => { this.toggleMenu(false); this.passDialog(p); };
+      card.append(btn);
+      grid.append(card);
+    }
+    this.menuBody.replaceChildren(grid);
+  }
+  // The buy dialog (from the Store tab or MarketplaceService:PromptGamePassPurchase).
+  passDialog(p, robits) {
+    if (this.activeDialog) this.activeDialog.remove();
+    const d = h('div', 'game-dialog');
+    const box = h('div', 'box pass-box', `<h3>Buy Game Pass</h3>
+      <div class="pass-row"><div class="pass-icon big" style="background:${esc(p.color)}">${esc(p.icon)}</div>
+      <div><b>${esc(p.name)}</b><p>${esc(p.description || p.perkName || '')}</p></div></div>`);
+    const btns = h('div', 'btns');
+    const close = (confirm) => { d.remove(); this.activeDialog = null; this.client.send({ t: 'buyPass', id: p.id, confirm }); };
+    if (p.owned) {
+      box.append(h('p', '', 'You already own this pass.'));
+      const ok = h('button', 'primary', 'OK'); ok.onclick = () => close(false); btns.append(ok);
+    } else {
+      const buy = h('button', 'primary', `Buy for R$ ${p.price}`); buy.onclick = () => close(true);
+      const cancel = h('button', 'secondary', 'Cancel'); cancel.onclick = () => close(false);
+      btns.append(buy, cancel);
+      if (robits !== undefined) box.append(h('p', 'pass-balance', `Your balance: R$ ${robits}`));
+    }
+    box.append(btns);
+    d.append(box);
+    this.root.append(d);
+    this.activeDialog = d;
+    if (document.pointerLockElement) document.exitPointerLock();
   }
 
   _helpTab() {

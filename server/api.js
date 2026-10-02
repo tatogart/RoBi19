@@ -1345,6 +1345,235 @@ export function createApi(db, manager, opts = {}) {
     });
   });
 
+  // ------------------------------------------------------------ game passes
+  // A game's owner sells passes (Robits, the owner gets 70%). Scripts check
+  // them with MarketplaceService:UserOwnsGamePassAsync(userId, passId) and can
+  // sell them in game with PromptGamePassPurchase; a pass can also have a
+  // built-in perk that works with no scripting (applied on every spawn).
+  if (!D.gamepasses) D.gamepasses = {};
+  if (!D.passOwners) D.passOwners = {}; // userId -> [passId]
+  const PASS_PERKS = { none: 'No perk (use it in scripts)', speed: 'Speed: run faster', jump: 'Super jump', fly: 'Flying' };
+  const PASS_ICONS = ['⭐', '👑', '⚡', '🚀', '🪽', '💎', '🔫', '🗡️', '🛡️', '🎁', '🐾', '💰', '🔥', '❤️', '🎵', '🏆'];
+  const ownsPass = (uid, pid) => (D.passOwners[uid] || []).includes(pid);
+  const isGameOwner = (g, u) => !!u && (u.id === g.creatorId || !!u.isAdmin);
+  const publicPass = (p, u) => ({
+    id: p.id, gameId: p.gameId, name: p.name, description: p.description, price: p.price, icon: p.icon, color: p.color, perk: p.perk,
+    perkName: PASS_PERKS[p.perk] || '', onSale: p.onSale, sales: p.sales, created: p.created, owned: !!u && ownsPass(u.id, p.id),
+  });
+  const cleanPass = (b, p = {}) => {
+    const name = b.name === undefined ? p.name : String(b.name || '').trim().slice(0, 50);
+    if (!name || name.length < 3) throw new Error('The name needs at least 3 characters.');
+    const price = b.price === undefined ? p.price : Math.trunc(+b.price || 0);
+    if (!(price >= 1 && price <= 100000)) throw new Error('The price must be between 1 and 100,000.');
+    return {
+      name, price,
+      description: b.description === undefined ? p.description || '' : String(b.description || '').slice(0, 500),
+      icon: PASS_ICONS.includes(b.icon) ? b.icon : p.icon || '⭐',
+      color: /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color.toLowerCase() : p.color || '#00a2ff',
+      perk: PASS_PERKS[b.perk] ? b.perk : p.perk || 'none',
+      onSale: b.onSale === undefined ? p.onSale !== false : !!b.onSale,
+    };
+  };
+  // Buys a pass for a player; used by the website and by the game (in-game purchase).
+  const buyPass = (u, pid) => {
+    const p = D.gamepasses[pid];
+    if (!p || !D.games[p.gameId]) return { error: 'This pass is not available.' };
+    if (ownsPass(u.id, p.id)) return { error: 'You already own this pass.' };
+    if (!p.onSale) return { error: 'This pass is not for sale.' };
+    if (u.robits < p.price) return { error: `You need ${p.price - u.robits} more Robits to buy this pass.` };
+    u.robits -= p.price;
+    const g = D.games[p.gameId];
+    const creator = D.users[g.creatorId];
+    if (creator && creator.id !== u.id) {
+      const cut = Math.floor(p.price * 0.7);
+      creator.robits += cut;
+      log(creator.id, cut, `Sold game pass ${p.name}`);
+    }
+    log(u.id, -p.price, `Purchased game pass ${p.name} (${g.name})`);
+    (D.passOwners[u.id] || (D.passOwners[u.id] = [])).push(p.id);
+    p.sales++;
+    db.save();
+    return { ok: true, pass: publicPass(p, u), robits: u.robits };
+  };
+  manager.passes = {
+    owns: (uid, pid) => ownsPass(+uid, +pid),
+    info: (pid, uid) => (D.gamepasses[+pid] ? publicPass(D.gamepasses[+pid], D.users[uid]) : null),
+    buy: (uid, pid) => (D.users[uid] ? buyPass(D.users[uid], +pid) : { error: 'Unknown player.' }),
+    perks: (uid, gameId) => (D.passOwners[uid] || []).map((pid) => D.gamepasses[pid]).filter((p) => p && p.gameId === gameId && p.perk !== 'none').map((p) => p.perk),
+    forGame: (gameId, uid) => Object.values(D.gamepasses).filter((p) => p.gameId === gameId && (p.onSale || ownsPass(uid, p.id))).map((p) => publicPass(p, D.users[uid])),
+  };
+
+  api.get('/games/:id/passes', (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    const mine = isGameOwner(g, req.user);
+    res.json({
+      passes: Object.values(D.gamepasses).filter((p) => p.gameId === g.id && (mine || p.onSale || (req.user && ownsPass(req.user.id, p.id)))).map((p) => publicPass(p, req.user)),
+      perks: PASS_PERKS, icons: PASS_ICONS,
+    });
+  });
+  api.post('/games/:id/passes', requireUser, (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    if (!isGameOwner(g, req.user)) return bad(res, 'Only the owner of this game can make passes.', 403);
+    if (Object.values(D.gamepasses).filter((p) => p.gameId === g.id).length >= 30) return bad(res, 'A game can have up to 30 passes.');
+    let data;
+    try { data = cleanPass(req.body || {}); } catch (e) { return bad(res, e.message); }
+    const id = db.nextId('gamepass');
+    D.gamepasses[id] = { id, gameId: g.id, ...data, sales: 0, created: Date.now() };
+    // the owner has their own passes
+    (D.passOwners[g.creatorId] || (D.passOwners[g.creatorId] = [])).push(id);
+    db.save();
+    res.json({ pass: publicPass(D.gamepasses[id], req.user) });
+  });
+  api.post('/gamepasses/:id', requireUser, (req, res) => {
+    const p = D.gamepasses[toInt(req.params.id)];
+    const g = p && D.games[p.gameId];
+    if (!g) return bad(res, 'Pass not found', 404);
+    if (!isGameOwner(g, req.user)) return bad(res, 'You don\'t have permission to do that.', 403);
+    if (req.body?.delete) {
+      if (p.sales > 0) return bad(res, 'Players already bought this pass. Take it off sale instead.');
+      delete D.gamepasses[p.id];
+      for (const list of Object.values(D.passOwners)) { const i = list.indexOf(p.id); if (i >= 0) list.splice(i, 1); }
+      db.save();
+      return res.json({ ok: true });
+    }
+    try { Object.assign(p, cleanPass(req.body || {}, p)); } catch (e) { return bad(res, e.message); }
+    db.save();
+    res.json({ pass: publicPass(p, req.user) });
+  });
+  api.post('/gamepasses/:id/buy', requireUser, (req, res) => {
+    const r = buyPass(req.user, toInt(req.params.id));
+    if (r.error) return bad(res, r.error);
+    res.json(r);
+  });
+  api.get('/users/:id/passes', (req, res) => {
+    const uid = toInt(req.params.id);
+    res.json({ passes: (D.passOwners[uid] || []).map((pid) => D.gamepasses[pid]).filter(Boolean).map((p) => ({ ...publicPass(p), gameName: D.games[p.gameId]?.name || 'Game' })) });
+  });
+
+  // ------------------------------------------------------------ private servers
+  // When the owner turns them on, players buy their own server of a game
+  // (free, or Robits for 30 days; the owner gets 70%). They invite friends
+  // with a code; only the owner, invited players and (optionally) the
+  // owner's friends can join.
+  if (!D.privateServers) D.privateServers = {};
+  const PS_DAYS = 30;
+  const psCode = () => { const r = crypto.randomBytes(6); const b = r.bytes || r; return [...b].map((x) => CODE_CHARS[x % CODE_CHARS.length]).join(''); };
+  const psActive = (ps) => !ps.until || Date.now() < ps.until;
+  const canJoinPrivate = (ps, u) => !!u && (u.id === ps.ownerId || u.isAdmin || ps.members.includes(u.id) || (ps.friends && (D.friends[ps.ownerId] || []).includes(u.id)));
+  const publicPS = (ps, u) => {
+    const mine = !!u && u.id === ps.ownerId;
+    return {
+      id: ps.id, gameId: ps.gameId, name: ps.name, ownerId: ps.ownerId, ownerName: D.users[ps.ownerId]?.username || '?',
+      until: ps.until, active: psActive(ps), friends: ps.friends, isOwner: mine,
+      members: mine ? ps.members.map((id) => D.users[id]).filter(Boolean).map((m) => ({ id: m.id, username: m.username })) : undefined,
+      code: mine ? ps.code : undefined,
+      playing: manager.allServers().filter((s) => s.privateId === ps.id).reduce((n, s) => n + s.playerCount, 0),
+    };
+  };
+  manager.privateAccess = (user, psId, gameId) => {
+    const ps = D.privateServers[psId];
+    if (!ps || ps.gameId !== gameId) return 'This private server doesn\'t exist anymore.';
+    if (!psActive(ps)) return 'This private server has expired. Its owner can renew it on the game page.';
+    if (!canJoinPrivate(ps, D.users[user.id] || user)) return 'You are not invited to this private server.';
+    return null;
+  };
+
+  api.get('/games/:id/private', (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    const u = req.user;
+    const list = u ? Object.values(D.privateServers).filter((ps) => ps.gameId === g.id && canJoinPrivate(ps, u)) : [];
+    res.json({
+      enabled: !!g.privateServers?.enabled, price: g.privateServers?.price || 0, days: PS_DAYS, isOwner: isGameOwner(g, u),
+      servers: list.sort((a, b) => (b.ownerId === u?.id) - (a.ownerId === u?.id)).map((ps) => publicPS(ps, u)),
+    });
+  });
+  api.post('/games/:id/private/settings', requireUser, (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    if (!isGameOwner(g, req.user)) return bad(res, 'Only the owner of this game can do that.', 403);
+    const price = Math.trunc(+req.body?.price || 0);
+    if (price < 0 || price > 100000) return bad(res, 'The price must be between 0 (free) and 100,000.');
+    g.privateServers = { enabled: !!req.body?.enabled, price };
+    db.save();
+    res.json({ enabled: g.privateServers.enabled, price });
+  });
+  api.post('/games/:id/private/buy', requireUser, (req, res) => {
+    const g = D.games[toInt(req.params.id)];
+    if (!g) return bad(res, 'Game not found', 404);
+    const u = req.user;
+    if (!g.privateServers?.enabled && !isGameOwner(g, u)) return bad(res, 'This game has no private servers.');
+    if (!g.isPublic && !isGameOwner(g, u)) return bad(res, 'This game is private.');
+    if (Object.values(D.privateServers).filter((ps) => ps.ownerId === u.id && ps.gameId === g.id).length >= 3) return bad(res, 'You can have up to 3 private servers per game.');
+    const price = isGameOwner(g, u) ? 0 : g.privateServers.price || 0;
+    if (u.robits < price) return bad(res, `You need ${price - u.robits} more Robits for a private server.`);
+    if (price) {
+      u.robits -= price;
+      const creator = D.users[g.creatorId];
+      if (creator) { const cut = Math.floor(price * 0.7); creator.robits += cut; log(creator.id, cut, `Sold a private server of ${g.name}`); }
+      log(u.id, -price, `Private server: ${g.name} (${PS_DAYS} days)`);
+    }
+    const id = db.nextId('privateserver');
+    const name = String(req.body?.name || '').trim().slice(0, 40) || `${u.username}'s server`;
+    D.privateServers[id] = { id, gameId: g.id, ownerId: u.id, name, members: [], friends: true, code: psCode(), created: Date.now(), until: price ? Date.now() + PS_DAYS * 86400e3 : 0 };
+    db.save();
+    res.json({ server: publicPS(D.privateServers[id], u), robits: u.robits });
+  });
+  // Joins a private server with its invite code (the link the owner shares).
+  api.post('/private/join', requireUser, (req, res) => {
+    const code = String(req.body?.code || '').trim().toUpperCase();
+    const ps = code && Object.values(D.privateServers).find((x) => x.code === code);
+    if (!ps) return bad(res, 'This invite link is not valid anymore.');
+    if (ps.ownerId !== req.user.id && !ps.members.includes(req.user.id)) {
+      if (ps.members.length >= 50) return bad(res, 'This private server is full.');
+      ps.members.push(req.user.id);
+      db.save();
+    }
+    res.json({ server: publicPS(ps, req.user) });
+  });
+
+  // Owner settings: { name, friends, add: username, remove: userId, newCode, renew, delete }
+  api.post('/private/:id', requireUser, (req, res) => {
+    const ps = D.privateServers[toInt(req.params.id)];
+    if (!ps) return bad(res, 'Private server not found', 404);
+    const u = req.user, b = req.body || {};
+    if (ps.ownerId !== u.id && !u.isAdmin) return bad(res, 'Only the owner of this server can do that.', 403);
+    const g = D.games[ps.gameId];
+    if (b.delete) {
+      delete D.privateServers[ps.id];
+      for (const s of manager.allServers()) if (s.privateId === ps.id) s.close?.();
+      db.save();
+      return res.json({ ok: true });
+    }
+    if (b.renew) {
+      const price = g && !isGameOwner(g, u) ? g.privateServers?.price || 0 : 0;
+      if (!ps.until) return bad(res, 'This server never expires.');
+      if (u.robits < price) return bad(res, `You need ${price - u.robits} more Robits to renew it.`);
+      if (price) {
+        u.robits -= price;
+        const creator = D.users[g.creatorId];
+        if (creator) { const cut = Math.floor(price * 0.7); creator.robits += cut; log(creator.id, cut, `Sold a private server of ${g.name}`); }
+        log(u.id, -price, `Renewed private server: ${g.name} (${PS_DAYS} days)`);
+      }
+      ps.until = price ? Math.max(ps.until, Date.now()) + PS_DAYS * 86400e3 : 0;
+    }
+    if (b.name !== undefined) ps.name = String(b.name).trim().slice(0, 40) || ps.name;
+    if (b.friends !== undefined) ps.friends = !!b.friends;
+    if (b.newCode) ps.code = psCode();
+    if (b.add) {
+      const m = Object.values(D.users).find((x) => !x.system && x.username.toLowerCase() === String(b.add).trim().toLowerCase());
+      if (!m) return bad(res, 'No player with that name.');
+      if (m.id !== ps.ownerId && !ps.members.includes(m.id)) {
+        if (ps.members.length >= 50) return bad(res, 'Up to 50 players can be invited.');
+        ps.members.push(m.id);
+      }
+    }
+    if (b.remove) ps.members = ps.members.filter((id) => id !== toInt(b.remove));
+    db.save();
+    res.json({ server: publicPS(ps, u), robits: u.robits });
+  });
   api.post('/games', requireUser, (req, res) => {
     const count = Object.values(D.games).filter((g) => g.creatorId === req.user.id).length;
     if (count >= 50 && !req.user.isAdmin) return bad(res, 'You have reached the maximum number of places.');

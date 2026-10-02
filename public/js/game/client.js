@@ -80,6 +80,7 @@ export class GameClient {
       this.hud.setLoadingStatus('Joining game...');
       const msg = { t: 'join', placeId: this.opts.placeId || 0 };
       if (this.opts.serverId) msg.serverId = this.opts.serverId;
+      if (this.opts.privateId) msg.privateId = this.opts.privateId;
       if (this.opts.testPlace) msg.test = this.opts.testPlace;
       this.ws.send(JSON.stringify(msg));
     };
@@ -195,6 +196,12 @@ export class GameClient {
         return;
       }
       case 'sys': this.hud.addChat('', m.text, { system: true }); this.hud.log({ level: 'info', text: m.text }); return;
+      case 'promptPass': this.hud.passDialog(m.pass, m.robits); return;
+      case 'passList': this.hud.showPassList(m.passes || []); return;
+      case 'passResult':
+        if (m.ok) this.hud.dialog('Purchase complete', `You bought ${m.pass.name}! Your balance: R$ ${m.robits}.`, [{ text: 'OK', primary: true }]);
+        else this.hud.dialog('Purchase failed', m.msg, [{ text: 'OK', primary: true }]);
+        return;
       case 'emote': { const v = this.views.get(m.userId); if (v) v.emote(m.emote); return; }
       case 'teleport': {
         if (this.local) {
@@ -261,6 +268,7 @@ export class GameClient {
     }
     for (const l of m.logs || []) this.handle({ t: 'output', ...l });
     this.hud.addChat('', `Welcome to ${m.name}! Press / to chat.`, { system: true });
+    if (m.privateName) this.hud.addChat('', `You are on the private server "${m.privateName}".`, { system: true });
     setTimeout(() => this.hud.hideLoading(), this.local ? 300 : 1500);
     this.boardTimer = 0;
   }

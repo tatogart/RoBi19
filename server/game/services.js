@@ -204,8 +204,17 @@ export function installServices(game, rt, backend) {
   badges.UserHasBadgeAsync = (userId, name) => (backend.hasBadge ? backend.hasBadge(+userId, String(name)) : false);
   badges.UserHasBadge = badges.UserHasBadgeAsync;
 
+  // Game passes: made on the game's page (Store). Studio tests without a
+  // published game own nothing.
   const market = game.GetService('MarketplaceService');
-  market.UserOwnsGamePassAsync = () => false;
+  const passes = backend.passes;
+  market.UserOwnsGamePassAsync = (userId, passId) => (passes ? passes.owns(+userId, +passId) : false);
+  market.UserOwnsGamePass = market.UserOwnsGamePassAsync;
+  market.PromptGamePassPurchase = (player, passId) => { if (backend.promptPass) backend.promptPass(player, +passId); };
+  market.GetProductInfo = (passId) => {
+    const p = passes && passes.info(+passId);
+    return p ? { Name: p.name, Description: p.description, PriceInRobux: p.price, PriceInRobits: p.price, IsForSale: p.onSale } : null;
+  };
   market.PlayerOwnsAsset = () => false;
   market.PromptPurchase = () => {};
 
