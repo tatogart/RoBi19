@@ -260,6 +260,8 @@ export async function renderPlace(place, size = 384, opts = {}) {
   cam.lookAt(center.x, center.y - sz.y * 0.1, center.z);
   env.setFocus(center);
   env.update(0, cam);
+  cam.updateMatrixWorld();
+  sync.assignLights(cam);
   const url = render(scene, cam, size, size, 'image/jpeg');
   sync.dispose();
   // Part materials/geometries are shared caches, so only free the sky.

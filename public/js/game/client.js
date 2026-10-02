@@ -689,7 +689,7 @@ export class GameClient {
       this.hud.crosshair.style.display = this.cam.shiftLock || this.cam.firstPerson || (this.isTouch && tool) ? 'block' : 'none';
       this.root.classList.toggle('tool-cursor', !!tool);
       this.hud.crosshair.classList.toggle('touch-aim', !!(this.isTouch && tool && !this.cam.shiftLock && !this.cam.firstPerson));
-      this.sync.update(dt);
+      this.sync.update(dt, this.camera);
       this.boardTimer -= dt;
       if (this.boardTimer <= 0) {
         this.boardTimer = 0.5;

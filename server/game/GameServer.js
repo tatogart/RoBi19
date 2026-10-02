@@ -12,6 +12,7 @@ import { buildCharacter, poseCharacter, rootCFrame, LIMBS } from '../../shared/e
 import { LuaRuntime } from './lua.js';
 import { installServices } from './services.js';
 import { filterChat } from './chatfilter.js';
+import { findHuntSpot } from './huntspot.js';
 
 const TICK_HZ = 30;
 const REPLICATED = new Set(['Workspace', 'Players', 'Lighting', 'ReplicatedStorage', 'StarterGui', 'Teams']);
@@ -278,7 +279,7 @@ export class GameServer {
   _huntJoin(session) {
     const h = this.backend.hunt;
     if (!h || this.isTest || !h.inEvent() || !h.eligible(session.user.id)) return;
-    if (!this.huntToken || this.huntToken._destroyed) this.huntToken = this._spawnHuntToken();
+    this._huntEnsure();
     const p = h.progress(session.user.id);
     const found = p && p.games.some((g) => g.id === this.gameId && g.found);
     setTimeout(() => {
@@ -291,38 +292,54 @@ export class GameServer {
 
   _huntCleanup() {
     const h = this.backend.hunt;
-    if (!this.huntToken || this.huntToken._destroyed) return;
     if ([...this.sessions.values()].some((s) => h && h.eligible(s.user.id))) return;
+    clearInterval(this.huntTimer);
+    this.huntTimer = null;
+    if (!this.huntToken || this.huntToken._destroyed) return;
     this.huntToken.Parent.Destroy();
     this.huntToken = null;
   }
 
-  // Hides the token on top of a random platform you can stand on: away from
-  // the spawn, and more often up high (harder to reach, harder to spot).
-  _spawnHuntToken() {
-    const BAD = /lava|kill|death|acid|spike|hazard|laser|trap|seek|void|fire|poison|danger|water/i;
-    const all = this.game.Workspace.GetDescendants().filter((p) => p instanceof BasePart && p._p.Anchored && p._p.CanCollide
-      && p._p.Transparency < 0.5 && p._p.Size.X >= 2 && p._p.Size.Z >= 2 && p._p.Size.X <= 600
-      && !BAD.test(p.Name) && !(p.Parent && BAD.test(p.Parent.Name)) && !p.FindFirstChildOfClass('Script')
-      && p.ClassName !== 'SpawnLocation' && !(p.Parent && p.Parent._isCharacter) && p.Position.Y < 600 && p.Position.Y > -50);
-    const spawns = this.game.Workspace.GetDescendants().filter((p) => p instanceof SpawnLocation).map((p) => p.Position);
-    const far = (p) => spawns.every((s) => Math.hypot(p.Position.X - s.X, p.Position.Z - s.Z) > 45);
-    // Not the big baseplate, and not right next to a spawn.
-    const nice = all.filter((p) => p.Name !== 'Baseplate' && p._p.Size.X * p._p.Size.Z < 40000);
-    const hard = nice.filter(far);
-    const pool = hard.length ? hard : nice.length ? nice : all;
-    let pos = new Vector3(0, 6, 0);
-    if (pool.length) {
-      // weighted: higher platforms are picked more often
-      const minY = Math.min(...pool.map((p) => p.Position.Y));
-      const weights = pool.map((p) => 1 + Math.max(0, p.Position.Y - minY) / 6);
-      let r = Math.random() * weights.reduce((a, b) => a + b, 0);
-      let p = pool[pool.length - 1];
-      for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) { p = pool[i]; break; } }
-      const top = p.CFrame.mul(new CFrame((Math.random() - 0.5) * (p.Size.X - 2), p.Size.Y / 2, (Math.random() - 0.5) * (p.Size.Z - 2))).Position;
-      pos = top.add(new Vector3(0, 2.2, 0));
-    }
-    const folder = createInstance('Folder');
+  // Keeps a token in the game: games that build their map while running (DOORS
+  // rooms, Natural Disaster maps, the random Tower) get it once there's a spot
+  // far from the spawn, and it moves if the platform under it goes away.
+  _huntEnsure() {
+    const place = (minDist, ground = false) => {
+      let pos = null;
+      try { pos = findHuntSpot(this.game.Workspace, Math.random, { minDist, ground }); } catch (e) { this.log('warn', 'The Hunt: ' + e.message); }
+      if (pos) this.huntToken = this._spawnHuntToken(pos);
+      return !!pos;
+    };
+    const tick = () => {
+      if (this.closed) return;
+      const t = this.huntToken;
+      if (t && !t._destroyed) {
+        if (this._huntSupported(t.Position)) return;
+        t.Parent.Destroy(); // its platform is gone
+        this.huntToken = null;
+      }
+      this.huntTries = (this.huntTries || 0) + 1;
+      // far from the spawn (small maps: a bit less); after ~2 minutes without
+      // such a spot, take the farthest one there is
+      if (place(45) || place(25)) return;
+      // nothing to stand on but the ground (an empty map): the ground it is
+      if (findHuntSpot(this.game.Workspace, Math.random, { minDist: 0 }) === null && place(0, true)) return;
+      if (this.huntTries > 8) place(0);
+    };
+    if (!this.huntToken || this.huntToken._destroyed) tick();
+    if (!this.huntTimer) this.huntTimer = setInterval(tick, 15000);
+  }
+
+  _huntSupported(pos) {
+    return this.game.Workspace.GetDescendants().some((p) => {
+      if (!(p instanceof BasePart) || !p._p.CanCollide || p === this.huntToken) return false;
+      const [a, b] = partAABB(p);
+      return pos.X > a.X - 0.5 && pos.X < b.X + 0.5 && pos.Z > a.Z - 0.5 && pos.Z < b.Z + 0.5 && b.Y <= pos.Y && b.Y > pos.Y - 4;
+    });
+  }
+
+  // The token itself, at a spot from huntspot.js.
+  _spawnHuntToken(pos) {    const folder = createInstance('Folder');
     folder.Name = 'TheHunt';
     const t = createInstance('Part');
     t.Name = 'HuntToken';
@@ -1046,6 +1063,7 @@ export class GameServer {
     if (this.closed) return;
     this.closed = true;
     clearInterval(this.timer);
+    clearInterval(this.huntTimer);
     for (const s of [...this.sessions.values()]) {
       this.send(s, { t: 'shutdown', msg: 'This game has shut down' });
       try { s.ws.close(); } catch { /* ignore */ }

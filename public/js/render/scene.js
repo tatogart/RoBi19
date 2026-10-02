@@ -119,6 +119,8 @@ function textSprite(text, color = '#ffffff', size = 24) {
   return s;
 }
 
+const MAX_LIGHTS = 8; // pooled point lights (see SceneSync)
+
 export class SceneSync {
   constructor(game, scene, opts = {}) {
     this.game = game;
@@ -128,6 +130,13 @@ export class SceneSync {
     this.effects = new Map(); // inst id -> {obj, emitter}
     this.root = new THREE.Group();
     scene.add(this.root);
+    // PointLights: a place can have dozens, but phones can only shade a few
+    // (too many and the game never draws). A fixed pool of real lights goes to
+    // the light sources nearest the camera; the count never changes, so shaders
+    // aren't rebuilt either.
+    this.lightSources = new Set();
+    this.lightPool = Array.from({ length: MAX_LIGHTS }, () => { const l = new THREE.PointLight(0xffffff, 0, 1, 1.2); this.root.add(l); return l; });
+    this.lightTimer = 0;
     this.unsub = [
       game.on('added', (i) => this.add(i)),
       game.on('removing', (i) => this.remove(i)),
@@ -169,10 +178,19 @@ export class SceneSync {
       const target = this.attachTarget(parent);
       if (!target) return;
       const p = inst._p;
-      const light = cls === 'SpotLight'
-        ? new THREE.SpotLight(0xffffff, 1, p.Range, (p.Angle * Math.PI) / 360, 0.4, 1.2)
-        : new THREE.PointLight(0xffffff, 1, p.Range, 1.2);
-      if (cls === 'SpotLight') { light.position.set(0, 0, 0); light.target.position.set(0, 0, -1); light.add(light.target); }
+      if (cls === 'PointLight') {
+        // just a marker: a pooled light shines here when it's close enough
+        const anchor = new THREE.Object3D();
+        anchor.userData.light = { color: new THREE.Color(), intensity: 0, distance: 1 };
+        target.add(anchor);
+        this.effects.set(inst.id, { obj: anchor, pooled: true });
+        this.lightSources.add(anchor);
+        this.updateLight(inst, anchor);
+        this.lightTimer = 0;
+        return;
+      }
+      const light = new THREE.SpotLight(0xffffff, 1, p.Range, (p.Angle * Math.PI) / 360, 0.4, 1.2);
+      light.position.set(0, 0, 0); light.target.position.set(0, 0, -1); light.add(light.target);
       target.add(light);
       this.effects.set(inst.id, { obj: light });
       this.updateLight(inst, light);
@@ -205,6 +223,14 @@ export class SceneSync {
 
   updateLight(inst, light) {
     const p = inst._p;
+    if (light.userData.light) { // a pooled PointLight's settings
+      const d = light.userData.light;
+      d.color.setRGB(p.Color.R, p.Color.G, p.Color.B);
+      d.intensity = p.Enabled ? p.Brightness * 6 : 0;
+      d.distance = p.Range * 1.5;
+      this.lightTimer = 0;
+      return;
+    }
     light.color.setRGB(p.Color.R, p.Color.G, p.Color.B);
     light.intensity = p.Enabled ? p.Brightness * 6 : 0;
     light.distance = p.Range * 1.5;
@@ -219,6 +245,7 @@ export class SceneSync {
     }
     const e = this.effects.get(inst.id);
     if (e) {
+      if (e.pooled) { this.lightSources.delete(e.obj); this.lightTimer = 0; }
       e.obj.removeFromParent();
       if (e.emitter) e.emitter.dispose();
       this.effects.delete(inst.id);
@@ -281,7 +308,31 @@ export class SceneSync {
     this.opts.onExplosion && this.opts.onExplosion(inst);
   }
 
-  update(dt) {
+  // Gives the pooled lights to the light sources nearest `camera` (a few times a second).
+  assignLights(camera) {
+    const at = new THREE.Vector3();
+    const cam = camera ? camera.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3();
+    const near = [];
+    for (const a of this.lightSources) {
+      if (!a.userData.light.intensity) continue;
+      a.getWorldPosition(at);
+      near.push({ a, pos: at.clone(), d: at.distanceToSquared(cam) });
+    }
+    near.sort((x, y) => x.d - y.d);
+    this.lightPool.forEach((l, i) => {
+      const n = near[i];
+      if (!n) { l.intensity = 0; return; }
+      const d = n.a.userData.light;
+      l.position.copy(n.pos);
+      l.color.copy(d.color);
+      l.intensity = d.intensity;
+      l.distance = d.distance;
+    });
+  }
+
+  update(dt, camera) {
+    this.lightTimer -= dt;
+    if (this.lightTimer <= 0 && this.lightSources.size) { this.lightTimer = 0.25; this.assignLights(camera); }
     for (const e of this.effects.values()) if (e.emitter) e.emitter.update(dt);
     if (this.anims) {
       this.anims = this.anims.filter(({ anim, g }) => {

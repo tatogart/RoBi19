@@ -72,7 +72,8 @@ export function buildHuntHub(games, prizes = []) {
   const portals = folder(ws, 'Portals');
   const decor = folder(ws, 'Decor');
   games.forEach((game, i) => {
-    const a = (i / n) * Math.PI * 2;
+    // half a step off, so no portal hides behind the info board at the spawn
+    const a = ((i + 0.5) / n) * Math.PI * 2;
     const x = Math.sin(a) * R, z = Math.cos(a) * R;
     const yaw = (a * 180) / Math.PI;
     const c = game.byPlayer ? '#ff4d8d' : COLORS[i % COLORS.length];
@@ -98,7 +99,7 @@ export function buildHuntHub(games, prizes = []) {
     inst(gate, 'Sparkles', { SparkleColor: Color3.fromHex(c) });
     light(gate, c, 22, 1.4);
     // a lamp post between this portal and the next
-    const b = ((i + 0.5) / n) * Math.PI * 2;
+    const b = ((i + 1) / n) * Math.PI * 2;
     const lx = Math.sin(b) * (R - 2), lz = Math.cos(b) * (R - 2);
     part(decor, { name: 'LampPost', size: [0.8, 10, 0.8], pos: [lx, 5, lz], color: '#1b1430', material: 'Metal' });
     const bulb = part(decor, { name: 'Lamp', size: [2, 2, 2], pos: [lx, 10.6, lz], color: '#fff1c4', material: 'Neon', shape: 'Ball', canCollide: false });

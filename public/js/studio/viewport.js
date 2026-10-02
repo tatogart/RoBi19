@@ -321,7 +321,7 @@ export class Viewport {
     }
     this.env.setFocus(this.camera.position.clone().addScaledVector(fwd, 40));
     this.env.update(dt, this.camera);
-    this.sync.update(dt);
+    this.sync.update(dt, this.camera);
     this.renderer.render(this.scene, this.camera);
     const p = this.camera.position;
     this.hud.textContent = `Camera ${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)}`;

@@ -86,7 +86,7 @@ async function hero() {
     cam.lookAt(0, 12, -30);
     env.setFocus(new THREE.Vector3(0, 0, -30));
     env.update(dt, cam);
-    sync.update(dt);
+    sync.update(dt, cam);
     renderer.render(scene, cam);
     requestAnimationFrame(loop);
   };
