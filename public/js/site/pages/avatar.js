@@ -3,6 +3,7 @@ import { initPage } from '../layout.js';
 import { api } from '../api.js';
 import { el, itemCard, toast } from '../ui.js';
 import { buildAvatar } from '../../render/avatar.js';
+import { avatarFullBody } from '../../render/thumbs.js';
 import { BODY_COLORS, WEAR_LIMITS } from '/shared/avatar.js';
 
 const me = await initPage({ active: 'avatar' });
@@ -71,7 +72,7 @@ function save() {
 }
 
 // ---------------------------------------------------------------- editor tabs
-const TABS = [['Recent', null], ['Hats', ['Hat']], ['Hair', ['Hair']], ['Faces', ['Face']], ['Shirts', ['Shirt']], ['Pants', ['Pants']], ['T-Shirts', ['TShirt']], ['Gear', ['Gear']], ['Pets', ['Pet']], ['Body Colors', 'body']];
+const TABS = [['Recent', null], ['Hats', ['Hat']], ['Hair', ['Hair']], ['Faces', ['Face']], ['Shirts', ['Shirt']], ['Pants', ['Pants']], ['T-Shirts', ['TShirt']], ['Gear', ['Gear']], ['Pets', ['Pet']], ['Body Colors', 'body'], ['Outfits', 'outfits']];
 const tabs = el('div', { class: 'tabs' });
 const body = el('div', { class: 'panel', style: { minHeight: '360px' } });
 function toggleWear(it) {
@@ -112,12 +113,43 @@ function showBody() {
   })));
   const all = el('button', { class: 'btn btn-small', text: 'Apply to whole body', onclick: () => { for (const k of Object.keys(parts)) avatar.bodyColors[k] = avatar.bodyColors[sel]; drawFig(); save(); } });
   body.replaceChildren(el('div', { class: 'row wrap', style: { alignItems: 'flex-start', gap: '30px' } },
-    el('div', {}, el('div', { class: 'small muted', text: 'Click a body part, then a color' }), fig, all), palette));
+    el('div', {}, el('div', { class: 'small muted', text: 'Click a body part, then a color' }), fig, all), palette),
+    el('p', { class: 'small muted', style: { marginTop: '14px' }, text: 'No shirt or pants on a skin-coloured body? You get plain default clothes, like in Roblox.' }));
+}
+// Saved outfits: the whole look (body colours + what's worn) in one click.
+async function showOutfits() {
+  body.replaceChildren(el('div', { class: 'loading-spinner' }));
+  let { outfits } = await api.get('/avatar/outfits');
+  const draw = () => {
+    const name = el('input', { class: 'input', maxlength: 30, placeholder: 'Name of this look', style: { maxWidth: '240px' } });
+    const grid = el('div', { class: 'outfit-grid' }, outfits.map((o) => {
+      const look = { bodyColors: o.avatar.bodyColors, items: o.avatar.wearing.map((id) => byId.get(id)).filter(Boolean).map((i) => ({ id: i.id, type: i.type, data: i.data })) };
+      const img = el('div', { class: 'outfit-img' });
+      avatarFullBody(look, 220).then((u) => img.append(el('img', { src: u, alt: '' }))).catch(() => {});
+      return el('div', { class: 'outfit-card' }, img, el('b', { class: 'no-i18n', text: o.name }),
+        el('div', { class: 'row', style: { gap: '6px', justifyContent: 'center' } },
+          el('button', { class: 'btn btn-small btn-green', text: 'Wear', onclick: async () => {
+            try { ({ avatar } = await api.put('/avatar', o.avatar)); rebuild(); toast(`Wearing ${o.name}`, 'success'); } catch (e) { toast(e.message, 'error'); }
+          } }),
+          el('button', { class: 'btn btn-small', text: '×', title: 'Delete', onclick: async () => {
+            if (!confirm(`Delete ${o.name}?`)) return;
+            ({ outfits } = await api.post('/avatar/outfits', { delete: o.id })); draw();
+          } })));
+    }));
+    body.replaceChildren(
+      el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '14px' } }, name,
+        el('button', { class: 'btn btn-primary', text: 'Save current look', onclick: async () => {
+          try { ({ outfits } = await api.post('/avatar/outfits', { name: name.value })); toast('Outfit saved!', 'success'); draw(); } catch (e) { toast(e.message, 'error'); }
+        } }),
+        el('span', { class: 'small muted', text: `${outfits.length} / 12` })),
+      outfits.length ? grid : el('div', { class: 'empty', text: 'No outfits yet. Dress up and press "Save current look" - then switch looks in one click.' }));
+  };
+  draw();
 }
 for (const [label, types] of TABS) {
   const b = el('button', { text: label, onclick: () => {
     [...tabs.children].forEach((x) => x.classList.toggle('active', x === b));
-    if (types === 'body') showBody(); else showItems(types);
+    if (types === 'body') showBody(); else if (types === 'outfits') showOutfits(); else showItems(types);
   } });
   tabs.append(b);
 }
@@ -142,6 +174,10 @@ style.textContent = `
 .bp-rightArm { left: 122px; top: 44px; width: 38px; height: 80px; }
 .bp-leftLeg { left: 40px; top: 126px; width: 39px; height: 74px; }
 .bp-rightLeg { left: 81px; top: 126px; width: 39px; height: 74px; }
+.outfit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.outfit-card { background: var(--gray-bg); border-radius: 8px; padding: 8px; text-align: center; display: flex; flex-direction: column; gap: 6px; }
+.outfit-img { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
+.outfit-img img { width: 100%; height: 100%; object-fit: contain; }
 .palette { display: grid; grid-template-columns: repeat(6, 40px); gap: 8px; }
 .swatch { width: 40px; height: 40px; border-radius: 50%; border: 2px solid rgba(0,0,0,.15); cursor: pointer; }
 .swatch:hover { transform: scale(1.1); }

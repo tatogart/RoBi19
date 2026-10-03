@@ -36,7 +36,14 @@ if (!h.visible) {
   const teamPct = Math.min(100, Math.round((h.team.shards / h.team.goal) * 100));
   const unitsWord = h.custom ? (quests ? 'quests' : 'finds') : quests ? 'relics' : 'shards';
   const jungle = h.hubStyle === 'relics';
-  const hero = el('div', { class: 'hunt-hero' + (jungle ? ' relics' : '') },
+  // the newer hub maps (Admin Panel -> The Hunt -> map)
+  const MAP = {
+    winter: { icon: '🎁', what: 'Presents', where: 'Hidden around the snowy plaza and on the ice ledges', hub: 'A giant Christmas tree • snowmen • ice ledges • jump pads • LET IT SNOW button' },
+    spooky: { icon: '🎃', what: 'Pumpkins', where: 'Hidden in the graveyard and on the ledges', hub: 'A haunted tower • graves and dead trees • jump pads • SPOOK button' },
+    candy: { icon: '🍬', what: 'Candies', where: 'Hidden in the candy kingdom and on the ledges', hub: 'A candy castle • candy canes and gumdrops • jump pads • SUGAR RUSH button' },
+    ocean: { icon: '🫧', what: 'Pearls', where: 'Hidden in the sunken city and on the ledges', hub: 'A sunken temple • coral and kelp • floaty water • jump pads • BUBBLES button' },
+  }[h.hubStyle];
+  const hero = el('div', { class: 'hunt-hero' + (jungle ? ' relics' : '') + (MAP ? ' theme-' + h.hubStyle : '') },
     jungle ? el('div', { class: 'hunt-leaf l1' }) : el('div', { class: 'hunt-planet p1' }),
     jungle ? el('div', { class: 'hunt-leaf l2' }) : el('div', { class: 'hunt-planet p2' }),
     !h.public ? el('div', { class: 'hunt-private', text: 'Private preview: only admins can see the event right now' }) : null,
@@ -67,12 +74,12 @@ if (!h.visible) {
         el('div', { class: 'hunt-stars' + (h.hubQuestDone ? ' solved' : ''), text: h.hubQuestDone ? '☀ ★ ≈ ☾' : '? ? ? ?' }),
         el('div', { class: 'small', text: h.hubQuestDone ? 'Solved!' : 'Find the 4 clue tablets in the hub, then click the runes in the right order' }))
       : el('div', { class: 'hunt-stat' },
-        el('b', { text: 'Star fragments' }),
-        el('div', { class: 'hunt-stars' }, Array.from({ length: h.fragments.total }, (_, i) => el('span', { class: i < h.fragments.count ? 'on' : '', text: '★' }))),
-        el('div', { class: 'small', text: 'Hidden on asteroids and the moon base in the hub' })),
+        el('b', { text: MAP ? MAP.what : 'Star fragments' }),
+        el('div', { class: 'hunt-stars' }, Array.from({ length: h.fragments.total }, (_, i) => el('span', { class: i < h.fragments.count ? 'on' : '', text: MAP ? MAP.icon : '★' }))),
+        el('div', { class: 'small', text: MAP ? MAP.where : 'Hidden on asteroids and the moon base in the hub' })),
     el('div', { class: 'hunt-stat' },
       el('b', { text: 'In the hub' }),
-      el('div', { class: 'small', text: jungle
+      el('div', { class: 'small', text: MAP ? MAP.hub : jungle
         ? 'A jungle camp • the Great Temple • stone archways to every game • the rune puzzle • the relic museum'
         : 'Low gravity • launch pads • a rocket to the moon • meteor showers • ZERO-G button' })));
   const prizes = el('div', { class: 'hunt-prizes' }, h.rewards.map((r) => {
@@ -141,6 +148,11 @@ style.textContent = `
 .hunt-found > *, .hunt-found { color: #fff; }
 .hunt-found { background: linear-gradient(135deg, #f3dcff, #b45cff 50%, #4a1a9c); box-shadow: 0 0 10px #b45cff; }
 .hunt-mini-token { background: rgba(0,0,0,.45); border: 2px dashed #b45cff; }
+.hunt-hero.theme-winter { background: radial-gradient(ellipse at 50% 0%, #5fa8e8, #173a6b 75%); }
+.hunt-hero.theme-spooky { background: radial-gradient(ellipse at 50% 0%, #5a2d82, #120a1c 75%); }
+.hunt-hero.theme-candy { background: radial-gradient(ellipse at 50% 0%, #ff8cc6, #8a2d6b 80%); }
+.hunt-hero.theme-ocean { background: radial-gradient(ellipse at 50% 0%, #2fb8c9, #0b2f5a 78%); }
+.hunt-hero[class*="theme-"] .hunt-planet { display: none; }
 .hunt-hero.relics { background: radial-gradient(ellipse at 50% 0%, #6b8a3a, #1f3318 75%); }
 .hunt-hero.relics::before { background-image: repeating-linear-gradient(115deg, rgba(255,201,74,.06) 0 12px, transparent 12px 40px); animation: none; }
 .hunt-hero.relics .hunt-logo2 { background: linear-gradient(90deg, #ffd27a, #5bd6a0, #ffc94a); -webkit-background-clip: text; background-clip: text; }

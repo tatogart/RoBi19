@@ -20,7 +20,7 @@ function getRenderer() {
 
 // Rendered avatar/item pictures are kept in IndexedDB, so pages don't draw
 // the same headshot again on every visit. Bump THUMB_VERSION when the look changes.
-const THUMB_VERSION = 5;
+const THUMB_VERSION = 6;
 const PERSIST = /^(head|body|item):/;
 let dbPromise = null;
 function thumbDb() {
@@ -149,7 +149,7 @@ export function itemThumbnail(item, size = 200) {
       return url;
     }
     const grey = { head: '#c8c8c8', torso: '#c8c8c8', leftArm: '#c8c8c8', rightArm: '#c8c8c8', leftLeg: '#c8c8c8', rightLeg: '#c8c8c8' };
-    const avatar = { bodyColors: grey, items: [{ id: item.id, type: item.type, data: item.data }] };
+    const avatar = { bare: true, bodyColors: grey, items: [{ id: item.id, type: item.type, data: item.data }] };
     const scene = new THREE.Scene();
     studioLights(scene);
     await preloadAvatar(avatar);

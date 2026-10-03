@@ -5,7 +5,7 @@ import { el, icon, iconSvg, fmtNum, headshotImg, toast, modal, joinFriendDialog 
 import { installApp, isInstalled } from './install.js';
 import { startInvites } from './invites.js';
 import { startChatParty } from './chatparty.js';
-import { installSecret } from './fun.js';
+import { installSecret, startLive } from './fun.js';
 
 const isStaff = (me) => me.isAdmin || (me.perms || []).some((p) => p === 'moderator' || p === 'economy');
 
@@ -83,7 +83,7 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     setDiscordStatus(site.discord.appId, where, me ? `as ${me.username}` : undefined);
   }
   showAnnouncement();
-  if (me) { startInvites(); installSecret(setRobits); }
+  if (me) { startInvites(); installSecret(setRobits); startLive(setRobits); }
   if (me && nav) startChatParty(me);
   return me;
 }

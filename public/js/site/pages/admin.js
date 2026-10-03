@@ -34,6 +34,10 @@ const ICONS = {
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   search: 'M11 18a7 7 0 100-14 7 7 0 000 14zm10 3l-5-5',
   bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
+  wheel: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 0v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4',
+  sparkle: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2zM19 3v4M17 5h4',
+  chart: 'M4 20V10m6 10V4m6 16v-7m4 7H2',
+  terminal: 'M3 5h18v14H3zm4 4l3 3-3 3m5 0h5',
 };
 const ic = (name, cls = 'adm-ic') => el('span', { class: cls, html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[name] || ICONS.box}"/></svg>` });
 
@@ -88,11 +92,15 @@ const TABS = {
   gifts: { label: 'Gift Center', group: 'Economy', icon: 'gift', draw: drawGifts, admin: true },
   items: { label: 'Items', group: 'Economy', icon: 'box', draw: drawItems },
   promo: { label: 'Promo Codes', group: 'Economy', icon: 'ticket', draw: drawPromo, perm: 'economy' },
+  spin: { label: 'Daily Spin', group: 'Economy', icon: 'wheel', draw: drawSpin, admin: true },
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
+  polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
   servers: { label: 'Servers', group: 'Live', icon: 'server', draw: drawServers },
+  live: { label: 'Live Events', group: 'Live', icon: 'sparkle', draw: drawLiveEvents, admin: true },
   broadcast: { label: 'Broadcast', group: 'Live', icon: 'megaphone', draw: drawBroadcast, admin: true },
   settings: { label: 'Settings', group: 'System', icon: 'gear', draw: drawSettings, admin: true },
+  console: { label: 'Console', group: 'System', icon: 'terminal', draw: drawConsole, admin: true },
   log: { label: 'Admin Log', group: 'System', icon: 'list', draw: drawLog },
 };
 for (const [id, t] of Object.entries(TABS)) if ((t.admin && !me.isAdmin) || (t.perm && !perm(t.perm))) delete TABS[id];
@@ -710,6 +718,9 @@ async function drawHunt() {
       el('button', { class: 'btn btn-small', text: 'Launch (private preview)', onclick: () => { if (confirm(`Launch ${e.name} as a private preview now?${live ? ` ${h.name} ends.` : ''}`)) control({ action: 'launch', key: e.key, public: false }, `${e.name} started (private)`); } }),
       el('button', { class: 'btn btn-small btn-green', text: 'Launch for everyone', onclick: () => { if (confirm(`Launch ${e.name} for everyone now?${live ? ` ${h.name} ends.` : ''}`)) control({ action: 'launch', key: e.key, public: true }, `${e.name} is live!`); } })))));
 
+  evCards.prepend(el('button', { class: 'hunt-admin-card hunt-new-event quick', onclick: () => quickEvent(h) },
+    el('b', { text: '⚡ Quick event' }),
+    el('div', { class: 'small muted', text: 'Pick a map, give it a name - prizes, story and goals are made for you. Ready in 10 seconds.' })));
   evCards.append(el('button', { class: 'hunt-admin-card hunt-new-event', onclick: () => customEventEditor(h, null) },
     el('b', { text: '+ Make your own event' }),
     el('div', { class: 'small muted', text: 'Name, story, quests or hidden items, the hub, prizes and goals - all yours.' })));
@@ -814,7 +825,7 @@ function customEventEditor(h, key) {
   const name = el('input', { class: 'input', maxlength: 60, value: c.name.replace(/^The Hunt: /, ''), placeholder: 'e.g. Pirate Treasure' });
   const desc = el('textarea', { class: 'input', rows: 3, maxlength: 500, value: c.description, placeholder: 'The story of the event (shown on the event page and the hub game)' });
   const kind = el('select', { class: 'input' }, [['quests', 'Quests in every game'], ['shards', 'Hidden items in every game (with a scanner)']].map(([v, t]) => el('option', { value: v, text: t, selected: c.kind === v })));
-  const hub = el('select', { class: 'input' }, [['relics', 'Jungle temple (rune puzzle)'], ['dimension', 'Space station (star fragments)']].map(([v, t]) => el('option', { value: v, text: t, selected: c.hub === v })));
+  const hub = el('select', { class: 'input' }, [['relics', 'Jungle temple (rune puzzle)'], ['dimension', 'Space station (star fragments)'], ['winter', 'Frost Festival (presents)'], ['spooky', 'Haunted Night (pumpkins)'], ['candy', 'Candy Kingdom (candies)'], ['ocean', 'Sunken City (pearls)']].map(([v, t]) => el('option', { value: v, text: t, selected: c.hub === v })));
   const robits = el('input', { class: 'input', type: 'number', min: 0, max: 1000, value: c.robits });
   const goal = el('input', { class: 'input', type: 'number', min: 1, max: 100000, value: c.teamGoal });
   const prizeRow = (p, ladder) => {
@@ -863,6 +874,87 @@ function customEventEditor(h, key) {
       try {
         await api.post('/admin/hunt/custom', { key, event: { name: name.value, description: desc.value, kind: kind.value, hub: hub.value, robits: +robits.value, teamGoal: +goal.value, prizes: [...ladder.children].map((r) => r.read()), teamPrize: team.read(), hubPrize: hubP.read() } });
         toast('Event saved', 'success');
+        drawHunt();
+      } catch (e) { toast(e.message, 'error'); return false; }
+    } }, { text: 'Cancel' }],
+  });
+}
+
+// ---------------------------------------------------------------- quick event
+// The easy way: a map, a name, a length - prizes and the story come with the map.
+const p5 = (names, model, colors, type = 'Hat') => names.map((name, i) => ({ name, type: Array.isArray(type) ? type[i] : type, model: Array.isArray(model) ? model[i] : model, color: colors[i % colors.length], accent: '#ffffff', ...(i === 0 ? { count: 1 } : { share: [25, 50, 75, 100][i - 1] }) }));
+const EVENT_MAPS = {
+  winter: { icon: '❄️', title: 'Frost Festival', bg: 'linear-gradient(135deg,#5fa8e8,#173a6b)', story: 'Snow has fallen on Robis! Step through the festive portals, finish a quest in every game and find the 6 presents hidden around the Frost Festival.',
+    prizes: p5(['Snowflake Beanie', 'Frosty Shades', 'Penguin Pal', 'Ice Saber', 'Crown of Winter'], ['beanie', 'shades', 'penguin', 'saber', 'crown'], ['#9fd8ff', '#4fc3ff', '#1b1b1b', '#bfefff', '#e8f6ff'], ['Hat', 'Hat', 'Pet', 'Gear', 'Hat']),
+    team: { name: 'Festival Party Hat', type: 'Hat', model: 'party', color: '#ff4d6d' }, hub: { name: 'Gift Halo', type: 'Hat', model: 'halo', color: '#ffd166' } },
+  spooky: { icon: '🎃', title: 'Haunted Night', bg: 'linear-gradient(135deg,#5a2d82,#120a1c)', story: 'The moon is full and the games are haunted... Survive a quest in every game and find the 6 pumpkins hidden in the graveyard.',
+    prizes: p5(['Witch Hat', 'Ghost Buddy', 'Pumpkin Torch', 'Spooky Wings', 'Crown of the Night'], ['witch', 'ghost', 'torch', 'wings', 'crown'], ['#7a3dbf', '#f4f8ff', '#ff7a1a', '#2b2b2b', '#ff7a1a'], ['Hat', 'Pet', 'Gear', 'Hat', 'Hat']),
+    team: { name: 'Bat Wings', type: 'Hat', model: 'wings', color: '#3b3640' }, hub: { name: 'Pumpkin Halo', type: 'Hat', model: 'halo', color: '#ff7a1a' } },
+  candy: { icon: '🍭', title: 'Candy Kingdom', bg: 'linear-gradient(135deg,#ff8cc6,#8a2d6b)', story: 'Everything is made of sugar! Finish a sweet quest in every game and find the 6 candies hidden in the Candy Kingdom.',
+    prizes: p5(['Gumdrop Cap', 'Candy Bunny', 'Lollipop Hammer', 'Party Cone', 'Sugar Crown'], ['cap', 'bunny', 'hammer', 'party', 'crown'], ['#ff5fa2', '#ffffff', '#ff3b8d', '#5fd3ff', '#ffb3d9'], ['Hat', 'Pet', 'Gear', 'Hat', 'Hat']),
+    team: { name: 'Sprinkle Headphones', type: 'Hat', model: 'headphones', color: '#b6ff5f' }, hub: { name: 'Candy Halo', type: 'Hat', model: 'halo', color: '#ff5fa2' } },
+  ocean: { icon: '🌊', title: 'Sunken City', bg: 'linear-gradient(135deg,#2fb8c9,#0b2f5a)', story: 'An ancient city rose from the sea! Swim through the portals, finish a quest in every game and find the 6 pearls of the Sunken City.',
+    prizes: p5(['Captain Hat', 'Diver Helmet', 'Trident Saber', 'Sea Dragon', 'Crown of the Deep'], ['pirate', 'astronaut', 'saber', 'dragon', 'crown'], ['#1f3a5f', '#1fd1c9', '#ffe066', '#1fd1c9', '#5f8bff'], ['Hat', 'Hat', 'Gear', 'Pet', 'Hat']),
+    team: { name: 'Pearl Shades', type: 'Hat', model: 'shades', color: '#f6f2ff' }, hub: { name: 'Pearl Halo', type: 'Hat', model: 'halo', color: '#f6f2ff' } },
+  relics: { icon: '🗿', title: 'Lost Temple', bg: 'linear-gradient(135deg,#6b8a3a,#1f3318)', story: 'A lost temple was found in the jungle. Finish a quest in every game to win its relics, and solve the rune puzzle in the temple.',
+    prizes: p5(['Explorer Hat', 'Jungle Torch', 'Stone Golem', 'Temple Wings', 'Golden Idol Crown'], ['explorer', 'torch', 'golem', 'wings', 'crown'], ['#c8a165', '#ff8a3d', '#8a8590', '#5bd6a0', '#ffc400'], ['Hat', 'Gear', 'Pet', 'Hat', 'Hat']),
+    team: { name: 'Temple Viking Helm', type: 'Hat', model: 'viking', color: '#c8a165' }, hub: { name: 'Rune Halo', type: 'Hat', model: 'halo', color: '#5bd6a0' } },
+  dimension: { icon: '🪐', title: 'Star Voyage', bg: 'linear-gradient(135deg,#3a1a6b,#0b0a2a)', story: 'A wormhole opened over Robis! Jump into the space station, finish a quest in every game and collect the 6 star fragments.',
+    prizes: p5(['Astronaut Helmet', 'UFO Pal', 'Space Saber', 'Planet Hat', 'Crown of the Cosmos'], ['astronaut', 'ufo', 'saber', 'planet', 'crown'], ['#e8e8f0', '#7dffb0', '#00e5ff', '#b45cff', '#ffd27a'], ['Hat', 'Pet', 'Gear', 'Hat', 'Hat']),
+    team: { name: 'Alien Buddy', type: 'Pet', model: 'alien', color: '#7dffb0' }, hub: { name: 'Stardust Halo', type: 'Hat', model: 'halo', color: '#7df9ff' } },
+};
+function quickEvent(h) {
+  let map = 'winter';
+  const name = el('input', { class: 'input', maxlength: 60, value: EVENT_MAPS[map].title });
+  const grid = el('div', { class: 'qe-maps' });
+  const prizesBox = el('div', { class: 'qe-prizes' });
+  const drawMaps = () => {
+    grid.replaceChildren(...Object.entries(EVENT_MAPS).map(([k, m]) => el('button', { type: 'button', class: 'qe-map' + (k === map ? ' on' : ''), style: { background: m.bg }, onclick: () => {
+      const auto = Object.values(EVENT_MAPS).some((x) => x.title === name.value) || !name.value;
+      map = k;
+      if (auto) name.value = m.title;
+      drawMaps();
+    } }, el('span', { class: 'qe-icon', text: m.icon }), el('b', { text: m.title }))));
+    const m = EVENT_MAPS[map];
+    prizesBox.replaceChildren(el('div', { class: 'small muted', text: 'Prizes:' }),
+      ...m.prizes.map((p, i) => el('span', { class: 'qe-chip' }, el('i', { style: { background: p.color } }), `${p.name}`, el('small', { text: i === 0 ? ' · 1st' : ` · ${p.share}%` }))),
+      el('span', { class: 'qe-chip bonus' }, el('i', { style: { background: m.team.color } }), m.team.name, el('small', { text: ' · team' })),
+      el('span', { class: 'qe-chip bonus' }, el('i', { style: { background: m.hub.color } }), m.hub.name, el('small', { text: ' · hub' })));
+  };
+  drawMaps();
+  const seg = (opts, val) => {
+    const box = el('div', { class: 'qe-seg' });
+    box.value = val;
+    const draw = () => box.replaceChildren(...opts.map(([v, t]) => el('button', { type: 'button', class: v === box.value ? 'on' : '', text: t, onclick: () => { box.value = v; draw(); } })));
+    draw();
+    return box;
+  };
+  const kind = seg([['quests', '📜 Quests in every game'], ['shards', '🔍 Hidden items (scanner)']], 'quests');
+  const length = seg([['0', 'No end'], ['1', '1 day'], ['3', '3 days'], ['7', '1 week']], '3');
+  const start = seg([['save', 'Just save'], ['private', 'Test (only me)'], ['public', 'Launch for everyone']], 'private');
+  const robits = el('input', { class: 'input', type: 'number', min: 0, max: 1000, value: 25, style: { width: '90px' } });
+  modal({
+    title: '⚡ Quick event',
+    width: 720,
+    body: el('div', { class: 'quick-event' },
+      el('div', { class: 'qe-step', text: '1. Pick a map' }), grid,
+      el('div', { class: 'qe-step', text: '2. Name it' }), el('div', { class: 'row', style: { gap: '8px', alignItems: 'center' } }, el('span', { class: 'muted', text: 'The Hunt:' }), name),
+      el('div', { class: 'qe-step', text: '3. What players do' }), kind,
+      el('div', { class: 'row wrap', style: { gap: '18px' } },
+        el('div', {}, el('div', { class: 'qe-step', text: '4. How long' }), length),
+        el('div', {}, el('div', { class: 'qe-step', text: 'Robits for each' }), robits)),
+      el('div', { class: 'qe-step', text: '5. Start' }), start,
+      prizesBox,
+      el('p', { class: 'small muted', text: 'You can change everything later with Edit (prizes, story, quests of every game).' })),
+    buttons: [{ text: 'Create', cls: 'btn-green', onClick: async () => {
+      const m = EVENT_MAPS[map];
+      try {
+        const r = await api.post('/admin/hunt/custom', { event: { name: name.value || m.title, description: m.story, kind: kind.value, hub: map, robits: +robits.value, teamGoal: 30, prizes: m.prizes, teamPrize: m.team, hubPrize: m.hub } });
+        if (start.value !== 'save') {
+          const days = +length.value;
+          await api.post('/admin/hunt/control', { action: 'launch', key: r.key, public: start.value === 'public', endsAt: days ? Date.now() + days * 86400e3 : 0 });
+        }
+        toast(start.value === 'public' ? 'The event is live!' : start.value === 'private' ? 'Started: only you can see it. Test it, then open it for everyone.' : 'Event saved', 'success');
         drawHunt();
       } catch (e) { toast(e.message, 'error'); return false; }
     } }, { text: 'Cancel' }],
@@ -1182,7 +1274,10 @@ async function drawDashboard() {
         me.isAdmin ? qa('Gift Center', 'gift', () => { location.hash = 'gifts'; }) : null,
         perm('moderator') ? qa('Reports', 'flag', () => { location.hash = 'reports'; }, 'orange') : null,
         me.isAdmin ? qa('Broadcast', 'megaphone', () => { location.hash = 'broadcast'; }) : null,
-        me.isAdmin ? qa('The Hunt', 'hunt', () => { location.hash = 'hunt'; }, 'purple') : null)),
+        me.isAdmin ? qa('The Hunt', 'hunt', () => { location.hash = 'hunt'; }, 'purple') : null,
+        me.isAdmin ? qa('Robits rain', 'sparkle', () => { location.hash = 'live'; }) : null,
+        me.isAdmin ? qa('Daily Spin', 'wheel', () => { location.hash = 'spin'; }) : null,
+        me.isAdmin ? qa('Console', 'terminal', () => { location.hash = 'console'; }) : null)),
     el('div', { class: 'dash-tiles' },
       tile('Players', fmtFull(k.users), `+${k.newToday} today`, 'blue'),
       tile('Online now', k.online, `${k.activeToday} visited today`, 'green'),
@@ -1563,3 +1658,240 @@ html[data-theme="dark"] .pw-box { background: #1f3a2a; }
 @media (max-width: 700px) { .manage-cols { grid-template-columns: 1fr; } .manage-top { flex-direction: column; align-items: flex-start; } }
 `;
 document.head.append(style);
+
+// ---------------------------------------------------------------- shared bits for the new sections
+const usersList = () => el('datalist', { id: 'admin-usernames-all' }, (data?.users || []).map((u) => el('option', { value: u.username })));
+const whoInput = (placeholder = 'Player name, "online" or "all"') => el('input', { class: 'input', placeholder, list: 'admin-usernames-all', autocomplete: 'off' });
+const card = (title, sub, ...kids) => el('div', { class: 'adm-card' }, el('div', { class: 'adm-card-head' }, el('b', { text: title }), sub ? el('span', { class: 'muted small', text: sub }) : null), ...kids);
+const segBtns = (opts, val, onChange) => {
+  const box = el('div', { class: 'qe-seg' });
+  box.value = val;
+  const draw = () => box.replaceChildren(...opts.map(([v, t]) => el('button', { type: 'button', class: String(v) === String(box.value) ? 'on' : '', text: t, onclick: () => { box.value = v; draw(); onChange && onChange(v); } })));
+  draw();
+  return box;
+};
+
+// ---------------------------------------------------------------- Daily Spin
+// The wheel's prizes and chances (with a live preview), boosts, free spins,
+// "next prize" for a player, numbers and the latest spins.
+async function drawSpin() {
+  body.replaceChildren(spinner());
+  let s;
+  try { s = await api.get('/admin/spin'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const { wheelEl } = await import('../fun.js');
+  const cfg = s.config;
+  const segs = cfg.segments.map((x) => ({ ...x }));
+  const itemNames = { ...s.items };
+  const post = async (b, msg) => {
+    try { const r = await api.post('/admin/spin', b); toast(msg + (r.players ? ` (${r.players})` : ''), 'success'); drawSpin(); } catch (e) { toast(e.message, 'error'); }
+  };
+
+  // ---- the wheel editor
+  const preview = el('div', { class: 'spin-wrap adm-spin-preview' });
+  const rows = el('div', { class: 'spin-rows' });
+  const drawPreview = () => preview.replaceChildren(el('div', { class: 'spin-pointer' }), wheelEl(segs), el('div', { class: 'spin-hub' }));
+  const drawRows = () => {
+    const total = segs.reduce((n, x) => n + (+x.w || 0), 0) || 1;
+    rows.replaceChildren(el('div', { class: 'spin-row head' }, el('span', { text: '' }), el('span', { text: 'On the wheel' }), el('span', { text: 'Robits' }), el('span', { text: 'Item' }), el('span', { text: 'Weight' }), el('span', { text: 'Chance' }), el('span', { text: '' })),
+      ...segs.map((x, i) => {
+        const upd = (k, v) => { x[k] = v; drawPreview(); if (k === 'w') drawRows(); };
+        return el('div', { class: 'spin-row' },
+          el('input', { type: 'color', value: x.color, oninput: (e) => upd('color', e.target.value) }),
+          el('input', { class: 'input', maxlength: 24, value: x.label, oninput: (e) => upd('label', e.target.value) }),
+          el('input', { class: 'input', type: 'number', min: 0, value: x.robits || 0, oninput: (e) => upd('robits', +e.target.value) }),
+          el('button', { class: 'btn btn-small spin-item', text: x.item ? (itemNames[x.item]?.name || `#${x.item}`) : '+ Item', onclick: () => itemPicker({ title: 'Prize item', multi: false, button: 'Pick', onPick: ([it]) => { x.item = it.id; itemNames[it.id] = it; if (!x.label || x.label.startsWith('R$')) x.label = it.name.slice(0, 24); drawPreview(); drawRows(); } }) },
+          ),
+          el('input', { class: 'input', type: 'number', min: 0.1, step: 0.1, value: x.w, oninput: (e) => upd('w', +e.target.value), onchange: drawRows }),
+          el('span', { class: 'spin-chance', text: ((x.w / total) * 100).toFixed(1) + '%' }),
+          el('div', { class: 'row', style: { gap: '4px', justifyContent: 'flex-end' } },
+            x.item ? el('button', { class: 'btn btn-small', title: 'Remove the item', text: '⨯ item', onclick: () => { x.item = 0; drawRows(); } }) : null,
+            el('label', { class: 'small', title: 'Jackpot: extra confetti' }, el('input', { type: 'checkbox', checked: !!x.jackpot, onchange: (e) => { x.jackpot = e.target.checked; } }), '★'),
+            el('button', { class: 'btn btn-small btn-red', text: '×', title: 'Remove', onclick: () => { if (segs.length <= 2) return toast('The wheel needs at least 2 prizes.', 'error'); segs.splice(i, 1); drawPreview(); drawRows(); } })));
+      }));
+  };
+  drawPreview();
+  drawRows();
+  const streakBonus = el('input', { class: 'input', type: 'number', min: 0, max: 1000, value: cfg.streakBonus ?? 10, style: { width: '90px' } });
+  const maxStreak = el('input', { class: 'input', type: 'number', min: 1, max: 30, value: cfg.maxStreak ?? 7, style: { width: '90px' } });
+  const save = () => post({ op: 'save', on: cfg.on, segments: segs, streakBonus: +streakBonus.value, maxStreak: +maxStreak.value }, 'The wheel is saved');
+
+  // ---- boost
+  const mult = segBtns([[2, 'x2'], [3, 'x3'], [5, 'x5'], [10, 'x10']], 2);
+  const hours = segBtns([[1, '1 hour'], [3, '3 hours'], [24, '1 day'], [72, '3 days']], 3);
+  const boostCard = card('Boost', s.boost ? `x${s.boost.mult} until ${new Date(s.boost.until).toLocaleString()}` : 'All Robits prizes are bigger for a while',
+    mult, hours,
+    el('div', { class: 'row', style: { gap: '6px' } },
+      el('button', { class: 'btn btn-primary', text: s.boost ? 'Change boost' : 'Start boost', onclick: () => post({ op: 'boost', mult: +mult.value, hours: +hours.value }, 'Boost started') }),
+      s.boost ? el('button', { class: 'btn', text: 'Stop', onclick: () => post({ op: 'boost', mult: 1, hours: 0 }, 'Boost stopped') }) : null));
+
+  // ---- players
+  const who = whoInput();
+  const count = el('input', { class: 'input', type: 'number', min: 1, max: 10, value: 1, style: { width: '70px' } });
+  const rigWho = whoInput('Player name');
+  const rigSeg = el('select', { class: 'input', style: { width: 'auto' } }, el('option', { value: '', text: 'Random (as usual)' }), cfg.segments.map((x, i) => el('option', { value: i, text: x.label })));
+  const playersCard = card('Players', 'Free spins work even if they already spun today',
+    el('div', { class: 'row wrap', style: { gap: '6px' } }, who, count,
+      el('button', { class: 'btn btn-green', text: '🎟 Give free spins', onclick: () => post({ op: 'give', target: who.value, count: +count.value }, 'Free spins given') }),
+      el('button', { class: 'btn', text: '↺ Let spin again today', onclick: () => post({ op: 'reset', target: who.value }, 'They can spin again') })),
+    el('div', { class: 'adm-sub', text: 'Next prize for a player (a surprise!)' }),
+    el('div', { class: 'row wrap', style: { gap: '6px' } }, rigWho, rigSeg,
+      el('button', { class: 'btn btn-primary', text: 'Set', onclick: () => post({ op: 'rig', target: rigWho.value, index: rigSeg.value === '' ? null : +rigSeg.value }, 'Next prize set') })),
+    s.rigged.length ? el('div', { class: 'small muted' }, s.rigged.map((r) => el('div', { class: 'no-i18n', text: `${r.username} → ${cfg.segments[r.index]?.label || '?'}` }))) : null);
+
+  const t = s.stats.today;
+  const tile = (label, value, cls = '') => el('div', { class: 'dash-tile ' + cls }, el('div', { class: 'dash-value', text: String(value) }), el('div', { class: 'dash-label', text: label }));
+  body.replaceChildren(usersList(),
+    el('div', { class: 'adm-hero spin' },
+      el('div', {}, el('h2', { text: '🎡 Daily Spin' }), el('p', { text: cfg.on ? 'The wheel is on: every player can spin once a day.' : 'The wheel is off: players can\'t spin.' })),
+      el('label', { class: 'adm-switch' }, el('input', { type: 'checkbox', checked: cfg.on, onchange: (e) => post({ op: 'toggle', on: e.target.checked }, e.target.checked ? 'The wheel is on' : 'The wheel is off') }), el('span', {}), el('b', { text: cfg.on ? 'ON' : 'OFF' }))),
+    el('div', { class: 'dash-tiles' }, tile('Spins today', t.spins, 'blue'), tile('Robits paid today', fmtNum(t.paid), 'green'), tile('Items won today', t.items), tile('Jackpots today', t.jackpots, t.jackpots ? 'orange' : '')),
+    el('div', { class: 'adm-spin-editor' },
+      el('div', { class: 'adm-spin-left' }, preview, el('p', { class: 'small muted', text: 'The preview changes as you edit. Weight = how likely, compared with the others.' })),
+      el('div', { class: 'adm-spin-right' }, rows,
+        el('div', { class: 'row wrap', style: { gap: '8px', marginTop: '10px', alignItems: 'center' } },
+          el('button', { class: 'btn', text: '+ Add prize', onclick: () => { if (segs.length >= 12) return toast('12 prizes at most.', 'error'); segs.push({ label: 'R$ 75', robits: 75, item: 0, color: '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0'), w: 10 }); drawPreview(); drawRows(); } }),
+          el('label', { class: 'small' }, 'Streak bonus R$/day ', streakBonus),
+          el('label', { class: 'small' }, 'Max streak days ', maxStreak),
+          el('button', { class: 'btn btn-green', text: 'Save the wheel', onclick: save })))),
+    el('div', { class: 'adm-cards' }, boostCard, playersCard),
+    s.stats.days.length > 1 ? el('div', { class: 'dash-charts' }, dayChart('Spins', s.stats.days, 'spins'), dayChart('Robits paid', s.stats.days, 'paid')) : null,
+    card('Latest spins', null, s.recent.length ? el('div', { class: 'mini-list' }, s.recent.map((r) => el('div', { class: 'mini-row' },
+      el('span', { class: 'mini-text' }, el('b', { class: 'no-i18n', text: r.username }), ' · ', el('span', { class: 'no-i18n', text: r.prize })), el('span', { class: 'muted small', text: timeAgo(r.t) })))) : el('div', { class: 'muted small', text: 'Nobody has spun yet.' })));
+}
+
+// ---------------------------------------------------------------- Live Events
+// Robits rain, a party on every open page, decorations on the site.
+async function drawLiveEvents() {
+  body.replaceChildren(spinner());
+  let f;
+  try { f = await api.get('/admin/fun'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b, msg) => {
+    try { const r = await api.post('/admin/fun', b); toast(msg + (r.players ? ` (${r.players} players)` : ''), 'success'); drawLiveEvents(); } catch (e) { toast(e.message, 'error'); }
+  };
+  const amount = segBtns([[10, 'R$ 10'], [25, 'R$ 25'], [50, 'R$ 50'], [100, 'R$ 100'], [500, 'R$ 500']], 25);
+  const custom = el('input', { class: 'input', type: 'number', min: 1, max: 10000, placeholder: 'or any', style: { width: '100px' } });
+  const who = segBtns([['online', `Everyone online (${f.online})`], ['all', `Everyone (${f.players})`]], 'online');
+  const rainText = el('input', { class: 'input', maxlength: 120, placeholder: 'Message (optional), e.g. "Thanks for playing!"' });
+  const partyText = el('input', { class: 'input', maxlength: 120, placeholder: 'e.g. 1000 players! Party time!' });
+  const emoji = segBtns([['', 'Confetti'], ['🎂', '🎂'], ['🎈', '🎈'], ['🔥', '🔥'], ['💎', '💎'], ['🟥', 'Bricks']], '');
+  const DEC = { none: ['Off', '🚫'], snow: ['Snow', '❄️'], halloween: ['Halloween', '🎃'], hearts: ['Hearts', '💖'], confetti: ['Confetti', '🎉'], leaves: ['Autumn', '🍂'], stars: ['Stars', '✨'] };
+  const decHours = segBtns([[0, 'Until turned off'], [24, '1 day'], [72, '3 days'], [168, '1 week']], 0);
+  const now = f.decor.name !== 'none' && (!f.decor.until || f.decor.until > Date.now()) ? f.decor.name : 'none';
+  body.replaceChildren(
+    el('div', { class: 'adm-hero live' }, el('div', {}, el('h2', { text: '✨ Live Events' }), el('p', { text: `Make something happen for everyone right now. ${f.online} players online.` }))),
+    el('div', { class: 'adm-cards' },
+      card('💰 Robits rain', 'Everyone gets Robits and sees them rain on the screen',
+        amount, custom, who, rainText,
+        el('button', { class: 'btn btn-green', text: 'Make it rain!', onclick: () => {
+          const n = +custom.value || +amount.value;
+          if (!confirm(`Give R$ ${n} to ${who.value === 'all' ? 'every player' : 'every player online'}?`)) return;
+          post({ op: 'rain', amount: n, target: who.value, text: rainText.value }, 'It\'s raining Robits!');
+        } })),
+      card('🎉 Party', 'Confetti and a big message on every open page', partyText, emoji,
+        el('button', { class: 'btn btn-primary', text: 'Start the party', onclick: () => post({ op: 'party', text: partyText.value, emoji: emoji.value }, 'Party started!') })),
+      card('🎄 Site decorations', now === 'none' ? 'Nothing is falling now' : `Now: ${DEC[now][0]}${f.decor.until ? ' until ' + new Date(f.decor.until).toLocaleString() : ''}`,
+        el('div', { class: 'decor-pick' }, Object.entries(DEC).map(([k, [name, icon]]) => el('button', { class: 'decor-opt' + (k === now ? ' on' : ''), onclick: () => post({ op: 'decor', decor: k, hours: +decHours.value }, k === 'none' ? 'Decorations off' : `${name} on the site!`) },
+          el('span', { class: 'decor-icon', text: icon }), el('span', { text: name })))),
+        decHours)),
+    card('History', 'The last 10 minutes', f.events.length ? el('div', { class: 'mini-list' }, f.events.map((e) => el('div', { class: 'mini-row' },
+      el('span', { class: 'mini-text' }, el('b', { text: e.type === 'rain' ? `💰 R$ ${e.amount}` : '🎉 Party' }), e.text ? el('span', { class: 'no-i18n', text: ' · ' + e.text }) : null, e.players !== null ? el('span', { class: 'muted', text: ` · ${e.players} players` }) : null),
+      el('span', { class: 'muted small no-i18n', text: `${e.by} · ${timeAgo(e.created)}` })))) : el('div', { class: 'muted small', text: 'Nothing yet.' })));
+}
+
+// ---------------------------------------------------------------- Polls
+async function drawPolls() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/polls'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b, msg) => { try { await api.post('/admin/polls', b); toast(msg, 'success'); drawPolls(); } catch (e) { toast(e.message, 'error'); } };
+  const q = el('input', { class: 'input', maxlength: 140, placeholder: 'Question, e.g. "What should the next event be?"' });
+  const opts = el('div', { class: 'poll-edit' });
+  const addOpt = (v = '') => { if (opts.children.length < 6) opts.append(el('input', { class: 'input', maxlength: 60, value: v, placeholder: `Answer ${opts.children.length + 1}` })); };
+  addOpt(); addOpt();
+  const hours = segBtns([[0, 'No end'], [24, '1 day'], [72, '3 days'], [168, '1 week']], 72);
+  const IDEAS = [['What should the next The Hunt be?', ['Frost Festival ❄️', 'Haunted Night 🎃', 'Candy Kingdom 🍭', 'Sunken City 🌊']], ['Best game on Robis?', ['DOORS', 'Natural Disaster', 'Murder Mystery 2', 'Tower']], ['What should we add next?', ['New games', 'New items', 'New events', 'More Robits!']]];
+  body.replaceChildren(
+    el('div', { class: 'adm-hero polls' }, el('div', {}, el('h2', { text: '📊 Polls' }), el('p', { text: 'Ask the players. Polls show on the home page; players see the results after voting.' }))),
+    card('New poll', null, q, opts,
+      el('div', { class: 'row wrap', style: { gap: '6px' } }, el('button', { class: 'btn btn-small', text: '+ Answer', onclick: () => addOpt() }),
+        el('span', { class: 'small muted', text: 'Ideas:' }), IDEAS.map(([qq, oo]) => el('button', { class: 'btn btn-small', text: qq, onclick: () => { q.value = qq; opts.replaceChildren(); oo.forEach(addOpt); } }))),
+      hours,
+      el('button', { class: 'btn btn-green', text: 'Post the poll', onclick: () => post({ op: 'create', question: q.value, options: [...opts.children].map((i) => i.value), hours: +hours.value }, 'Poll posted') })),
+    ...r.polls.map((p) => {
+      const max = Math.max(1, ...p.counts);
+      return card(p.question, `${p.total} votes · ${p.closed ? 'closed' : p.ends ? 'ends ' + new Date(p.ends).toLocaleString() : 'open'} · by ${p.by}`,
+        el('div', { class: 'poll-options' }, p.options.map((o, i) => el('div', { class: 'poll-result' + (p.counts[i] === max && p.total ? ' top' : '') },
+          el('div', { class: 'poll-fill', style: { width: (p.total ? Math.round((p.counts[i] / p.total) * 100) : 0) + '%' } }),
+          el('span', { class: 'no-i18n', text: o }), el('b', { text: `${p.counts[i]} · ${p.total ? Math.round((p.counts[i] / p.total) * 100) : 0}%` })))),
+        el('div', { class: 'row', style: { gap: '6px' } },
+          p.closed ? null : el('button', { class: 'btn btn-small', text: 'Close', onclick: () => post({ op: 'close', id: p.id }, 'Poll closed') }),
+          el('button', { class: 'btn btn-small btn-red', text: 'Delete', onclick: () => { if (confirm('Delete this poll?')) post({ op: 'delete', id: p.id }, 'Deleted'); } })));
+    }));
+}
+
+// ---------------------------------------------------------------- Console
+// Commands for everything, fast: "give Bob 500", "rain 50", "decor snow"...
+const CMDS = [
+  ['help', 'all commands'],
+  ['robits <player> <amount>', 'give (or take, with -) Robits'],
+  ['item <player> <item id>', 'give an item'],
+  ['kick <player> [reason]', 'kick from their game'],
+  ['warn <player> <reason>', 'send a warning'],
+  ['spin <player|online|all> [n]', 'give free spins'],
+  ['spinreset <player|online|all>', 'let them spin again today'],
+  ['boost <x> <hours>', 'Daily Spin boost (boost 1 0 = off)'],
+  ['rain <amount> [all]', 'Robits rain for everyone online (or all)'],
+  ['party [message]', 'confetti and a message on every page'],
+  ['decor <none|snow|halloween|hearts|confetti|leaves|stars> [hours]', 'site decorations'],
+  ['announce <text>', 'the announcement bar ("announce" alone removes it)'],
+  ['poll <question> | <answer> | <answer>...', 'post a poll'],
+  ['find <name>', 'open a player'],
+  ['clear', 'clear the console'],
+];
+let consoleLines = [];
+function drawConsole() {
+  const out = el('div', { class: 'adm-console-out' });
+  const print = (text, cls = '') => { consoleLines.push([text, cls]); consoleLines = consoleLines.slice(-200); out.append(el('div', { class: 'cline ' + cls, text })); out.scrollTop = out.scrollHeight; };
+  for (const [t, c] of consoleLines) out.append(el('div', { class: 'cline ' + c, text: t }));
+  const input = el('input', { class: 'adm-console-in', placeholder: 'Type a command, e.g. help', autocomplete: 'off', spellcheck: false });
+  const history = [];
+  let hi = 0;
+  const userBy = (name) => (data?.users || []).find((u) => u.username.toLowerCase() === String(name || '').toLowerCase() || String(u.id) === String(name));
+  const need = (name) => { const u = userBy(name); if (!u) throw new Error(`No player "${name}".`); return u; };
+  const run = async (line) => {
+    const [cmd, ...a] = line.trim().split(/\s+/);
+    const rest = line.trim().slice(cmd.length).trim();
+    switch ((cmd || '').toLowerCase()) {
+      case 'help': CMDS.forEach(([c, d]) => print(`${c.padEnd(44)} ${d}`, 'muted')); return;
+      case 'clear': consoleLines = []; out.replaceChildren(); return;
+      case 'robits': { const u = need(a[0]); await api.post(`/admin/users/${u.id}/robits`, { amount: +a[1] }); return print(`✓ ${u.username}: ${+a[1] > 0 ? '+' : ''}${+a[1]} Robits`, 'ok'); }
+      case 'item': { const u = need(a[0]); await api.post(`/admin/users/${u.id}/items`, { itemId: +a[1] }); return print(`✓ Gave item #${+a[1]} to ${u.username}`, 'ok'); }
+      case 'kick': { const u = need(a[0]); await api.post(`/admin/users/${u.id}/kick`, { reason: a.slice(1).join(' ') }); return print(`✓ Kicked ${u.username}`, 'ok'); }
+      case 'warn': { const u = need(a[0]); await api.post(`/admin/users/${u.id}/warn`, { reason: a.slice(1).join(' ') }); return print(`✓ Warned ${u.username}`, 'ok'); }
+      case 'spin': { const r = await api.post('/admin/spin', { op: 'give', target: a[0], count: +a[1] || 1 }); return print(`✓ Free spins for ${r.players} player(s)`, 'ok'); }
+      case 'spinreset': { const r = await api.post('/admin/spin', { op: 'reset', target: a[0] }); return print(`✓ ${r.players} player(s) can spin again`, 'ok'); }
+      case 'boost': await api.post('/admin/spin', { op: 'boost', mult: +a[0], hours: +a[1] }); return print(+a[0] > 1 && +a[1] ? `✓ x${+a[0]} boost for ${+a[1]}h` : '✓ Boost off', 'ok');
+      case 'rain': { const r = await api.post('/admin/fun', { op: 'rain', amount: +a[0], target: a[1] === 'all' ? 'all' : 'online' }); return print(`✓ R$ ${+a[0]} rained on ${r.players} player(s)`, 'ok'); }
+      case 'party': await api.post('/admin/fun', { op: 'party', text: rest }); return print('✓ Party started', 'ok');
+      case 'decor': await api.post('/admin/fun', { op: 'decor', decor: a[0], hours: +a[1] || 0 }); return print(`✓ Decorations: ${a[0]}`, 'ok');
+      case 'announce': await api.post('/admin/announcement', { text: rest, color: 'blue' }); return print(rest ? '✓ Announcement posted' : '✓ Announcement removed', 'ok');
+      case 'poll': { const [qq, ...oo] = rest.split('|').map((x) => x.trim()); await api.post('/admin/polls', { op: 'create', question: qq, options: oo, hours: 72 }); return print('✓ Poll posted', 'ok'); }
+      case 'find': { const u = need(rest); manage(u); return print(`→ ${u.username}`, 'muted'); }
+      default: throw new Error(`Unknown command "${cmd}". Type help.`);
+    }
+  };
+  input.addEventListener('keydown', async (e) => {
+    if (e.key === 'ArrowUp') { if (hi > 0) input.value = history[--hi]; e.preventDefault(); return; }
+    if (e.key === 'ArrowDown') { input.value = hi < history.length - 1 ? history[++hi] : (hi = history.length, ''); e.preventDefault(); return; }
+    if (e.key !== 'Enter' || !input.value.trim()) return;
+    const line = input.value;
+    history.push(line); hi = history.length;
+    input.value = '';
+    print('> ' + line, 'cmd');
+    try { await run(line); } catch (err) { print('✗ ' + (err.message || err), 'err'); }
+  });
+  if (!consoleLines.length) print('Robis admin console. Type help for the commands. ↑ = last command.', 'muted');
+  body.replaceChildren(el('div', { class: 'adm-console', onclick: () => input.focus() }, out, el('div', { class: 'adm-console-row' }, el('span', { text: '>' }), input)),
+    el('div', { class: 'adm-cmds' }, CMDS.map(([c, d]) => el('button', { class: 'adm-cmd', title: d, onclick: () => { input.value = c.split(' ')[0] + ' '; input.focus(); } }, el('code', { text: c }), el('span', { class: 'muted small', text: d })))));
+  setTimeout(() => input.focus(), 50);
+}

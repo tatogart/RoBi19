@@ -14,6 +14,7 @@
 //   past: [{ key, name, progress, rewarded, rewards, hubId, ended }]
 import { buildHuntHub } from './seed/hunt.js';
 import { buildRelicsHub } from './seed/hunt2.js';
+import { buildThemedHub, HUB_THEMES } from './seed/hunt3.js';
 import { officialAccount } from './seed/seed.js';
 import { questFor, RUNES_TEXT } from './huntquests.js';
 
@@ -102,6 +103,8 @@ function cleanPrize(r, ladder = true) {
   else out.count = Math.max(1, Math.min(1000, Math.trunc(+r.count || 1)));
   return out;
 }
+// The hub maps a custom event can use.
+export const HUB_MAPS = ['relics', 'dimension', ...Object.keys(HUB_THEMES)];
 // Games that are never in the event (nothing to do in a house).
 const EXCLUDED_KEYS = ['happyhome'];
 
@@ -112,11 +115,14 @@ function customEvent(c) {
   (c.prizes || []).forEach((r, i) => { rewards['c' + (r.id || i)] = r; });
   const bonus = {};
   if (c.teamPrize) bonus.cteam = { ...c.teamPrize, team: true, how: `Everyone together reaches the team goal (${quests ? 'complete' : 'find'} at least 1)` };
-  if (c.hubPrize) bonus.chub = { ...c.hubPrize, hub: true, how: c.hub === 'relics' ? 'Solve the rune puzzle in the hub' : 'Collect all 6 star fragments in the hub' };
+  const theme = HUB_THEMES[c.hub];
+  if (c.hubPrize) bonus.chub = { ...c.hubPrize, hub: true, how: c.hub === 'relics' ? 'Solve the rune puzzle in the hub' : theme ? `Find all 6 ${theme.collectibles} in the hub` : 'Collect all 6 star fragments in the hub' };
   return {
     name: c.name, kind: c.kind, unit: quests ? 'quest' : 'find', units: quests ? 'quests' : 'finds', robits: c.robits, teamGoal: c.teamGoal,
     fragments: c.hub === 'relics' ? 0 : 6, description: c.description, rewards, bonus, custom: true, hubStyle: c.hub, quests: c.quests || {},
-    build: (games, prizes) => (c.hub === 'relics' ? buildRelicsHub(games, prizes, { name: c.name }) : buildHuntHub(games, prizes, { fragments: 6, name: c.name })),
+    build: (games, prizes) => (c.hub === 'relics' ? buildRelicsHub(games, prizes, { name: c.name })
+      : theme ? buildThemedHub(games, prizes, { theme: c.hub, name: c.name })
+        : buildHuntHub(games, prizes, { fragments: 6, name: c.name })),
   };
 }
 
@@ -591,7 +597,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
         name: /^the hunt/i.test(name) ? name : 'The Hunt: ' + name,
         description: cleanText(e.description, 500) || 'A new The Hunt event!',
         kind: e.kind === 'shards' ? 'shards' : 'quests',
-        hub: e.hub === 'dimension' ? 'dimension' : 'relics',
+        hub: HUB_MAPS.includes(e.hub) ? e.hub : 'relics',
         robits: Math.max(0, Math.min(1000, Math.trunc(+e.robits || 0))),
         teamGoal: Math.max(1, Math.min(100000, Math.trunc(+e.teamGoal || 30))),
         prizes,

@@ -33,35 +33,45 @@ export function confetti({ count = 140, colors = ['#00a2ff', '#02b757', '#ffc400
 }
 
 // ---------------------------------------------------------------- the Daily Spin
+// The wheel itself (also the preview in the Admin Panel).
+export function wheelEl(segments, size = 260) {
+  const step = 360 / segments.length;
+  return el('div', { class: 'spin-wheel', style: { background: `conic-gradient(${segments.map((s, i) => `${s.color} ${i * step}deg ${(i + 1) * step}deg`).join(',')})` } },
+    segments.map((s, i) => el('span', { class: 'spin-label no-i18n', style: { transform: `rotate(${i * step + step / 2}deg) translateY(-${Math.round(size * 0.37)}px)` }, text: String(s.label).replace('JACKPOT ', '★ ') })));
+}
 export async function spinDialog(onRobits) {
   let info;
   try { info = await api.get('/fun/spin'); } catch (e) { toast(e.message, 'error'); return; }
   const n = info.segments.length;
   const step = 360 / n;
-  const wheel = el('div', { class: 'spin-wheel', style: { background: `conic-gradient(${info.segments.map((s, i) => `${s.color} ${i * step}deg ${(i + 1) * step}deg`).join(',')})` } },
-    info.segments.map((s, i) => el('span', { class: 'spin-label no-i18n', style: { transform: `rotate(${i * step + step / 2}deg) translateY(-96px)` }, text: s.label.replace('JACKPOT ', '★ ') })));
+  const wheel = wheelEl(info.segments);
   const result = el('div', { class: 'spin-result' });
-  const streak = el('div', { class: 'small muted', text: tr(`Streak: ${info.streak} day${info.streak === 1 ? '' : 's'} in a row (spin every day for a bonus!)`) });
-  const btn = el('button', { class: 'btn btn-green btn-large', text: info.canSpin ? tr('SPIN!') : tr('Come back tomorrow'), disabled: !info.canSpin });
+  const streakText = (k) => tr(`Streak: ${k} day${k === 1 ? '' : 's'} in a row (spin every day for a bonus!)`);
+  const streak = el('div', { class: 'small muted', text: streakText(info.streak) });
+  const label = (free) => (free > 0 ? tr(`SPIN! (${free} free)`) : tr('SPIN!'));
+  const btn = el('button', { class: 'btn btn-green btn-large', text: !info.on ? tr('The wheel is resting') : info.canSpin ? label(info.spunToday ? info.freeSpins : 0) : tr('Come back tomorrow'), disabled: !info.canSpin });
+  let turns = 0;
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     let r;
     try { r = await api.post('/fun/spin', {}); } catch (e) { toast(e.message, 'error'); return; }
     // 5 full turns, then stop with the won segment under the pointer (at the top)
-    const end = 360 * 5 + (360 - (r.index * step + step / 2)) + (Math.random() - 0.5) * step * 0.6;
+    turns += 5;
+    const end = 360 * turns + (360 - (r.index * step + step / 2)) + (Math.random() - 0.5) * step * 0.6;
     wheel.style.transform = `rotate(${end}deg)`;
     setTimeout(() => {
       result.replaceChildren(el('b', { class: 'no-i18n', text: `🎉 ${tr('You won')}: ${tr(r.prize)}` }), ...(r.bonus ? [el('div', { class: 'small', text: tr(`+ R$ ${r.bonus} streak bonus (day ${r.streak})`) })] : []));
-      btn.textContent = tr('Come back tomorrow');
+      if (r.freeSpins > 0) { btn.textContent = label(r.freeSpins); btn.disabled = false; } else btn.textContent = tr('Come back tomorrow');
       confetti(r.jackpot ? { count: 260 } : {});
       onRobits && onRobits(r.robits);
-      streak.textContent = tr(`Streak: ${r.streak} day${r.streak === 1 ? '' : 's'} in a row (spin every day for a bonus!)`);
+      streak.textContent = streakText(r.streak);
     }, 4200);
   });
   modal({
     title: 'Daily Spin',
     width: 380,
     body: el('div', { class: 'spin-box' },
+      info.boost ? el('div', { class: 'spin-boost', text: tr(`x${info.boost.mult} BOOST: all Robits prizes are bigger right now!`) }) : null,
       el('div', { class: 'spin-wrap' }, el('div', { class: 'spin-pointer' }), wheel, el('div', { class: 'spin-hub' })),
       result, btn, streak),
     buttons: [{ text: 'Close' }],
@@ -90,3 +100,94 @@ export function installSecret(onRobits) {
 }
 
 export { fmtNum };
+
+// ---------------------------------------------------------------- live events
+// Decorations on every page, Robits rain and parties from the admins.
+const DECOR = {
+  snow: ['❄', '❅', '❆'], halloween: ['🎃', '🦇', '👻', '🕸️'], hearts: ['💖', '💗', '💕'],
+  confetti: ['🎉', '🎊', '✨'], leaves: ['🍂', '🍁', '🍃'], stars: ['✨', '⭐', '🌟'],
+};
+const hideKey = 'robis.decor.hidden';
+let decorBox = null;
+export function setDecor(name) {
+  let hidden = '';
+  try { hidden = localStorage.getItem(hideKey) || ''; } catch { /* private mode */ }
+  if (decorBox && decorBox.dataset.name === name) return;
+  if (decorBox) { decorBox.remove(); decorBox = null; }
+  if (!DECOR[name] || hidden === name || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const list = DECOR[name];
+  decorBox = el('div', { class: 'decor-layer decor-' + name, 'aria-hidden': 'true' },
+    Array.from({ length: 22 }, (_, i) => el('span', { class: 'decor-bit', text: list[i % list.length], style: {
+      left: `${(i * 4.6 + (i % 3) * 7) % 100}%`, animationDuration: `${9 + (i % 7) * 1.7}s`, animationDelay: `-${(i * 1.3) % 12}s`, fontSize: `${14 + (i % 4) * 5}px`,
+    } })));
+  decorBox.dataset.name = name;
+  const close = el('button', { class: 'decor-close', title: 'Hide decorations', text: '×', onclick: () => {
+    try { localStorage.setItem(hideKey, name); } catch { /* ignore */ }
+    decorBox.remove(); decorBox = null;
+  } });
+  decorBox.append(close);
+  document.body.append(decorBox);
+}
+
+function bigBanner(text, sub) {
+  const b = el('div', { class: 'live-banner' }, el('b', { class: 'no-i18n', text }), sub ? el('div', { class: 'small no-i18n', text: sub }) : null);
+  document.body.append(b);
+  setTimeout(() => b.classList.add('out'), 5000);
+  setTimeout(() => b.remove(), 5600);
+}
+
+export function startLive(onRobits) {
+  const key = 'robis.live.last';
+  let last = 0;
+  try { last = +(sessionStorage.getItem(key) || localStorage.getItem(key) || 0); } catch { /* ignore */ }
+  const check = async () => {
+    let r;
+    try { r = await api.get('/fun/live?since=' + last); } catch { return; }
+    setDecor(r.decor);
+    for (const e of r.events) {
+      if (e.type === 'rain') {
+        confetti({ count: 70, emoji: '💰' });
+        bigBanner(`${tr('Robits rain!')} +R$ ${fmtNum(e.amount)}`, e.text || `${tr('From')} ${e.by}`);
+        api.get('/auth/me').then((m) => m.user && onRobits && onRobits(m.user.robits)).catch(() => {});
+      } else if (e.type === 'party') {
+        confetti({ count: 200 });
+        if (e.emoji) setTimeout(() => confetti({ count: 40, emoji: e.emoji }), 600);
+        bigBanner(e.text, `${tr('From')} ${e.by}`);
+      }
+    }
+    last = Math.max(last, r.last);
+    try { localStorage.setItem(key, String(last)); } catch { /* ignore */ }
+    const nav = document.querySelector('.spin-nav');
+    if (nav) nav.classList.toggle('boost', !!r.boost);
+  };
+  check();
+  setInterval(check, 15000);
+}
+
+// ---------------------------------------------------------------- polls
+// The admins' polls on the home page: vote, then see the results.
+export async function pollCards() {
+  let polls;
+  try { ({ polls } = await api.get('/polls')); } catch { return null; }
+  if (!polls.length) return null;
+  const card = (p) => {
+    const box = el('div', { class: 'panel section poll-card' });
+    const draw = () => {
+      const voted = p.myVote !== null;
+      const max = Math.max(1, ...(p.counts || [0]));
+      box.replaceChildren(
+        el('div', { class: 'poll-head' }, el('span', { text: '📊' }), el('b', { class: 'no-i18n', text: p.question }), p.closed ? el('span', { class: 'pill', text: 'CLOSED' }) : null),
+        el('div', { class: 'poll-options' }, p.options.map((o, i) => (p.counts
+          ? el('div', { class: 'poll-result' + (p.myVote === i ? ' mine' : '') + (p.counts[i] === max && p.total ? ' top' : '') },
+            el('div', { class: 'poll-fill', style: { width: (p.total ? Math.round((p.counts[i] / p.total) * 100) : 0) + '%' } }),
+            el('span', { class: 'no-i18n', text: o + (p.myVote === i ? ' ✓' : '') }), el('b', { text: (p.total ? Math.round((p.counts[i] / p.total) * 100) : 0) + '%' }))
+          : el('button', { class: 'btn poll-option no-i18n', text: o, onclick: async () => {
+            try { ({ poll: p } = await api.post(`/polls/${p.id}/vote`, { option: i })); draw(); confetti({ count: 50 }); } catch (e) { toast(e.message, 'error'); }
+          } })))),
+        el('div', { class: 'small muted', text: voted || p.closed ? tr(`${p.total} vote${p.total === 1 ? '' : 's'}`) : tr('Vote to see the results!') }));
+    };
+    draw();
+    return box;
+  };
+  return el('div', {}, polls.map(card));
+}

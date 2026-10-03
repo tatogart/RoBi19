@@ -1608,3 +1608,86 @@ test('fun: daily spin, the secret code and pokes', async () => {
   assert.equal(pokes[0].from.username, 'Spinner');
   assert.equal((await call('GET', '/pokes', null, b)).data.pokes.length, 0);
 });
+
+test('new event maps: a quick event on every themed map starts without script errors', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  for (const hub of ['winter', 'spooky', 'candy', 'ocean']) {
+    const c = (await call('POST', '/admin/hunt/custom', { event: { name: 'Map ' + hub, kind: 'quests', hub, robits: 10, teamGoal: 5,
+      prizes: [{ name: 'Map Hat', type: 'Hat', model: 'cap', color: '#ff0000', count: 1 }], hubPrize: { name: 'Map Halo', type: 'Hat', model: 'halo', color: '#ffffff' } } }, admin)).data;
+    assert.ok(c.key, hub);
+    assert.equal((await call('POST', '/admin/hunt/control', { action: 'launch', key: c.key, public: false, endsAt: Date.now() + 86400e3 }, admin)).status, 200);
+    const h = (await call('GET', '/hunt', null, admin)).data;
+    assert.equal(h.hubStyle, hub);
+    assert.ok(h.rewards.some((r) => r.how && /in the hub/.test(r.how)));
+    const s = await join(admin, { placeId: h.hubId });
+    await s.wait((m) => m.t === 'welcome');
+    await new Promise((r) => setTimeout(r, 500));
+    const errors = s.inbox.filter((m) => (m.t === 'output' && m.level === 'error') || m.t === 'error');
+    assert.deepEqual(errors, [], hub);
+    s.ws.close();
+  }
+  await call('POST', '/admin/hunt/control', { action: 'launch', key: 'dimension', public: true }, admin);
+});
+
+test('Admin Panel 3.0: the Daily Spin settings, live events, polls and outfits', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = await call('POST', '/auth/signup', { username: 'WheelKid', password: 'secret123' });
+  const k = kid.cookie;
+  // only admins
+  assert.equal((await call('GET', '/admin/spin', null, k)).status, 403);
+  let s = (await call('GET', '/admin/spin', null, admin)).data;
+  assert.ok(s.config.segments.length >= 2);
+  // a new wheel: two prizes
+  assert.equal((await call('POST', '/admin/spin', { op: 'save', segments: [{ label: 'Only', robits: 5 }] }, admin)).status, 400);
+  s = (await call('POST', '/admin/spin', { op: 'save', segments: [{ label: 'R$ 7', robits: 7, color: '#ff0000', w: 1 }, { label: 'R$ 9', robits: 9, color: '#00ff00', w: 1 }], streakBonus: 0 }, admin)).data;
+  assert.deepEqual((await call('GET', '/fun/spin', null, k)).data.segments.map((x) => x.label), ['R$ 7', 'R$ 9']);
+  // the next prize for this player, then a boost
+  await call('POST', '/admin/spin', { op: 'rig', target: 'WheelKid', index: 1 }, admin);
+  await call('POST', '/admin/spin', { op: 'boost', mult: 3, hours: 1 }, admin);
+  const before = (await call('GET', '/auth/me', null, k)).data.user.robits;
+  let r = (await call('POST', '/fun/spin', {}, k)).data;
+  assert.equal(r.index, 1);
+  assert.equal(r.robits, before + 27);
+  assert.equal((await call('POST', '/fun/spin', {}, k)).status, 400);
+  // free spins work on the same day
+  await call('POST', '/admin/spin', { op: 'give', target: 'WheelKid', count: 2 }, admin);
+  assert.equal((await call('GET', '/fun/spin', null, k)).data.canSpin, true);
+  r = (await call('POST', '/fun/spin', {}, k)).data;
+  assert.equal(r.freeSpins, 1);
+  // turned off
+  await call('POST', '/admin/spin', { op: 'toggle', on: false }, admin);
+  assert.equal((await call('POST', '/fun/spin', {}, k)).status, 400);
+  await call('POST', '/admin/spin', { op: 'toggle', on: true }, admin);
+  await call('POST', '/admin/spin', { op: 'boost', mult: 1, hours: 0 }, admin);
+  assert.ok((await call('GET', '/admin/log', null, admin)).data.log.some((e) => /Daily Spin/.test(e.action)));
+  // Robits rain for everyone, a party, decorations
+  const kidBefore = (await call('GET', '/auth/me', null, k)).data.user.robits;
+  assert.equal((await call('POST', '/admin/fun', { op: 'rain', amount: 15, target: 'all' }, k)).status, 403);
+  await call('POST', '/admin/fun', { op: 'rain', amount: 15, target: 'all', text: 'Yay' }, admin);
+  assert.equal((await call('GET', '/auth/me', null, k)).data.user.robits, kidBefore + 15);
+  await call('POST', '/admin/fun', { op: 'party', text: 'Party!' }, admin);
+  await call('POST', '/admin/fun', { op: 'decor', decor: 'snow', hours: 1 }, admin);
+  const live = (await call('GET', '/fun/live?since=0', null, k)).data;
+  assert.equal(live.decor, 'snow');
+  assert.ok(live.events.some((e) => e.type === 'rain' && e.amount === 15) && live.events.some((e) => e.type === 'party'));
+  assert.ok(!live.events.some((e) => e.users));
+  assert.equal((await call('GET', `/fun/live?since=${live.last}`, null, k)).data.events.length, 0);
+  await call('POST', '/admin/fun', { op: 'decor', decor: 'none' }, admin);
+  // a poll: vote once, results after voting
+  assert.equal((await call('POST', '/admin/polls', { op: 'create', question: 'Best?', options: ['A'] }, admin)).status, 400);
+  await call('POST', '/admin/polls', { op: 'create', question: 'Best color?', options: ['Red', 'Blue'], hours: 24 }, admin);
+  let p = (await call('GET', '/polls', null, k)).data.polls.find((x) => x.question === 'Best color?');
+  assert.equal(p.counts, null);
+  p = (await call('POST', `/polls/${p.id}/vote`, { option: 1 }, k)).data.poll;
+  assert.deepEqual(p.counts, [0, 1]);
+  assert.equal((await call('POST', `/polls/${p.id}/vote`, { option: 0 }, k)).status, 400);
+  await call('POST', '/admin/polls', { op: 'close', id: p.id }, admin);
+  assert.equal((await call('POST', `/polls/${p.id}/vote`, { option: 0 }, admin)).status, 400);
+  // outfits
+  let o = (await call('POST', '/avatar/outfits', { name: 'Cool look' }, k)).data.outfits;
+  assert.equal(o.length, 1);
+  assert.equal(o[0].name, 'Cool look');
+  assert.ok(Array.isArray(o[0].avatar.wearing));
+  o = (await call('POST', '/avatar/outfits', { delete: o[0].id }, k)).data.outfits;
+  assert.equal(o.length, 0);
+});

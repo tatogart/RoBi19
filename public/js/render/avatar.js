@@ -13,7 +13,39 @@ export function resolveItems(avatar) {
     else if (it.type === 'Gear') r.gear = it.data;
     else if (it.type === 'Pet') r.pet = it.data;
   }
+  if (!avatar?.bare) defaultClothing(r);
   return r;
+}
+
+// No one walks around naked: like Roblox, a body without a shirt or pants gets
+// plain default clothes when that part is skin coloured (so the classic
+// "noob" colours without clothes still look like before).
+const DEFAULT_SHIRTS = ['#2f6fb3', '#c0392b', '#27ae60', '#7d4cc2', '#d35400', '#1f8a8a'];
+const DEFAULT_PANTS = ['#2d2f38', '#1f3a5f', '#4a3626'];
+function rgbOf(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+export function skinLike(hex, head) {
+  const c = rgbOf(hex);
+  if (!c) return true; // no colour = the default skin
+  const h = rgbOf(head);
+  if (h && Math.hypot(c[0] - h[0], c[1] - h[1], c[2] - h[2]) < 70) return true;
+  const [r, g, b] = c.map((x) => x / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  if (d < 0.04) return false; // greys, white and black are not skin
+  const s = d / (1 - Math.abs(2 * l - 1));
+  let hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  hue = (hue * 60 + 360) % 360;
+  return (hue <= 50 || hue >= 345) && s > 0.12 && s < 0.85 && l > 0.25 && l < 0.92 && r >= g && g >= b * 0.85;
+}
+function defaultClothing(r) {
+  const bc = r.bodyColors || {};
+  const seed = [...String(bc.head || '') + (bc.torso || '')].reduce((n, ch) => n * 31 + ch.charCodeAt(0), 7) >>> 0;
+  if (!r.shirt && skinLike(bc.torso, bc.head)) r.shirt = { color: DEFAULT_SHIRTS[seed % DEFAULT_SHIRTS.length], accent: '#ffffff', pattern: 'plain', isDefault: true };
+  if (!r.pants && (skinLike(bc.leftLeg, bc.head) || skinLike(bc.rightLeg, bc.head))) r.pants = { color: DEFAULT_PANTS[seed % DEFAULT_PANTS.length], accent: '#000000', pattern: 'plain', isDefault: true };
 }
 
 // ------------------------------------------------------------ custom pictures (BETA items)

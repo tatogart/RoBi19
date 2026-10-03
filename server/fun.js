@@ -1,9 +1,15 @@
-// Fun stuff: the daily spin (a prize wheel once a day, with a streak bonus),
-// the secret code (a hidden badge) and pokes between friends.
+// Fun stuff: the Daily Spin (a prize wheel once a day, with a streak bonus; set
+// up by the admins: prizes, chances, boosts, free spins), the secret code (a
+// hidden badge), pokes between friends, live events from the admins (Robits
+// rain, a party, decorations on the site), polls and saved outfits.
 import { officialAccount } from './seed/seed.js';
 
 const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
-// The wheel: w = how likely (out of the total).
+const HEX = /^#[0-9a-f]{6}$/i;
+const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
+const int = (v, lo, hi, d = lo) => { const n = Math.trunc(+v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
+
+// The wheel the first time: w = how likely (out of the total).
 export const SPIN = [
   { label: 'R$ 10', robits: 10, color: '#00a2ff', w: 28 },
   { label: 'R$ 25', robits: 25, color: '#02b757', w: 24 },
@@ -12,10 +18,11 @@ export const SPIN = [
   { label: 'R$ 250', robits: 250, color: '#ff4d8d', w: 8 },
   { label: 'R$ 500', robits: 500, color: '#e8590c', w: 4 },
   { label: 'Lucky Cap', item: 'spinCap', color: '#00c2c2', w: 3 },
-  { label: 'JACKPOT R$ 1,000', robits: 1000, color: '#ffc400', w: 2 },
+  { label: 'JACKPOT R$ 1,000', robits: 1000, color: '#ffc400', w: 2, jackpot: true },
 ];
+export const DECORS = ['none', 'snow', 'halloween', 'hearts', 'confetti', 'leaves', 'stars'];
 
-export function installFun(api, { db, requireUser, bad, log, giveSerial, publicUser }) {
+export function installFun(api, { db, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence }) {
   const D = db.data;
   if (!D.funItems) D.funItems = {};
   if (!D.pokes) D.pokes = [];
@@ -29,6 +36,29 @@ export function installFun(api, { db, requireUser, bad, log, giveSerial, publicU
     };
     D.funItems.spinCap = id;
   }
+  if (!D.fun) D.fun = {};
+  const F = D.fun;
+  if (!F.spin) F.spin = { on: true, streakBonus: 10, maxStreak: 7, segments: SPIN.map((s) => ({ ...s, item: s.item ? D.funItems[s.item] : 0 })) };
+  if (!F.stats) F.stats = {};
+  if (!F.recent) F.recent = [];
+  if (!F.rig) F.rig = {};
+  if (!F.events) F.events = [];
+  if (!F.polls) F.polls = [];
+  if (!F.decor) F.decor = { name: 'none', until: 0 };
+  const C = F.spin;
+
+  const boost = () => (C.boost && C.boost.until > Date.now() ? C.boost : null);
+  const decor = () => (F.decor.name !== 'none' && (!F.decor.until || F.decor.until > Date.now()) ? F.decor.name : 'none');
+  const isOnline = (u) => presence(u).status !== 'offline';
+  const players = () => Object.values(D.users).filter((u) => !u.system);
+  // 'online', 'all', or a player's name / id
+  const targets = (t) => {
+    const s = String(t || '').trim();
+    if (s === 'all') return players();
+    if (s === 'online') return players().filter(isOnline);
+    const u = /^\d+$/.test(s) ? D.users[+s] : Object.values(D.users).find((x) => x.username.toLowerCase() === s.toLowerCase());
+    return u && !u.system ? [u] : [];
+  };
 
   // ---------------------------------------------------------------- daily spin
   const streakOf = (u) => (u.spinDay === dayKey(Date.now() - 86400e3) || u.spinDay === dayKey() ? u.spinStreak || 0 : 0);
@@ -36,35 +66,115 @@ export function installFun(api, { db, requireUser, bad, log, giveSerial, publicU
     const u = req.user;
     const today = dayKey();
     const tomorrow = new Date(today + 'T00:00:00Z').getTime() + 86400e3;
-    res.json({ segments: SPIN.map((s) => ({ label: s.label, color: s.color })), canSpin: u.spinDay !== today, nextAt: tomorrow, streak: streakOf(u) });
+    res.json({
+      on: !!C.on, segments: C.segments.map((s) => ({ label: s.label, color: s.color })),
+      canSpin: !!C.on && (u.spinDay !== today || (u.freeSpins || 0) > 0), freeSpins: u.freeSpins || 0, spunToday: u.spinDay === today,
+      nextAt: tomorrow, streak: streakOf(u), boost: boost() ? { mult: C.boost.mult, until: C.boost.until } : null,
+    });
   });
   api.post('/fun/spin', requireUser, (req, res) => {
     const u = req.user;
     const today = dayKey();
-    if (u.spinDay === today) return bad(res, 'You already spun today. Come back tomorrow!');
-    const total = SPIN.reduce((n, s) => n + s.w, 0);
-    let r = Math.random() * total;
-    let index = 0;
-    while (r >= SPIN[index].w) { r -= SPIN[index].w; index++; }
-    const seg = SPIN[index];
-    const streak = Math.min(7, (u.spinDay === dayKey(Date.now() - 86400e3) ? u.spinStreak || 0 : 0) + 1);
-    u.spinDay = today;
-    u.spinStreak = streak;
+    if (!C.on) return bad(res, 'The Daily Spin is turned off right now.');
+    const free = u.spinDay === today;
+    if (free && !(u.freeSpins > 0)) return bad(res, 'You already spun today. Come back tomorrow!');
+    let index;
+    if (Number.isInteger(F.rig[u.id]) && C.segments[F.rig[u.id]]) { index = F.rig[u.id]; delete F.rig[u.id]; } else {
+      const total = C.segments.reduce((n, s) => n + s.w, 0);
+      let r = Math.random() * total;
+      index = 0;
+      while (index < C.segments.length - 1 && r >= C.segments[index].w) { r -= C.segments[index].w; index++; }
+    }
+    const seg = C.segments[index];
+    let streak = u.spinStreak || 0;
+    if (free) u.freeSpins--;
+    else {
+      streak = Math.min(C.maxStreak || 7, (u.spinDay === dayKey(Date.now() - 86400e3) ? u.spinStreak || 0 : 0) + 1);
+      u.spinDay = today;
+      u.spinStreak = streak;
+    }
     let prize = seg.label;
     let robits = seg.robits || 0;
     if (seg.item) {
-      const it = D.items[D.funItems[seg.item]];
+      const it = D.items[seg.item];
       const inv = D.inventory[u.id] || (D.inventory[u.id] = []);
-      if (it && !inv.includes(it.id)) { inv.push(it.id); giveSerial(it, u.id); prize = it.name; } else { robits = 250; prize = 'R$ 250 (you already have the Lucky Cap)'; }
+      if (it && !inv.includes(it.id)) { inv.push(it.id); giveSerial(it, u.id); prize = it.name; } else { robits = robits || 250; prize = `R$ ${robits} (you already have ${it ? it.name : 'it'})`; }
     }
-    // a streak of days in a row: +10 Robits for every day (up to 7)
-    const bonus = streak > 1 ? streak * 10 : 0;
+    const b = boost();
+    if (b && robits) { robits = Math.round(robits * b.mult); prize = seg.item ? prize : `R$ ${robits.toLocaleString('en-US')} (x${b.mult} boost)`; }
+    // days in a row: +streakBonus Robits for every day (not for free spins)
+    const bonus = !free && streak > 1 ? streak * (C.streakBonus || 0) : 0;
     if (robits + bonus) {
       u.robits += robits + bonus;
       log(u.id, robits + bonus, `Daily Spin: ${prize}${bonus ? ` + streak bonus R$ ${bonus}` : ''}`);
     }
+    const st = F.stats[today] || (F.stats[today] = { spins: 0, paid: 0, items: 0, jackpots: 0 });
+    st.spins++; st.paid += robits + bonus; if (seg.item) st.items++; if (seg.jackpot || index === C.segments.length - 1) st.jackpots++;
+    if (Object.keys(F.stats).length > 30) delete F.stats[Object.keys(F.stats).sort()[0]];
+    F.recent.push({ uid: u.id, prize, t: Date.now() });
+    if (F.recent.length > 50) F.recent.shift();
     db.save();
-    res.json({ index, prize, bonus, streak, robits: u.robits, jackpot: index === SPIN.length - 1 });
+    res.json({ index, prize, bonus, streak, robits: u.robits, jackpot: !!seg.jackpot, freeSpins: u.freeSpins || 0 });
+  });
+
+  // ---- the admins: the wheel's prizes and chances, boosts, free spins
+  const spinAdmin = () => {
+    const days = Object.keys(F.stats).sort().slice(-14).map((d) => ({ day: d, ...F.stats[d] }));
+    return {
+      config: C, boost: boost(),
+      stats: { days, today: F.stats[dayKey()] || { spins: 0, paid: 0, items: 0, jackpots: 0 } },
+      recent: F.recent.slice().reverse().slice(0, 30).map((r) => ({ ...r, username: D.users[r.uid]?.username || '?' })),
+      items: Object.fromEntries(C.segments.filter((s) => s.item && D.items[s.item]).map((s) => [s.item, { id: s.item, name: D.items[s.item].name, type: D.items[s.item].type, data: D.items[s.item].data }])),
+      rigged: Object.entries(F.rig).map(([uid, i]) => ({ uid: +uid, username: D.users[uid]?.username || '?', index: i })),
+    };
+  };
+  api.get('/admin/spin', requireAdmin, (req, res) => res.json(spinAdmin()));
+  api.post('/admin/spin', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    if (b.op === 'save') {
+      const segs = Array.isArray(b.segments) ? b.segments.slice(0, 12) : [];
+      if (segs.length < 2) return bad(res, 'The wheel needs at least 2 prizes.');
+      const out = [];
+      for (const s of segs) {
+        const label = clean(s.label, 24);
+        if (!label) return bad(res, 'Every prize needs a name on the wheel.');
+        const item = int(s.item, 0, 1e12, 0);
+        if (item && !D.items[item]) return bad(res, `Item #${item} does not exist.`);
+        const robits = int(s.robits, 0, 100000, 0);
+        if (!item && !robits) return bad(res, `"${label}": give Robits or an item.`);
+        out.push({ label, robits, item, color: HEX.test(s.color) ? s.color : '#00a2ff', w: Math.max(0.1, Math.min(1000, +s.w || 1)), jackpot: !!s.jackpot });
+      }
+      C.segments = out;
+      C.on = b.on !== false;
+      C.streakBonus = int(b.streakBonus, 0, 1000, 10);
+      C.maxStreak = int(b.maxStreak, 1, 30, 7);
+    } else if (b.op === 'toggle') {
+      C.on = !!b.on;
+    } else if (b.op === 'boost') {
+      const mult = Math.max(1, Math.min(10, +b.mult || 1));
+      const hours = Math.max(0, Math.min(168, +b.hours || 0));
+      C.boost = mult > 1 && hours ? { mult, until: Date.now() + hours * 3600e3 } : null;
+    } else if (b.op === 'give' || b.op === 'reset') {
+      const list = targets(b.target);
+      if (!list.length) return bad(res, 'No players found.');
+      const n = int(b.count, 1, 10, 1);
+      for (const u of list) {
+        if (b.op === 'give') u.freeSpins = Math.min(50, (u.freeSpins || 0) + n);
+        else u.spinDay = '';
+      }
+      db.save();
+      return res.json({ ok: true, players: list.length, ...spinAdmin() });
+    } else if (b.op === 'rig') {
+      const [u] = targets(b.target);
+      if (!u || targets(b.target).length !== 1) return bad(res, 'Write one player\'s name.');
+      if (b.index === null || b.index === undefined || b.index === '') delete F.rig[u.id];
+      else {
+        const i = int(b.index, 0, C.segments.length - 1, 0);
+        F.rig[u.id] = i;
+      }
+    } else return bad(res, 'Unknown action.');
+    db.save();
+    res.json({ ok: true, ...spinAdmin() });
   });
 
   // ---------------------------------------------------------------- the secret code
@@ -100,5 +210,122 @@ export function installFun(api, { db, requireUser, bad, log, giveSerial, publicU
     D.pokes = D.pokes.filter((p) => p.to !== req.user.id);
     db.save();
     res.json({ pokes: mine.map((p) => ({ id: p.id, from: publicUser(D.users[p.from]), created: p.created })) });
+  });
+
+  // ---------------------------------------------------------------- live events
+  // Robits rain (everyone online, or everyone, gets Robits and sees it rain),
+  // a party (confetti + a message on every open page) and decorations.
+  // Pages ask GET /fun/live every 15 seconds (with the newest event id they saw).
+  api.get('/fun/live', (req, res) => {
+    const since = int(req.query.since, 0, 1e15, 0);
+    const now = Date.now();
+    const events = F.events.filter((e) => e.id > since && now - e.created < 5 * 60e3 && (!e.users || (req.user && e.users.includes(req.user.id))))
+      .map(({ users, ...e }) => e);
+    res.json({ last: F.events.at(-1)?.id || 0, decor: decor(), boost: boost() ? { mult: C.boost.mult, until: C.boost.until } : null, events });
+  });
+  const pushEvent = (e) => {
+    F.events.push({ id: (F.events.at(-1)?.id || 0) + 1, created: Date.now(), ...e });
+    F.events = F.events.filter((x) => Date.now() - x.created < 10 * 60e3).slice(-50);
+  };
+  api.post('/admin/fun', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    if (b.op === 'rain') {
+      const amount = int(b.amount, 1, 10000, 0);
+      if (!amount) return bad(res, 'How many Robits?');
+      const list = b.target === 'all' ? players() : players().filter(isOnline);
+      if (!list.length) return bad(res, 'Nobody is online right now.');
+      for (const u of list) { u.robits += amount; log(u.id, amount, `Robits rain from ${req.user.username}`); }
+      pushEvent({ type: 'rain', amount, text: clean(b.text, 120), by: req.user.username, users: list.map((u) => u.id) });
+      db.save();
+      return res.json({ ok: true, players: list.length });
+    }
+    if (b.op === 'party') {
+      pushEvent({ type: 'party', text: clean(b.text, 120) || 'Party time!', by: req.user.username, emoji: clean(b.emoji, 4) });
+      db.save();
+      return res.json({ ok: true });
+    }
+    if (b.op === 'decor') {
+      if (!DECORS.includes(b.decor)) return bad(res, 'Unknown decoration.');
+      const hours = Math.max(0, Math.min(24 * 60, +b.hours || 0));
+      F.decor = { name: b.decor, until: b.decor !== 'none' && hours ? Date.now() + hours * 3600e3 : 0 };
+      db.save();
+      return res.json({ ok: true, decor: decor() });
+    }
+    bad(res, 'Unknown action.');
+  });
+  api.get('/admin/fun', requireAdmin, (req, res) => {
+    res.json({ decor: F.decor, decors: DECORS, online: players().filter(isOnline).length, players: players().length,
+      events: F.events.slice().reverse().map(({ users, ...e }) => ({ ...e, players: users ? users.length : null })) });
+  });
+
+  // ---------------------------------------------------------------- polls
+  const pollView = (p, u) => {
+    const votes = Object.values(p.votes);
+    const mine = u ? p.votes[u.id] : undefined;
+    const done = p.closed || (p.ends && p.ends < Date.now());
+    return {
+      id: p.id, question: p.question, options: p.options, created: p.created, ends: p.ends, closed: !!done,
+      total: votes.length, myVote: mine ?? null,
+      counts: mine !== undefined || done ? p.options.map((_, i) => votes.filter((v) => v === i).length) : null,
+    };
+  };
+  api.get('/polls', (req, res) => {
+    const now = Date.now();
+    const list = F.polls.filter((p) => !p.closed && (!p.ends || p.ends > now) || (now - (p.closedAt || p.ends || 0) < 24 * 3600e3 && (p.closed || p.ends)))
+      .slice(-3).reverse();
+    res.json({ polls: list.map((p) => pollView(p, req.user)) });
+  });
+  api.post('/polls/:id/vote', requireUser, (req, res) => {
+    const p = F.polls.find((x) => x.id === +req.params.id);
+    if (!p) return bad(res, 'Poll not found', 404);
+    if (p.closed || (p.ends && p.ends < Date.now())) return bad(res, 'This poll is closed.');
+    const i = int(req.body?.option, -1, p.options.length - 1, -1);
+    if (i < 0) return bad(res, 'Pick an answer.');
+    if (p.votes[req.user.id] !== undefined) return bad(res, 'You already voted.');
+    p.votes[req.user.id] = i;
+    db.save();
+    res.json({ poll: pollView(p, req.user) });
+  });
+  api.get('/admin/polls', requireAdmin, (req, res) => {
+    res.json({ polls: F.polls.slice().reverse().map((p) => ({ ...pollView(p, null), counts: p.options.map((_, i) => Object.values(p.votes).filter((v) => v === i).length), by: p.by })) });
+  });
+  api.post('/admin/polls', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    if (b.op === 'create') {
+      const question = clean(b.question, 140);
+      const options = (Array.isArray(b.options) ? b.options : []).map((o) => clean(o, 60)).filter(Boolean).slice(0, 6);
+      if (question.length < 3) return bad(res, 'Write the question.');
+      if (options.length < 2) return bad(res, 'A poll needs at least 2 answers.');
+      const hours = Math.max(0, Math.min(24 * 30, +b.hours || 0));
+      F.polls.push({ id: (F.polls.at(-1)?.id || 0) + 1, question, options, votes: {}, created: Date.now(), ends: hours ? Date.now() + hours * 3600e3 : 0, closed: false, by: req.user.username });
+      if (F.polls.length > 50) F.polls.shift();
+    } else {
+      const p = F.polls.find((x) => x.id === +b.id);
+      if (!p) return bad(res, 'Poll not found', 404);
+      if (b.op === 'close') { p.closed = true; p.closedAt = Date.now(); } else if (b.op === 'delete') F.polls = F.polls.filter((x) => x !== p);
+      else return bad(res, 'Unknown action.');
+    }
+    db.save();
+    res.json({ ok: true });
+  });
+
+  // ---------------------------------------------------------------- outfits
+  // Up to 12 saved looks (body colours + what's worn); wearing one goes through
+  // PUT /avatar, so items the player no longer owns are left out.
+  api.get('/avatar/outfits', requireUser, (req, res) => res.json({ outfits: req.user.outfits || [] }));
+  api.post('/avatar/outfits', requireUser, (req, res) => {
+    const u = req.user;
+    const list = u.outfits || (u.outfits = []);
+    const b = req.body || {};
+    if (b.delete) {
+      u.outfits = list.filter((o) => o.id !== +b.delete);
+    } else {
+      if (list.length >= 12) return bad(res, 'You can save up to 12 outfits. Delete one first.');
+      const name = clean(b.name, 30) || `Outfit ${list.length + 1}`;
+      const a = u.avatar || {};
+      list.push({ id: (list.at(-1)?.id || 0) + 1, name, avatar: { bodyColors: { ...(a.bodyColors || {}) }, wearing: [...(a.wearing || [])] }, created: Date.now() });
+    }
+    db.save();
+    res.json({ outfits: u.outfits });
   });
 }

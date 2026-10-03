@@ -2057,6 +2057,9 @@ export function createApi(db, manager, opts = {}) {
     gamedelete: () => 'Deleted game',
     promocodes: (b) => (b.op ? `Promo code ${String(b.code || '').toUpperCase()}: ${b.op}` : `Made ${b.code ? 'promo code ' + String(b.code).toUpperCase() : (Math.trunc(+b.count || 1)) + ' promo code(s)'}: R$${Math.trunc(+b.robits || 0)}${(b.items || []).length ? ' + ' + b.items.length + ' item(s)' : ''}${MEMBERSHIPS[b.membership] && b.membership !== 'None' ? ' + ' + MEMBERSHIPS[b.membership].name + (+b.membershipDays ? ' ' + Math.trunc(+b.membershipDays) + 'd' : '') : ''}`),
     donate: () => 'Changed donate prices',
+    spin: (b) => `Daily Spin: ${{ save: 'changed the wheel', toggle: b.on ? 'turned on' : 'turned off', boost: +b.mult > 1 && +b.hours ? `x${+b.mult} boost for ${+b.hours}h` : 'boost off', give: `+${Math.trunc(+b.count || 1)} free spin(s) to ${String(b.target || '').slice(0, 30)}`, reset: `new spin for ${String(b.target || '').slice(0, 30)}`, rig: `next prize for ${String(b.target || '').slice(0, 30)}` }[b.op] || b.op}`,
+    fun: (b) => (b.op === 'rain' ? `Robits rain: R$${Math.trunc(+b.amount || 0)} to ${b.target === 'all' ? 'everyone' : 'everyone online'}` : b.op === 'party' ? `Party: ${String(b.text || '').slice(0, 80)}` : `Decorations: ${b.decor}${+b.hours ? ` for ${+b.hours}h` : ''}`),
+    polls: (b) => (b.op === 'create' ? `Poll: ${String(b.question || '').slice(0, 100)}` : `Poll #${+b.id}: ${b.op}`),
     hunt: (b) => (b.action ? `The Hunt: ${b.action}${b.key ? ' ' + b.key : ''}${b.action === 'schedule' ? ' (times)' : ''}` : b.user ? `The Hunt: ${b.take ? 'took' : 'gave'} ${b.all ? 'all tokens' : 'a token'} ${b.take ? 'from' : 'to'} ${String(b.user).slice(0, 30)}` : `The Hunt settings${b.public !== undefined ? (b.public ? ' (open)' : ' (private)') : ''}`),
   };
   api.use('/admin', (req, res, next) => {
@@ -2497,7 +2500,7 @@ export function createApi(db, manager, opts = {}) {
 
   installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial });
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
-  installFun(api, { db, requireUser, bad, log, giveSerial, publicUser });
+  installFun(api, { db, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });
 

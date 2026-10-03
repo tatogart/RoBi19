@@ -1,6 +1,6 @@
 import { initPage, setRobits, socialBanner, SITE } from '../layout.js';
 import { api } from '../api.js';
-import { spinDialog } from '../fun.js';
+import { spinDialog, pollCards } from '../fun.js';
 import { el, gameCard, avatarCard, headshotImg, toast, spinner, MEMBERSHIP, joinFriendDialog, nameBadges } from '../ui.js';
 
 const me = await initPage({ active: 'home' });
@@ -31,6 +31,11 @@ app.append(el('div', { class: 'panel section row spin-banner' },
   el('span', { class: 'spin-mini' }),
   el('div', { class: 'spacer' }, el('b', { text: 'Daily Spin' }), el('div', { class: 'small muted', text: 'Spin the wheel once a day: Robits, a rare hat or the R$ 1,000 jackpot!' })),
   el('button', { class: 'btn btn-primary', text: 'Spin', onclick: () => spinDialog(setRobits) })));
+
+// The admins' polls
+const pollsBox = el('div');
+app.append(pollsBox);
+pollCards().then((c) => { if (c) pollsBox.replaceWith(c); });
 
 function section(title, href, content) {
   return el('div', { class: 'section' },
