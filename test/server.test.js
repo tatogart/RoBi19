@@ -1379,3 +1379,63 @@ test('The Hunt event manager: launch a quest event, quests in games, end it', as
   await call('POST', '/admin/hunt/control', { action: 'launch', key: 'dimension', public: true }, admin);
   await call('POST', '/admin/hunt', { autoPlayers: keepAuto, games: keepGames }, admin);
 });
+
+test('The Hunt private preview: only testers, on their own servers; first win counts; custom events', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const other = await call('POST', '/auth/signup', { username: 'OtherAdmin', password: 'secret123' });
+  await call('POST', `/admin/users/${other.data.user.id}/admin`, { isAdmin: true }, admin);
+  const player = (await call('POST', '/auth/signup', { username: 'PreviewPlayer', password: 'secret123' })).cookie;
+  // a game whose quest is "get 1 more Wins": the script gives a win after 6 s
+  const maker = (await call('POST', '/auth/signup', { username: 'WinMaker', password: 'secret123' })).cookie;
+  const wg = (await call('POST', '/games', { name: 'First Win Game', template: 'baseplate' }, maker)).data.game;
+  const place = (await call('GET', `/games/${wg.id}/place`, null, maker)).data.place;
+  place.services.ServerScriptService.ch.push({ c: 'Script', p: { Name: 'Wins', Source: 'game:GetService("Players").PlayerAdded:Connect(function(p)\nlocal ls = Instance.new("Folder") ls.Name = "leaderstats" ls.Parent = p\nlocal w = Instance.new("IntValue") w.Name = "Wins" w.Parent = ls\nwait(6) w.Value = w.Value + 1\nend)' } });
+  await call('PUT', `/games/${wg.id}/place`, { place }, maker);
+  await call('PATCH', `/games/${wg.id}`, { isPublic: true }, maker);
+  let a = (await call('GET', '/admin/hunt', null, admin)).data;
+  const keepGames = a.games, keepAuto = a.autoPlayers;
+  a = (await call('POST', '/admin/hunt/control', { action: 'launch', key: 'relics', public: false }, admin)).data;
+  assert.deepEqual(a.testers.map((t) => t.username), ['Tester_1']);
+  await call('POST', '/admin/hunt', { autoPlayers: 0, games: [wg.id] }, admin);
+  await call('POST', '/admin/hunt/quest', { gameId: wg.id, quest: { type: 'gain', name: 'Wins', target: 1, text: 'Win once' } }, admin);
+  // other admins and players don't see the preview
+  assert.equal((await call('GET', '/hunt', null, other.cookie)).data.visible, false);
+  assert.equal((await call('GET', '/auth/me', null, other.cookie)).data.user.hunt, false);
+  const h = (await call('GET', '/hunt', null, admin)).data;
+  assert.equal(h.visible, true);
+  const hubTry = await join(other.cookie, { placeId: h.hubId });
+  assert.equal((await hubTry.wait((m) => m.t === 'welcome' || m.t === 'error')).msg, 'The Hunt is not open yet.');
+  // the tester plays on an own server; the player on a normal one without the quest
+  const t = await join(admin, { placeId: wg.id });
+  const tw = await t.wait((m) => m.t === 'welcome');
+  assert.equal((await t.wait((m) => m.t === 'huntQuest')).text, 'Win once');
+  const p = await join(player, { placeId: wg.id });
+  const pw = await p.wait((m) => m.t === 'welcome');
+  assert.notEqual(pw.serverId, tw.serverId);
+  assert.ok(!(await call('GET', `/games/${wg.id}/servers`, null, player)).data.servers?.some((s) => s.id === tw.serverId));
+  // the very first win counts
+  const done = await t.wait((m) => m.t === 'hunt', 12000);
+  assert.equal(done.count, 1);
+  await new Promise((r) => setTimeout(r, 1000));
+  assert.ok(!p.inbox.some((m) => m.t === 'huntQuest' || m.t === 'hunt'));
+  t.ws.close(); p.ws.close();
+  // the testers list
+  a = (await call('POST', '/admin/hunt/testers', { add: 'OtherAdmin' }, admin)).data;
+  assert.equal((await call('GET', '/hunt', null, other.cookie)).data.visible, true);
+  await call('POST', '/admin/hunt/testers', { remove: other.data.user.id }, admin);
+  // a custom event
+  assert.equal((await call('POST', '/admin/hunt/custom', { event: { name: 'Pirates', prizes: [] } }, admin)).status, 400);
+  const c = (await call('POST', '/admin/hunt/custom', { event: { name: 'Pirate Treasure', description: 'Find the gold!', kind: 'quests', hub: 'relics', robits: 30, teamGoal: 5,
+    prizes: [{ name: 'Pirate Hat', type: 'Hat', model: 'pirate', color: '#222222', count: 1 }, { name: 'Golden Parrot', type: 'Pet', model: 'dragon', color: '#ffc400', share: 100 }],
+    teamPrize: { name: 'Treasure Crown', type: 'Hat', model: 'crown', color: '#ffc400' } } }, admin)).data;
+  assert.ok(c.events.some((e) => e.key === c.key && e.custom && e.name === 'The Hunt: Pirate Treasure'));
+  await call('POST', '/admin/hunt/control', { action: 'launch', key: c.key, public: true }, admin);
+  const ch = (await call('GET', '/hunt', null, player)).data;
+  assert.equal(ch.name, 'The Hunt: Pirate Treasure');
+  assert.equal(ch.description, 'Find the gold!');
+  assert.deepEqual(ch.rewards.map((r) => r.name), ['Pirate Hat', 'Golden Parrot', 'Treasure Crown']);
+  assert.equal((await call('POST', '/admin/hunt/custom', { key: c.key, delete: true }, admin)).status, 400); // it's live
+  // back to the dimension event for the other tests
+  await call('POST', '/admin/hunt/control', { action: 'launch', key: 'dimension', public: true }, admin);
+  await call('POST', '/admin/hunt', { autoPlayers: keepAuto, games: keepGames }, admin);
+});

@@ -33,6 +33,7 @@ export class GameServer {
     this.subPlace = opts.subPlace || 0; // a place of the game other than its start place
     this.placeName = opts.placeName || '';
     this.reserved = !!opts.reserved; // made for one group (TeleportPartyAsync)
+    this.huntPreview = !!opts.huntPreview; // a tester's server while The Hunt is a private preview
     this.privateName = opts.privateName || '';
     this.backend = opts.backend || {};
     this.onClose = opts.onClose || (() => {});
@@ -167,7 +168,6 @@ export class GameServer {
   }
 
   _onChanged(inst, prop) {
-    if (prop === 'Value' && this.questTimer && inst._parent && inst._parent.Name === 'leaderstats') this._questStat(inst);
     if (inst instanceof Script && prop === 'Disabled') {
       if (inst.Disabled) this.rt.stopScript(inst); else this._maybeQueueScript(inst);
     }
@@ -293,6 +293,8 @@ export class GameServer {
   _huntJoin(session) {
     const h = this.backend.hunt;
     if (!h || this.isTest || !h.eligible(session.user.id)) return;
+    // a private preview only runs on the testers' own servers
+    if (h.isPublic && !h.isPublic() && !this.huntPreview) return;
     if (h.kind && h.kind() === 'quests') { this._questJoin(session); return; }
     if (this.subPlace || !h.inEvent()) return;
     this._huntEnsure();
@@ -487,29 +489,33 @@ export class GameServer {
     this.log('info', `${session.user.username} completed The Hunt quest (${r.count}/${r.total})`);
   }
 
-  // A leaderstat changed (from _onChanged).
-  _questStat(inst) {
-    const player = inst._parent && inst._parent._parent;
-    const session = player && [...this.sessions.values()].find((x) => x.player === player);
-    const q = session && session.quest;
-    if (!q || q.done || inst.Name !== q.def.stat) return;
+  // Leaderstat quests: checked every second from the player's leaderstats.
+  // Counting starts from the value when the quest starts (after the first
+  // seconds, while saved stats load), so the first win counts too.
+  _questStatTick(session) {
+    const q = session.quest;
     const d = q.def;
-    const v = parseFloat(inst._p.Value);
-    if (!Number.isFinite(v)) return;
+    if (!d.stat || q.done) return;
+    const v = this._questStatValue(session, d.stat);
+    if (v === null) return;
+    const now = Date.now();
+    if (now < q.readyAt) { q.last[d.stat] = v; return; }
     const prev = q.last[d.stat];
     q.last[d.stat] = v;
-    // the first seconds are loading (saved stats): they don't count
-    if (Date.now() < q.readyAt) return;
-    if (d.type === 'stat' && v >= d.target) return this._questComplete(session);
-    if (d.type === 'gain' && prev !== undefined && v > prev) {
-      q.gained += v - prev;
-      if (q.gained >= d.target) return this._questComplete(session);
+    if (prev === undefined) {
+      // the stat appeared after the start: it began at 0
+      if (d.type === 'gain' && v > 0) q.gained += v;
+    } else if (v !== prev) {
+      if (d.type === 'gain' && v > prev) q.gained += v - prev;
+      if (d.type === 'below' && v > 0 && (!q.best || v < q.best)) q.best = v;
+    } else if (d.type !== 'stat') {
+      return;
     }
-    if (d.type === 'below' && v > 0) {
-      if (!q.best || v < q.best) q.best = v;
-      if (v <= d.target) return this._questComplete(session);
+    if ((d.type === 'stat' && v >= d.target) || (d.type === 'gain' && q.gained >= d.target) || (d.type === 'below' && q.best && q.best <= d.target)) {
+      this._questComplete(session);
+      return;
     }
-    this._questHud(session);
+    if (prev !== v) this._questHud(session);
   }
 
   _questBadge(uid, name) {
@@ -554,6 +560,7 @@ export class GameServer {
       if (q.hudDirty) this._questHud(s);
       if (q.done) continue;
       const d = q.def;
+      if (d.stat) { this._questStatTick(s); if (q.done) continue; }
       if (d.type === 'visit' && s.character) {
         if (!parts) parts = this.game.Workspace.GetDescendants().filter((p) => p instanceof BasePart);
         const [x, y, z] = s.state.p;
@@ -671,7 +678,7 @@ export class GameServer {
     if (!where) { this.log('error', `TeleportService: there is no place ${placeId}`); return; }
     let serverId;
     if (together) {
-      try { serverId = this.manager.reserve(where.gameId, where.place); } catch (e) { this.log('error', 'TeleportService: ' + e.message); return; }
+      try { serverId = this.manager.reserve(where.gameId, where.place, { huntPreview: !!this.huntPreview }); } catch (e) { this.log('error', 'TeleportService: ' + e.message); return; }
     }
     for (const s of sessions) this.send(s, { t: 'teleportPlace', placeId: where.gameId, place: where.place || undefined, serverId });
   }

@@ -99,10 +99,22 @@ export class GameManager {
   }
 
   // A fresh server only for a group (TeleportPartyAsync): returns its id.
-  reserve(gameId, placeId = 0) {
+  reserve(gameId, placeId = 0, opts = {}) {
     const game = this.db.data.games[gameId];
     if (!game) throw new Error('Game not found');
-    return this._newPlaceServer(game, placeId, { reserved: true }).id;
+    return this._newPlaceServer(game, placeId, { reserved: true, huntPreview: !!opts.huntPreview }).id;
+  }
+
+  // The Hunt's private preview: testers play on their own servers (hidden from
+  // the server list), so other players never see the event's quests or items.
+  serverForPreview(gameId, serverId, place = 0) {
+    const game = this.db.data.games[gameId];
+    if (!game) throw new Error('Game not found');
+    const fits = (s) => s && !s.closed && s.huntPreview && s.gameId === gameId && (s.subPlace || 0) === place && !s.isFull;
+    if (serverId && fits(this.servers.get(serverId))) return this.servers.get(serverId);
+    const open = this.allServers().filter(fits);
+    if (open.length) return open[0];
+    return this._newPlaceServer(game, place, { reserved: true, huntPreview: true });
   }
 
   // A private server: one running instance per private server id.

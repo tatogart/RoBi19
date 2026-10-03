@@ -490,6 +490,7 @@ async function drawHunt() {
         try { await api.post('/admin/hunt', { public: !h.public }); toast(h.public ? 'Now only admins can see it' : 'The Hunt is open for everyone!', 'success'); drawHunt(); } catch (e) { toast(e.message, 'error'); }
       } }),
       el('button', { class: 'btn btn-red', text: 'End now', onclick: () => { if (confirm(`End ${h.name} now? Players keep their prizes, the hub closes.`)) control({ action: 'end' }, 'The event has ended'); } })) : null,
+    live && !h.public ? testersBox(h) : null,
     live ? el('div', { class: 'row wrap', style: { gap: '8px', marginTop: '10px', alignItems: 'center' } },
       el('span', { text: 'End automatically at' }), endIn,
       el('button', { class: 'btn btn-small btn-primary', text: 'Set', onclick: () => { if (!endIn.value) return toast('Pick a date and time.', 'error'); control({ action: 'schedule', endsAt: fromLocalInput(endIn.value) }, 'End time saved'); } }),
@@ -514,17 +515,27 @@ async function drawHunt() {
         if (!nextAt.value) return toast('Pick a date and time.', 'error');
         control({ action: 'schedule', next: { key: nextSel.value, startsAt: fromLocalInput(nextAt.value), public: nextPub.checked } }, 'Next event scheduled');
       } })),
-    el('p', { class: 'small muted', text: 'When the next event starts, the live one ends by itself. A private preview is only for admins: test it, then press Open for everyone.' }));
+    el('p', { class: 'small muted', text: 'When the next event starts, the live one ends by itself. A private preview is only for the main account and the testers: test it, then press Open for everyone.' }));
 
   // ---- prepared events
   const evCards = el('div', { class: 'hunt-events' }, h.events.map((e) => el('div', { class: 'hunt-admin-card event' + (e.key === h.current && live ? ' current' : '') },
     el('b', { class: 'no-i18n', text: e.name }),
     el('div', { class: 'small', text: `${KIND_LABEL[e.kind]} · ${e.prizes} prizes` }),
     el('p', { class: 'small muted', text: e.description }),
+    e.custom ? el('div', { class: 'row wrap', style: { gap: '6px' } },
+      el('span', { class: 'pill', text: 'Your event' }),
+      el('button', { class: 'btn btn-small', text: 'Edit', onclick: () => customEventEditor(h, e.key) }),
+      e.key === h.current && live ? null : el('button', { class: 'btn btn-small btn-red', text: 'Delete', onclick: async () => {
+        if (!confirm(`Delete ${e.name}?`)) return;
+        try { await api.post('/admin/hunt/custom', { key: e.key, delete: true }); toast('Deleted', 'success'); drawHunt(); } catch (err) { toast(err.message, 'error'); }
+      } })) : null,
     e.key === h.current && live ? el('span', { class: 'hunt-state live', text: 'RUNNING' }) : el('div', { class: 'row wrap', style: { gap: '6px' } },
       el('button', { class: 'btn btn-small', text: 'Launch (private preview)', onclick: () => { if (confirm(`Launch ${e.name} as a private preview now?${live ? ` ${h.name} ends.` : ''}`)) control({ action: 'launch', key: e.key, public: false }, `${e.name} started (private)`); } }),
       el('button', { class: 'btn btn-small btn-green', text: 'Launch for everyone', onclick: () => { if (confirm(`Launch ${e.name} for everyone now?${live ? ` ${h.name} ends.` : ''}`)) control({ action: 'launch', key: e.key, public: true }, `${e.name} is live!`); } })))));
 
+  evCards.append(el('button', { class: 'hunt-admin-card hunt-new-event', onclick: () => customEventEditor(h, null) },
+    el('b', { text: '+ Make your own event' }),
+    el('div', { class: 'small muted', text: 'Name, story, quests or hidden items, the hub, prizes and goals - all yours.' })));
   const past = h.past.length ? el('div', { class: 'small muted' }, h.past.slice().reverse().map((p) => el('div', { class: 'no-i18n', text: `${p.name} - ${p.players} players${p.ended ? ' - ended ' + fmtWhen(p.ended) : ''}` }))) : null;
 
   // ---- settings of the live event
@@ -553,7 +564,10 @@ async function drawHunt() {
       el('span', { class: 'small muted', text: `now ${h.riftShards}${h.riftOpen ? ' · OPEN' : ''} · the most possible is players × games in the event` })),
     el('h4', { text: `In the event now (${h.event.length})` }),
     quests
-      ? el('div', { class: 'hunt-admin-quests' }, h.event.map((g) => el('div', { class: 'hunt-admin-quest' }, el('b', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' }), el('div', { class: 'small', text: g.quest }))))
+      ? el('div', { class: 'hunt-admin-quests' }, h.event.map((g) => el('div', { class: 'hunt-admin-quest' }, el('b', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' }),
+        h.overrides[g.id] ? el('span', { class: 'pill', style: { marginLeft: '6px' }, text: 'changed' }) : null,
+        el('div', { class: 'small', text: g.quest }),
+        el('button', { class: 'btn btn-small', style: { marginTop: '4px' }, text: 'Edit quest', onclick: () => questEditor(h, g) }))))
       : el('div', { class: 'promo-chosen' }, h.event.map((g) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.byPlayer ? ' · ' + g.creator : ' · official' })))),
     el('button', { class: 'btn btn-primary', style: { marginTop: '14px' }, text: 'Save', onclick: save }),
     huntPlayerBox(quests)) : null;
@@ -563,6 +577,119 @@ async function drawHunt() {
     el('h3', { text: 'Prepared events' }), evCards,
     past ? el('div', { style: { margin: '10px 0 18px' } }, el('h4', { text: 'Past events' }), past) : null,
     settings);
+}
+
+// Who sees the private preview (only them, not every admin).
+function testersBox(h) {
+  const who = el('input', { class: 'input', placeholder: 'Player name', style: { width: '180px' } });
+  const send = async (b, msg) => { try { await api.post('/admin/hunt/testers', b); toast(msg, 'success'); drawHunt(); } catch (e) { toast(e.message, 'error'); } };
+  return el('div', { class: 'hunt-testers' },
+    el('div', { class: 'small', text: 'The private preview is only visible to these players (they play on their own servers, so nobody else sees the quests):' }),
+    el('div', { class: 'row wrap', style: { gap: '6px', margin: '6px 0' } },
+      h.owner ? el('span', { class: 'holder-chip no-i18n', text: h.owner + ' (main account)' }) : null,
+      h.testers.map((t) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: t.username }), el('button', { class: 'chip-x', text: '×', title: 'Remove', onclick: () => send({ remove: t.id }, 'Removed') }))),
+      h.testers.some((t) => t.id === me.id) ? null : el('button', { class: 'btn btn-small btn-primary', text: 'Add me', onclick: () => send({ me: true }, 'Added') })),
+    el('div', { class: 'row wrap', style: { gap: '6px' } }, who, el('button', { class: 'btn btn-small', text: 'Add tester', onclick: () => send({ add: who.value.trim() }, 'Added') })));
+}
+
+const QUEST_TYPE_LABEL = {
+  default: 'The game\'s own quest (default)', runes: 'Find 3 runes in order (any game)', stat: 'Reach a leaderstat (e.g. 40 Coins)', gain: 'Get more of a leaderstat (e.g. 2 Wins)',
+  below: 'A leaderstat at or below a number (e.g. Time 40)', badge: 'Earn a badge of the game', visit: 'Reach parts by name', click: 'Press every button in a model', script: 'The game\'s scripts call HuntService:CompleteQuest',
+};
+const QUEST_NAME_HINT = { stat: 'Leaderstat name (e.g. Coins)', gain: 'Leaderstat name (e.g. Wins)', below: 'Leaderstat name (e.g. Time)', badge: 'Badge name (e.g. Door 25)', visit: 'Part names, comma separated', click: 'Model name (e.g. Buttons)' };
+// A game's quest in the live event.
+function questEditor(h, g) {
+  const cur = h.overrides[g.id] || {};
+  const type = el('select', { class: 'input' }, h.questTypes.map((t) => el('option', { value: t, text: QUEST_TYPE_LABEL[t] || t, selected: t === (cur.type || 'default') })));
+  const name = el('input', { class: 'input', value: cur.stat || cur.badge || cur.model || (cur.parts || []).join(', ') || '' });
+  const target = el('input', { class: 'input', type: 'number', min: 1, value: cur.target || 1 });
+  const text = el('input', { class: 'input', maxlength: 160, value: cur.text || '', placeholder: 'What the player has to do (shown everywhere)' });
+  const nameRow = el('label', { class: 'field' }, el('span', {}), name);
+  const targetRow = el('label', { class: 'field' }, 'Number', target);
+  const sync = () => {
+    const t = type.value;
+    nameRow.style.display = QUEST_NAME_HINT[t] ? '' : 'none';
+    nameRow.firstChild.textContent = QUEST_NAME_HINT[t] || '';
+    targetRow.style.display = ['stat', 'gain', 'below'].includes(t) ? '' : 'none';
+  };
+  type.addEventListener('change', sync);
+  sync();
+  modal({
+    title: `Quest: ${g.name}`,
+    body: el('div', { class: 'quest-editor' },
+      el('p', { class: 'small muted', text: `Now: ${g.quest}` }),
+      el('label', { class: 'field' }, 'Kind of quest', type), nameRow, targetRow,
+      el('label', { class: 'field' }, 'Quest text', text),
+      el('p', { class: 'small muted', text: 'Players who are in the game now get the new quest the next time they join.' })),
+    buttons: [{ text: 'Save', cls: 'btn-primary', onClick: async () => {
+      try {
+        await api.post('/admin/hunt/quest', { gameId: g.id, quest: type.value === 'default' ? null : { type: type.value, name: name.value, target: +target.value, text: text.value } });
+        toast('Quest saved', 'success');
+        drawHunt();
+      } catch (e) { toast(e.message, 'error'); return false; }
+    } }, { text: 'Cancel' }],
+  });
+}
+
+// Make or edit your own event: the story, the kind, the hub, the prizes.
+function customEventEditor(h, key) {
+  const c = key ? JSON.parse(JSON.stringify(h.custom[key])) : { name: '', description: '', kind: 'quests', hub: 'relics', robits: 25, teamGoal: 30, prizes: [{ name: '', type: 'Hat', data: { model: 'crown', color: '#ffc400', accent: '#ffffff' }, count: 1 }], teamPrize: null, hubPrize: null };
+  const name = el('input', { class: 'input', maxlength: 60, value: c.name.replace(/^The Hunt: /, ''), placeholder: 'e.g. Pirate Treasure' });
+  const desc = el('textarea', { class: 'input', rows: 3, maxlength: 500, value: c.description, placeholder: 'The story of the event (shown on the event page and the hub game)' });
+  const kind = el('select', { class: 'input' }, [['quests', 'Quests in every game'], ['shards', 'Hidden items in every game (with a scanner)']].map(([v, t]) => el('option', { value: v, text: t, selected: c.kind === v })));
+  const hub = el('select', { class: 'input' }, [['relics', 'Jungle temple (rune puzzle)'], ['dimension', 'Space station (star fragments)']].map(([v, t]) => el('option', { value: v, text: t, selected: c.hub === v })));
+  const robits = el('input', { class: 'input', type: 'number', min: 0, max: 1000, value: c.robits });
+  const goal = el('input', { class: 'input', type: 'number', min: 1, max: 100000, value: c.teamGoal });
+  const prizeRow = (p, ladder) => {
+    const d = p.data || {};
+    const type = el('select', { class: 'input' }, Object.keys(h.prizeModels).map((t) => el('option', { value: t, text: t === 'TShirt' ? 'T-Shirt' : t, selected: t === p.type })));
+    const model = el('select', { class: 'input' });
+    const fillModels = () => model.replaceChildren(...h.prizeModels[type.value].map((m) => el('option', { value: m, text: m, selected: m === d.model })));
+    type.addEventListener('change', fillModels);
+    fillModels();
+    const pname = el('input', { class: 'input', maxlength: 50, value: p.name || '', placeholder: 'Prize name' });
+    const color = el('input', { type: 'color', value: d.color || '#ffc400' });
+    const accent = el('input', { type: 'color', value: d.accent || '#ffffff' });
+    const mode = el('select', { class: 'input' }, [['count', 'after'], ['share', '% of all']].map(([v, t]) => el('option', { value: v, text: t, selected: v === (p.share ? 'share' : 'count') })));
+    const need = el('input', { class: 'input', type: 'number', min: 1, value: p.share ? Math.round(p.share * 100) : p.count || 1, style: { width: '80px' } });
+    const row = el('div', { class: 'prize-row' }, pname, type, model, color, accent,
+      ladder ? mode : null, ladder ? need : null,
+      ladder ? el('button', { class: 'btn btn-small btn-red', text: '×', title: 'Remove', onclick: () => row.remove() }) : null);
+    row.read = () => ({ id: p.id, name: pname.value, type: type.value, model: model.value, color: color.value, accent: accent.value, ...(mode.value === 'share' ? { share: +need.value } : { count: +need.value }) });
+    return row;
+  };
+  const ladder = el('div', { class: 'prize-rows' }, c.prizes.map((p) => prizeRow(p, true)));
+  const optional = (p, label) => {
+    const on = el('input', { type: 'checkbox', checked: !!p });
+    const row = prizeRow(p || { name: '', type: 'Hat', data: { model: 'halo', color: '#5bd6a0' } }, false);
+    const sync = () => { row.style.display = on.checked ? '' : 'none'; };
+    on.addEventListener('change', sync);
+    sync();
+    return { node: el('div', {}, el('label', { class: 'perm-row' }, on, el('span', { text: label })), row), read: () => (on.checked ? row.read() : null) };
+  };
+  const team = optional(c.teamPrize, 'Team prize: everyone gets it when all players together reach the team goal');
+  const hubP = optional(c.hubPrize, 'Hub prize: for the hub\'s puzzle (rune puzzle / star fragments)');
+  modal({
+    title: key ? `Edit ${c.name}` : 'Your own event',
+    width: 760,
+    body: el('div', { class: 'custom-event' },
+      el('label', { class: 'field' }, 'Name (The Hunt: ...)', name),
+      el('label', { class: 'field' }, 'Story', desc),
+      el('div', { class: 'row wrap', style: { gap: '10px' } },
+        el('label', { class: 'field' }, 'Kind', kind), el('label', { class: 'field' }, 'Hub', hub),
+        el('label', { class: 'field' }, 'Robits for each', robits), el('label', { class: 'field' }, 'Team goal', goal)),
+      el('h4', { text: 'Prizes (in order: after N finds or a % of all games)' }), ladder,
+      el('button', { class: 'btn btn-small', text: '+ Add prize', onclick: () => ladder.append(prizeRow({ name: '', type: 'Hat', data: { model: 'cap', color: '#ffc400' }, count: ladder.children.length + 1 }, true)) }),
+      el('h4', { text: 'Bonus prizes' }), team.node, hubP.node,
+      el('p', { class: 'small muted', text: 'The games of the event and their quests are set in the settings of the live event: launch it as a private preview, change the quests, test it, then open it for everyone.' })),
+    buttons: [{ text: 'Save', cls: 'btn-primary', onClick: async () => {
+      try {
+        await api.post('/admin/hunt/custom', { key, event: { name: name.value, description: desc.value, kind: kind.value, hub: hub.value, robits: +robits.value, teamGoal: +goal.value, prizes: [...ladder.children].map((r) => r.read()), teamPrize: team.read(), hubPrize: hubP.read() } });
+        toast('Event saved', 'success');
+        drawHunt();
+      } catch (e) { toast(e.message, 'error'); return false; }
+    } }, { text: 'Cancel' }],
+  });
 }
 
 // Give or take a player's finds (prizes and Robits come with them as usual).

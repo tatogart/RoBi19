@@ -272,7 +272,7 @@ Players.PlayerAdded:Connect(function(player)
 	stars.Value = f.Count .. "/" .. f.Total
 	stars.Parent = ls
 	wait(1.5)
-	player:Notify("Welcome to The Hunt: Another Dimension! Gravity is low here - jump around. You have " .. p.Collected .. " of " .. p.Total .. " shards.")
+	player:Notify("Welcome to ${(opts.name || 'The Hunt: Another Dimension').replace(/["\\]/g, '')}! Gravity is low here - jump around. You have " .. p.Collected .. " of " .. p.Total .. " shards.")
 end)
 
 -- wormholes
@@ -463,5 +463,5 @@ while true do
 	wait(0.1)
 end
 `);
-  return finish(g, { name: 'The Hunt: Another Dimension' });
+  return finish(g, { name: opts.name || 'The Hunt: Another Dimension' });
 }

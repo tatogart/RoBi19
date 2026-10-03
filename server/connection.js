@@ -36,7 +36,12 @@ export function handleConnection(ws, user, { db, manager }) {
             // msg.place: one of the game's other places (a lobby's level, like DOORS' hotel)
             const sub = +msg.place && +msg.place !== gameId ? +msg.place : 0;
             if (sub && db.data.places?.[sub]?.gameId !== gameId) throw new Error('This place is not part of the game.');
-            gameServer = manager.serverForGame(gameId, msg.serverId, sub);
+            const hunt = manager.hunt;
+            // The Hunt's hub is closed to everyone outside the event (admins too)
+            if (game.huntHub && hunt && !hunt.eligible(user.id)) throw new Error('The Hunt is not open yet.');
+            gameServer = hunt && hunt.previewFor && hunt.previewFor(user.id, gameId)
+              ? manager.serverForPreview(gameId, msg.serverId, sub)
+              : manager.serverForGame(gameId, msg.serverId, sub);
           }
           game.visits++;
           countPlay(db.data, user.id);

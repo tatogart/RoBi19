@@ -34,15 +34,16 @@ if (!h.visible) {
   const [, sub = ''] = h.name.split(': ');
   const pct = h.total ? Math.round((h.count / h.total) * 100) : 0;
   const teamPct = Math.min(100, Math.round((h.team.shards / h.team.goal) * 100));
-  const unitsWord = quests ? 'relics' : 'shards';
-  const hero = el('div', { class: 'hunt-hero' + (quests ? ' relics' : '') },
-    quests ? el('div', { class: 'hunt-leaf l1' }) : el('div', { class: 'hunt-planet p1' }),
-    quests ? el('div', { class: 'hunt-leaf l2' }) : el('div', { class: 'hunt-planet p2' }),
+  const unitsWord = h.custom ? (quests ? 'quests' : 'finds') : quests ? 'relics' : 'shards';
+  const jungle = h.hubStyle === 'relics';
+  const hero = el('div', { class: 'hunt-hero' + (jungle ? ' relics' : '') },
+    jungle ? el('div', { class: 'hunt-leaf l1' }) : el('div', { class: 'hunt-planet p1' }),
+    jungle ? el('div', { class: 'hunt-leaf l2' }) : el('div', { class: 'hunt-planet p2' }),
     !h.public ? el('div', { class: 'hunt-private', text: 'Private preview: only admins can see the event right now' }) : null,
-    el('div', { class: 'hunt-part', text: quests ? 'PART 3' : 'PART 2' }),
+    h.custom ? null : el('div', { class: 'hunt-part', text: quests ? 'PART 3' : 'PART 2' }),
     el('div', { class: 'hunt-logo', text: 'THE HUNT' }),
     el('div', { class: 'hunt-logo2 no-i18n', text: sub.toUpperCase() }),
-    el('p', { class: 'hunt-sub', text: quests
+    h.custom ? el('p', { class: 'hunt-sub no-i18n', text: h.description }) : el('p', { class: 'hunt-sub', text: quests
       ? 'Ancient relics are hidden behind a quest in every game. Beat the obby, win a round, survive the disasters, reach Door 25... Finish a game\'s quest to get its relic!'
       : 'A rift to another dimension has opened! Jump through the wormholes and find the dimension shard hidden in every game. Your scanner shows how close you are.' }),
     el('p', { class: 'hunt-sub small', text: quests
@@ -55,12 +56,12 @@ if (!h.visible) {
     h.hubId ? el('button', { class: 'btn btn-large hunt-play', text: 'Enter the hub', onclick: () => launchGame(h.hubId) }) : null);
   const stats = el('div', { class: 'hunt-stats' },
     el('div', { class: 'hunt-stat' },
-      el('b', { text: quests ? 'The Great Temple' : 'The Rift' }),
+      el('b', { text: h.custom ? 'Team goal' : quests ? 'The Great Temple' : 'The Rift' }),
       el('div', { class: 'hunt-bar rift' }, el('div', { style: { width: teamPct + '%' } })),
       el('div', { class: 'small', text: h.team.open
         ? (quests ? `OPEN! ${h.team.shards} quests done by everyone` : `OPEN! ${h.team.shards} shards found by everyone`)
         : (quests ? `${h.team.shards} / ${h.team.goal} quests done by everyone. Open it together for a prize!` : `${h.team.shards} / ${h.team.goal} shards found by everyone. Open it together for a prize!`) })),
-    quests
+    jungle
       ? el('div', { class: 'hunt-stat' },
         el('b', { text: 'Rune puzzle' }),
         el('div', { class: 'hunt-stars' + (h.hubQuestDone ? ' solved' : ''), text: h.hubQuestDone ? '☀ ★ ≈ ☾' : '? ? ? ?' }),
@@ -71,7 +72,7 @@ if (!h.visible) {
         el('div', { class: 'small', text: 'Hidden on asteroids and the moon base in the hub' })),
     el('div', { class: 'hunt-stat' },
       el('b', { text: 'In the hub' }),
-      el('div', { class: 'small', text: quests
+      el('div', { class: 'small', text: jungle
         ? 'A jungle camp • the Great Temple • stone archways to every game • the rune puzzle • the relic museum'
         : 'Low gravity • launch pads • a rocket to the moon • meteor showers • ZERO-G button' })));
   const prizes = el('div', { class: 'hunt-prizes' }, h.rewards.map((r) => {

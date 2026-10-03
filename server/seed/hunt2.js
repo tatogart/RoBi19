@@ -33,7 +33,7 @@ function tablet(parent, name, x, y, z, yaw, text) {
 }
 
 // games: [{ id, name, byPlayer, creator, quest }], prizes: [{ name, need | how, bonus }]
-export function buildRelicsHub(games, prizes = []) {
+export function buildRelicsHub(games, prizes = [], opts = {}) {
   const g = newGame();
   const ws = g.Workspace;
   const L = g.Lighting;
@@ -192,7 +192,7 @@ Players.PlayerAdded:Connect(function(player)
 	relics.Value = p.Collected .. "/" .. p.Total
 	relics.Parent = ls
 	wait(1.5)
-	player:Notify("Welcome to The Hunt: Lost Relics! Every archway leads to a game with its own quest. You have " .. p.Collected .. " of " .. p.Total .. " relics.")
+	player:Notify("Welcome to ${(opts.name || 'The Hunt: Lost Relics').replace(/["\\]/g, '')}! Every archway leads to a game with its own quest. You have " .. p.Collected .. " of " .. p.Total .. " relics.")
 end)
 
 -- archways
@@ -257,5 +257,5 @@ while true do
 	wait(10)
 end
 `);
-  return finish(g, { name: 'The Hunt: Lost Relics' });
+  return finish(g, { name: opts.name || 'The Hunt: Lost Relics' });
 }

@@ -15,7 +15,7 @@
 import { buildHuntHub } from './seed/hunt.js';
 import { buildRelicsHub } from './seed/hunt2.js';
 import { officialAccount } from './seed/seed.js';
-import { questFor } from './huntquests.js';
+import { questFor, RUNES_TEXT } from './huntquests.js';
 
 // ---------------------------------------------------------------- the events
 // Prize ladder: count = a number of finds, share = a part of all of them.
@@ -63,13 +63,69 @@ export const EVENTS = {
 // Tomorrow's switch (Moscow time, UTC+3): Another Dimension ends at 15:00 and
 // Lost Relics starts as a private preview for the admins.
 const SWITCH_AT = Date.UTC(2026, 9, 3, 12, 0);
+// Models a prize can use in a custom event (see public/js/render/avatar.js).
+export const PRIZE_MODELS = {
+  Hat: ['cap', 'cone', 'tophat', 'crown', 'viking', 'party', 'headphones', 'halo', 'dominator', 'beanie', 'pirate', 'witch', 'shades', 'wings', 'astronaut', 'planet', 'explorer'],
+  Pet: ['dog', 'cat', 'bunny', 'penguin', 'robot', 'ghost', 'dragon', 'ufo', 'alien', 'golem'],
+  Gear: ['sword', 'rocket', 'gun', 'flashlight', 'brush', 'hammer', 'saber', 'torch'],
+  TShirt: ['star'],
+};
+// What an admin can set for a game's quest (see server/huntquests.js).
+export const QUEST_TYPES = ['default', 'runes', 'stat', 'gain', 'below', 'badge', 'visit', 'click', 'script'];
+const HEX = /^#[0-9a-f]{6}$/i;
+const cleanText = (v, max = 200) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, max);
+// A quest set by an admin, checked and cleaned (null = use the game's own quest).
+export function cleanQuest(q) {
+  if (!q || !QUEST_TYPES.includes(q.type) || q.type === 'default') return null;
+  const text = cleanText(q.text, 160);
+  const target = Math.max(1, Math.min(1e9, Math.trunc(+q.target || 0)));
+  const name = cleanText(q.name, 60);
+  if (q.type === 'runes') return { type: 'runes', text: text || RUNES_TEXT };
+  if (q.type === 'script') return { type: 'script', text: text || 'Complete the quest of this game' };
+  if (!name) throw new Error('Write the name of the leaderstat, badge, part or model.');
+  if (['stat', 'gain', 'below'].includes(q.type)) return { type: q.type, stat: name, target, text: text || (q.type === 'gain' ? `Get ${target} more ${name}` : q.type === 'below' ? `Get ${name} of ${target} or less` : `Reach ${target} ${name}`) };
+  if (q.type === 'badge') return { type: 'badge', badge: name, text: text || `Earn the badge "${name}"` };
+  if (q.type === 'click') return { type: 'click', model: name, text: text || `Press every button of ${name}` };
+  const parts = name.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 6);
+  return { type: 'visit', parts, text: text || `Reach ${parts.join(', ')}` };
+}
+// A prize of a custom event, checked and cleaned.
+function cleanPrize(r, ladder = true) {
+  const type = PRIZE_MODELS[r && r.type] ? r.type : 'Hat';
+  const model = PRIZE_MODELS[type].includes(r.model) ? r.model : PRIZE_MODELS[type][0];
+  const name = cleanText(r.name, 50);
+  if (name.length < 3) throw new Error('Every prize needs a name (3 letters or more).');
+  const data = type === 'TShirt' ? { graphic: 'star' } : { model, color: HEX.test(r.color) ? r.color : '#ffc400', accent: HEX.test(r.accent) ? r.accent : '#ffffff' };
+  const out = { name, type, data };
+  if (!ladder) return out;
+  if (r.share) out.share = Math.max(0.05, Math.min(1, (+r.share || 0) / 100));
+  else out.count = Math.max(1, Math.min(1000, Math.trunc(+r.count || 1)));
+  return out;
+}
 // Games that are never in the event (nothing to do in a house).
 const EXCLUDED_KEYS = ['happyhome'];
+
+// A custom event (made in Admin Panel -> The Hunt) as an event like the ones above.
+function customEvent(c) {
+  const quests = c.kind === 'quests';
+  const rewards = {};
+  (c.prizes || []).forEach((r, i) => { rewards['c' + (r.id || i)] = r; });
+  const bonus = {};
+  if (c.teamPrize) bonus.cteam = { ...c.teamPrize, team: true, how: `Everyone together reaches the team goal (${quests ? 'complete' : 'find'} at least 1)` };
+  if (c.hubPrize) bonus.chub = { ...c.hubPrize, hub: true, how: c.hub === 'relics' ? 'Solve the rune puzzle in the hub' : 'Collect all 6 star fragments in the hub' };
+  return {
+    name: c.name, kind: c.kind, unit: quests ? 'quest' : 'find', units: quests ? 'quests' : 'finds', robits: c.robits, teamGoal: c.teamGoal,
+    fragments: c.hub === 'relics' ? 0 : 6, description: c.description, rewards, bonus, custom: true, hubStyle: c.hub, quests: c.quests || {},
+    build: (games, prizes) => (c.hub === 'relics' ? buildRelicsHub(games, prizes, { name: c.name }) : buildHuntHub(games, prizes, { fragments: 6, name: c.name })),
+  };
+}
 
 export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial }) {
   const D = db.data;
   if (!D.hunt) D.hunt = {};
   const H = D.hunt;
+  if (!D.huntCustom) D.huntCustom = {};
+  const eventDef = (key) => EVENTS[key] || (D.huntCustom[key] ? customEvent(D.huntCustom[key]) : null);
   const official = () => officialAccount(D);
   const allOfficial = () => {
     const off = official();
@@ -105,7 +161,14 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   H.past = H.past || [];
   if (!H.current) H.current = 'dimension';
   if (!H.state) H.state = 'live';
-  const ev = () => EVENTS[H.current] || EVENTS.dimension;
+  const ev = () => eventDef(H.current) || EVENTS.dimension;
+  // The private preview is only for the main account and the testers the
+  // admins pick (by default the admin who launched it) - not every admin.
+  H.testers = H.testers || [];
+  // an event already started by hand must not start again from the schedule
+  // (that would wipe its progress)
+  if (H.state === 'live' && H.next && H.next.key === H.current) H.next = null;
+  H.questOverrides = H.questOverrides || {};
   const live = () => H.state === 'live';
   if (!H.riftGoal || H.riftGoal === 300) H.riftGoal = ev().teamGoal;
   const teamGoal = () => H.riftGoal || ev().teamGoal;
@@ -158,7 +221,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     if (!live()) return false;
     if (H.public) return true;
     const u = D.users[uid];
-    return !!u && (u.isAdmin || u.id === official()?.id);
+    return !!u && (u.id === official()?.id || H.testers.includes(u.id));
   };
   // The games in the event: the chosen official games + the most popular player games.
   const excluded = (g) => EXCLUDED_KEYS.includes(g.seedKey) || g.huntHub;
@@ -176,7 +239,12 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     }));
   };
   const questCache = new Map();
-  const quest = (gameId) => (ev().kind === 'quests' ? questFor(D.games[gameId], (id) => db.readPlace(id), questCache) : null);
+  // the admins' quests for this event (custom events keep theirs with the event)
+  const overrides = () => (ev().custom ? ev().quests : (H.questOverrides[H.current] || {}));
+  const quest = (gameId) => {
+    if (ev().kind !== 'quests') return null;
+    return overrides()[gameId] || questFor(D.games[gameId], (id) => db.readPlace(id), questCache);
+  };
   const questText = (g) => quest(g.id)?.text || '';
   const progress = (uid) => {
     const games = eventGames();
@@ -231,6 +299,10 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   manager.hunt = {
     eligible,
     kind: () => ev().kind,
+    isPublic: () => !!H.public,
+    // private preview: testers play the event's games on their own servers,
+    // so nobody else sees the quests, runes or shards
+    previewFor: (uid, gameId) => live() && !H.public && eligible(uid) && (gameId === H.hubId || eventGames().some((g) => g.id === gameId)),
     inEvent: (gameId) => live() && eventGames().some((g) => g.id === gameId),
     quest,
     collect,
@@ -301,14 +373,16 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   // Starts an event from scratch; the one before is put away (its prizes stay
   // with the players who won them).
   const launch = (key, opts = {}) => {
-    if (!EVENTS[key]) throw new Error('Unknown event.');
+    const def = eventDef(key);
+    if (!def) throw new Error('Unknown event.');
+    if (H.next && H.next.key === key) H.next = null;
     if (live()) endEvent('ended (a new event started)');
     H.past.push({ key: H.current, name: ev().name, progress: H.progress, rewarded: H.rewarded, rewards: H.rewards, hubId: H.hubId, ended: H.endedAt || Date.now() });
     if (H.past.length > 20) H.past.shift();
     Object.assign(H, {
       current: key, state: 'live', public: !!opts.public, startedAt: Date.now(), endsAt: opts.endsAt || 0, endedAt: 0,
-      progress: {}, rewarded: {}, rewards: {}, fragments: {}, hubDone: {}, riftOpen: false, riftGoal: EVENTS[key].teamGoal,
-      hubId: 0, hubKey: '',
+      progress: {}, rewarded: {}, rewards: {}, fragments: {}, hubDone: {}, riftOpen: false, riftGoal: def.teamGoal,
+      hubId: 0, hubKey: '', testers: opts.testers ? [...new Set(opts.testers)] : H.testers,
     });
     if (!H.games || !H.games.length) H.games = allOfficial();
     makePrizes();
@@ -323,7 +397,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     if (H.next && H.next.startsAt && now >= H.next.startsAt) {
       const n = H.next;
       H.next = null;
-      try { launch(n.key, { public: n.public }); } catch { /* unknown event */ }
+      try { launch(n.key, { public: n.public, testers: n.testers }); } catch { /* unknown event */ }
     }
   };
   tick();
@@ -340,6 +414,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const team = { shards: globalFinds(), goal: teamGoal(), open: !!H.riftOpen };
     return {
       key: H.current, name: ev().name, kind: ev().kind, unit: ev().unit, units: ev().units,
+      custom: !!ev().custom, description: ev().description, hubStyle: ev().hubStyle || (ev().kind === 'quests' ? 'relics' : 'dimension'),
       public: !!H.public, hubId: syncHub()?.id || null, endsAt: H.endsAt || 0, ...p,
       robitsPerToken: ev().robits,
       rift: team, team,
@@ -353,7 +428,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     if (!live()) {
       // between events: what ended, and when the next one starts (if it's public)
       const nextPublic = H.next && H.next.public;
-      return res.json({ visible: false, ended: { name: ev().name, at: H.endedAt || 0 }, next: nextPublic ? { name: EVENTS[H.next.key]?.name, startsAt: H.next.startsAt } : null });
+      return res.json({ visible: false, ended: { name: ev().name, at: H.endedAt || 0 }, next: nextPublic ? { name: eventDef(H.next.key)?.name, startsAt: H.next.startsAt } : null });
     }
     if (!eligible(req.user.id)) return res.json({ visible: false });
     res.json({ visible: true, ...status(req.user) });
@@ -365,7 +440,12 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     return {
       current: H.current, state: H.state, name: ev().name, kind: ev().kind, public: !!H.public,
       startedAt: H.startedAt || 0, endsAt: H.endsAt || 0, endedAt: H.endedAt || 0, next: H.next || null,
-      events: Object.entries(EVENTS).map(([key, e]) => ({ key, name: e.name, kind: e.kind, description: e.description, prizes: Object.keys(e.rewards).length + Object.keys(e.bonus).length })),
+      events: [...Object.keys(EVENTS), ...Object.keys(D.huntCustom)].map((key) => { const e = eventDef(key); return { key, name: e.name, kind: e.kind, description: e.description, custom: !!e.custom, prizes: Object.keys(e.rewards).length + Object.keys(e.bonus).length }; }),
+      custom: D.huntCustom,
+      testers: H.testers.map((id) => ({ id, username: D.users[id]?.username || '?' })),
+      owner: official()?.username || '',
+      prizeModels: PRIZE_MODELS, questTypes: QUEST_TYPES,
+      overrides: overrides(),
       past: H.past.map((p) => ({ key: p.key, name: p.name, ended: p.ended || 0, players: Object.values(p.progress || {}).filter((l) => l.length).length })),
       autoPlayers: H.autoPlayers, games: H.games || [], hubId: H.hubId,
       riftGoal: teamGoal(), riftShards: globalFinds(), riftOpen: !!H.riftOpen,
@@ -410,6 +490,8 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   api.post('/admin/hunt', requireAdmin, (req, res) => {
     const b = req.body || {};
     if (b.public !== undefined) H.public = !!b.public;
+    // whoever makes it private keeps seeing it
+    if (b.public === false && !H.testers.includes(req.user.id)) H.testers.push(req.user.id);
     if (Array.isArray(b.games)) H.games = [...new Set(b.games.map((x) => +x))].filter((id) => D.games[id] && !isHub(id)).slice(0, 30);
     if (b.riftGoal !== undefined) {
       const n = Math.trunc(+b.riftGoal || 0);
@@ -437,7 +519,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const b = req.body || {};
     try {
       if (b.action === 'launch') {
-        launch(String(b.key), { public: !!b.public, endsAt: when(b.endsAt) });
+        launch(String(b.key), { public: !!b.public, endsAt: when(b.endsAt), testers: [req.user.id] });
       } else if (b.action === 'end') {
         endEvent(`ended by ${req.user.username}`);
       } else if (b.action === 'schedule') {
@@ -446,8 +528,8 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
           H.endsAt = when(b.endsAt);
         }
         if (b.next !== undefined) {
-          if (b.next && !EVENTS[b.next.key]) throw new Error('Unknown event.');
-          H.next = b.next ? { key: b.next.key, startsAt: when(b.next.startsAt), public: !!b.next.public } : null;
+          if (b.next && !eventDef(b.next.key)) throw new Error('Unknown event.');
+          H.next = b.next ? { key: b.next.key, startsAt: when(b.next.startsAt), public: !!b.next.public, testers: [...new Set([...H.testers, req.user.id])] } : null;
           if (H.next && !H.next.startsAt) throw new Error('Pick when the next event starts.');
         }
       } else {
@@ -456,6 +538,85 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     } catch (e) { return bad(res, e.message); }
     db.save();
     res.json({ ok: true, ...adminState() });
+  });
+  // Who sees the private preview: { add: username } | { remove: userId } | { me: true }
+  api.post('/admin/hunt/testers', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    if (b.me) H.testers = [...new Set([...H.testers, req.user.id])];
+    if (b.add) {
+      const u = findUser(b.add);
+      if (!u) return bad(res, 'No player with that name.', 404);
+      H.testers = [...new Set([...H.testers, u.id])];
+    }
+    if (b.remove) H.testers = H.testers.filter((id) => id !== +b.remove);
+    db.save();
+    res.json({ ok: true, ...adminState() });
+  });
+  // A game's quest in the live event: { gameId, quest: { type, name, target, text } | null }
+  api.post('/admin/hunt/quest', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    if (!live() || ev().kind !== 'quests') return bad(res, 'The live event has no quests.');
+    const gameId = +b.gameId;
+    if (!eventGames().some((g) => g.id === gameId)) return bad(res, 'That game is not in The Hunt.');
+    let q;
+    try { q = cleanQuest(b.quest); } catch (e) { return bad(res, e.message); }
+    const list = ev().custom ? (D.huntCustom[H.current].quests = D.huntCustom[H.current].quests || {}) : (H.questOverrides[H.current] = H.questOverrides[H.current] || {});
+    if (q) list[gameId] = q; else delete list[gameId];
+    syncHub();
+    db.save();
+    // players already in that game get the new quest when they join again
+    res.json({ ok: true, ...adminState() });
+  });
+  // Custom events: { key?, event: {...} } saves, { key, delete: true } deletes.
+  api.post('/admin/hunt/custom', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    if (b.delete) {
+      if (!D.huntCustom[b.key]) return bad(res, 'Event not found.', 404);
+      if (H.current === b.key && live()) return bad(res, 'End this event before deleting it.');
+      delete D.huntCustom[b.key];
+      if (H.next && H.next.key === b.key) H.next = null;
+      db.save();
+      return res.json({ ok: true, ...adminState() });
+    }
+    const e = b.event || {};
+    let c;
+    try {
+      const name = cleanText(e.name, 60);
+      if (name.length < 3) throw new Error('Give the event a name.');
+      const prizes = (Array.isArray(e.prizes) ? e.prizes : []).slice(0, 12).map((r, i) => ({ ...cleanPrize(r), id: Math.trunc(+r.id) || i + 1 }));
+      if (!prizes.length) throw new Error('Add at least one prize.');
+      const ids = new Set();
+      for (const p of prizes) { while (ids.has(p.id)) p.id++; ids.add(p.id); }
+      c = {
+        name: /^the hunt/i.test(name) ? name : 'The Hunt: ' + name,
+        description: cleanText(e.description, 500) || 'A new The Hunt event!',
+        kind: e.kind === 'shards' ? 'shards' : 'quests',
+        hub: e.hub === 'dimension' ? 'dimension' : 'relics',
+        robits: Math.max(0, Math.min(1000, Math.trunc(+e.robits || 0))),
+        teamGoal: Math.max(1, Math.min(100000, Math.trunc(+e.teamGoal || 30))),
+        prizes,
+        teamPrize: e.teamPrize && e.teamPrize.name ? cleanPrize(e.teamPrize, false) : null,
+        hubPrize: e.hubPrize && e.hubPrize.name ? cleanPrize(e.hubPrize, false) : null,
+      };
+    } catch (err) { return bad(res, err.message); }
+    let key = String(b.key || '');
+    if (key && !D.huntCustom[key]) return bad(res, 'Event not found.', 404);
+    if (!key) { key = 'custom' + (db.nextId('huntEvent')); }
+    c.quests = D.huntCustom[key]?.quests || {};
+    D.huntCustom[key] = c;
+    // the live event: its prizes follow the changes
+    if (H.current === key && live()) {
+      const ev2 = customEvent(c);
+      for (const [k, r] of Object.entries({ ...ev2.rewards, ...ev2.bonus })) {
+        const it = D.items[H.rewards[k]];
+        if (it) Object.assign(it, { name: r.name, type: r.type, data: r.data });
+      }
+      makePrizes();
+      if (!H.riftOpen) H.riftGoal = c.teamGoal;
+      syncHub();
+    }
+    db.save();
+    res.json({ ok: true, key, ...adminState() });
   });
   void requireUser;
 }
