@@ -11,6 +11,7 @@ import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES, CATALOG } from '../shared/ava
 import { PLACE_FORMAT } from '../shared/engine/serialize.js';
 import { filterChat } from './game/chatfilter.js';
 import { installAdminTools } from './admintools.js';
+import { installDiscordStatus } from './discordstatus.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -2448,6 +2449,7 @@ export function createApi(db, manager, opts = {}) {
 
   installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial });
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
+  installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });
 
   api.use((req, res) => bad(res, 'Not found', 404));

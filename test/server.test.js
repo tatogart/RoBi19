@@ -1523,8 +1523,43 @@ test('Discord Activity: session without cookies, settings, token exchange is off
   // set up: the secret is kept on the server
   assert.equal((await call('POST', '/admin/settings', { discord: { on: true, appId: 'robis' } }, admin)).status, 400);
   const s = (await call('POST', '/admin/settings', { discord: { on: true, appId: '123456789012345678', secret: 'topsecretvalue' } }, admin)).data.settings;
-  assert.deepEqual(s.discord, { on: true, appId: '123456789012345678', hasSecret: true });
+  assert.deepEqual(s.discord, { on: true, status: true, appId: '123456789012345678', hasSecret: true });
   assert.ok(!JSON.stringify((await call('GET', '/admin/settings', null, admin)).data).includes('topsecretvalue'));
   assert.deepEqual((await call('GET', '/site')).data.discord, { appId: '123456789012345678' });
   await call('POST', '/admin/settings', { discord: { on: false, appId: '', clearSecret: true } }, admin);
+});
+
+test('Discord status: the helper app, what it shows, the private key', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'StatusKid', password: 'secret123' })).cookie;
+  // off until the admins set the Application ID
+  assert.equal((await call('GET', '/me/discord-status', null, kid)).data.enabled, false);
+  assert.equal((await fetch(base + '/api/me/discord-status/RobisDiscordStatus.bat', { headers: { cookie: kid } })).status, 404);
+  await call('POST', '/admin/settings', { discord: { status: true, appId: '123456789012345678' } }, admin);
+  assert.equal((await call('GET', '/site')).data.discordStatus, true);
+  const st = (await call('GET', '/me/discord-status', null, kid)).data;
+  assert.equal(st.enabled, true);
+  assert.match(st.key, /^[0-9a-z]{32}$/);
+  // the file: a .bat with the player's key and the app id
+  const res = await fetch(base + '/api/me/discord-status/RobisDiscordStatus.bat', { headers: { cookie: kid } });
+  assert.match(res.headers.get('content-disposition'), /RobisDiscordStatus\.bat/);
+  const bat = await res.text();
+  assert.ok(bat.startsWith('@echo off\r\n'));
+  assert.ok(bat.includes(`$key = '${st.key}'`) && bat.includes("$app = '123456789012345678'") && bat.includes('#PSBEGIN#'));
+  assert.ok(!bat.includes('\n') || bat.split('\n').every((l, i, a) => i === a.length - 1 || l.endsWith('\r')));
+  // what the helper sees: on the site, then in a game
+  let p = (await call('GET', `/presence/discord/${st.key}`)).data;
+  assert.equal(p.details, 'Browsing Robis');
+  const game = (await call('GET', '/games?sort=popular')).data.games[0];
+  const c = await join(kid, { placeId: game.id });
+  await c.wait((m) => m.t === 'welcome');
+  p = (await call('GET', `/presence/discord/${st.key}`)).data;
+  assert.equal(p.details, `Playing ${game.name}`);
+  assert.equal(p.state, 'Playing solo');
+  assert.ok(p.start > 0 && p.buttons[0].url.endsWith(`/game?id=${game.id}`));
+  c.ws.close();
+  // a new key: the old file stops working
+  await call('POST', '/me/discord-status/reset', {}, kid);
+  assert.equal((await call('GET', `/presence/discord/${st.key}`)).status, 404);
+  await call('POST', '/admin/settings', { discord: { status: false, appId: '' } }, admin);
 });

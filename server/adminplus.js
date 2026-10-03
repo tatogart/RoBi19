@@ -34,10 +34,11 @@ export function siteSettings(D) {
   if (!S.maintenance) S.maintenance = { on: false, message: '' };
   if (!S.bannedWords) S.bannedWords = [];
   if (!S.discord) S.discord = { on: false, appId: '', secret: '' };
+  if (S.discord.status === undefined) S.discord.status = true; // "Playing Robis" in Discord profiles (needs only the Application ID)
   return S;
 }
 // Settings for the Admin Panel: the Discord secret never leaves the server.
-const adminView = (S) => ({ ...S, discord: { on: !!S.discord.on, appId: S.discord.appId, hasSecret: !!S.discord.secret } });
+const adminView = (S) => ({ ...S, discord: { on: !!S.discord.on, status: !!S.discord.status, appId: S.discord.appId, hasSecret: !!S.discord.secret } });
 export const isStaffUser = (u) => !!u && (u.isAdmin || (u.perms || []).length > 0);
 
 export function installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version }) {
@@ -49,7 +50,8 @@ export function installAdminPlus(api, { db, manager, requireAdmin, requireStaff,
   // Public: what every page needs (social links, maintenance notice, sign-ups).
   api.get('/site', (req, res) => {
     res.json({ socials: S.socials, maintenance: S.maintenance.on ? S.maintenance : null, signups: S.signups !== false, staff: isStaffUser(req.user),
-      discord: S.discord.on && S.discord.appId ? { appId: S.discord.appId } : null });
+      discord: S.discord.on && S.discord.appId ? { appId: S.discord.appId } : null,
+      discordStatus: !!(S.discord.status && S.discord.appId) });
   });
 
   // Discord Activity: the page inside Discord trades the code from
@@ -170,6 +172,7 @@ export function installAdminPlus(api, { db, manager, requireAdmin, requireStaff,
       if (typeof b.discord.secret === 'string' && b.discord.secret.trim()) S.discord.secret = b.discord.secret.trim().slice(0, 100);
       if (b.discord.clearSecret) S.discord.secret = '';
       S.discord.on = !!b.discord.on && !!appId;
+      if (b.discord.status !== undefined) S.discord.status = !!b.discord.status;
     }
     db.save();
     res.json({ settings: adminView(S) });

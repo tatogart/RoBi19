@@ -710,3 +710,4 @@ html[data-theme="dark"] .adm-note { background: #2b2d2f; }
   .adm-search { max-width: 44px; flex: none; margin-left: 0; }
 }
 .discord-steps { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.discord-more { margin-top: 12px; } .discord-more summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }

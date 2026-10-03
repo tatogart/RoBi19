@@ -1284,6 +1284,7 @@ async function drawSettings() {
   const words = el('textarea', { class: 'input', rows: 3, value: S.bannedWords.join(', '), placeholder: 'word1, word2, ...' });
   const dc = S.discord || { on: false, appId: '', hasSecret: false };
   const dcOn = el('input', { type: 'checkbox', checked: !!dc.on });
+  const dcStatus = el('input', { type: 'checkbox', checked: dc.status !== false });
   const dcApp = el('input', { class: 'input', value: dc.appId || '', placeholder: 'Application ID (a long number)', inputmode: 'numeric' });
   const dcSecret = el('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: dc.hasSecret ? 'Client Secret is saved (type a new one to change it)' : 'Client Secret' });
   const host = location.host;
@@ -1309,7 +1310,7 @@ async function drawSettings() {
       await api.post('/admin/settings', {
         maintenance: { on: maint.checked, message: maintMsg.value }, signups: signups.checked, startRobits: +start.value,
         bannedWords: words.value.split(/[,\n]/), socials: socials,
-        discord: { on: dcOn.checked, appId: dcApp.value.trim(), secret: dcSecret.value },
+        discord: { on: dcOn.checked, status: dcStatus.checked, appId: dcApp.value.trim(), secret: dcSecret.value },
       });
       toast('Settings saved', 'success');
       drawSettings();
@@ -1324,13 +1325,22 @@ async function drawSettings() {
       el('label', { class: 'row', style: { gap: '8px', marginTop: '6px' } }, el('span', { text: 'Robits for new accounts' }), start)),
     section('Chat filter', 'Extra words to hide in chat (on top of the built-in list). Separate them with commas.', words),
     section('Social links', 'Shown in the menu, on the home page and at the bottom of every page.', socialRows),
-    section('Discord Activity', 'Robis inside Discord: players start it in a voice channel and play together, and their Discord status shows what they do ("Playing DOORS").',
-      el('label', { class: 'perm-row' }, dcOn, el('b', { text: 'Robis works as a Discord Activity' }), dc.on && dc.appId ? el('span', { class: 'pill online-pill', text: 'on' }) : null),
-      el('div', { class: 'row wrap', style: { gap: '8px' } }, dcApp, dcSecret),
-      dc.hasSecret ? el('button', { class: 'btn btn-small', style: { marginTop: '6px' }, text: 'Delete the saved secret', onclick: async () => {
-        try { await api.post('/admin/settings', { discord: { on: dcOn.checked, appId: dcApp.value.trim(), clearSecret: true } }); toast('Secret deleted', 'success'); drawSettings(); } catch (e) { toast(e.message, 'error'); }
-      } }) : null,
-      el('h4', { text: 'How to set it up' }), discordSteps),
+    section('Discord', '"Playing Robis" in the players\' Discord profiles: they download a small app (Settings -> Discord status) that shows what they play.',
+      el('label', { class: 'perm-row' }, dcStatus, el('b', { text: 'Show "Playing Robis" in Discord profiles' }), dc.status !== false && dc.appId ? el('span', { class: 'pill online-pill', text: 'on' }) : null),
+      el('label', { class: 'field' }, 'Application ID', dcApp),
+      el('h4', { text: 'How to set it up' }),
+      el('ol', { class: 'discord-steps' },
+        el('li', {}, 'Open ', el('a', { href: 'https://discord.com/developers/applications', target: '_blank', rel: 'noopener', text: 'discord.com/developers/applications' }), ' and press New Application. Name it Robis - players see this name: "Playing Robis".'),
+        el('li', { text: 'General Information: copy the Application ID into the field above and save.' }),
+        el('li', { text: 'Rich Presence -> Art Assets: upload the Robis logo (at least 512x512) with the name robis. It is the picture next to the status (Discord shows new pictures after a few minutes).' }),
+        el('li', { text: 'Done! Players find "Discord status" in their Settings, download the app and run it.' })),
+      el('details', { class: 'discord-more' }, el('summary', { text: 'Optional: Robis inside Discord (Activity in voice channels)' }),
+        el('label', { class: 'perm-row' }, dcOn, el('span', { text: 'Robis works as a Discord Activity' })),
+        dcSecret,
+        dc.hasSecret ? el('button', { class: 'btn btn-small', style: { marginTop: '6px' }, text: 'Delete the saved secret', onclick: async () => {
+          try { await api.post('/admin/settings', { discord: { on: dcOn.checked, appId: dcApp.value.trim(), clearSecret: true } }); toast('Secret deleted', 'success'); drawSettings(); } catch (e) { toast(e.message, 'error'); }
+        } }) : null,
+        discordSteps)),
     el('button', { class: 'btn btn-primary btn-large', text: 'Save settings', onclick: save }));
 }
 
