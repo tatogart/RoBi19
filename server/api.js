@@ -10,6 +10,7 @@ import { TEMPLATES } from './seed/places.js';
 import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES, CATALOG } from '../shared/avatar.js';
 import { PLACE_FORMAT } from '../shared/engine/serialize.js';
 import { filterChat } from './game/chatfilter.js';
+import { installAdminTools } from './admintools.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -58,7 +59,7 @@ export const BAN_STEPS = ['1h', '1d', '3d', '7d', '30d', 'forever'];
 const B = (key, label) => ({ key, label, type: 'bool', default: true });
 export const PERM_OPTIONS = {
   moderator: [
-    B('kick', 'Kick players'), B('mute', 'Mute players in games'), B('ban', 'Ban players'),
+    B('kick', 'Kick players'), B('warn', 'Warn players'), B('mute', 'Mute players in games'), B('ban', 'Ban players'),
     { key: 'maxBan', label: 'Longest ban', type: 'choice', choices: BAN_STEPS, default: 'forever' },
     B('deviceBan', 'Ban devices too (alt accounts)'), B('rename', 'Rename players'), B('password', 'Reset passwords and log players out'),
     B('deleteUsers', 'Delete accounts'), B('deleteGames', 'Delete games'), B('announce', 'Site announcement'), B('groups', 'Moderate groups and player items'),
@@ -368,6 +369,7 @@ export function createApi(db, manager, opts = {}) {
     stipend: stipendFor(u), rawAvatar: normalizeAvatar(u.avatar),
     perms: u.isAdmin ? Object.keys(PERMISSIONS) : (u.perms || []), tradePrivacy: u.tradePrivacy || 'everyone',
     hunt: manager.hunt ? manager.hunt.eligible(u.id) : false, // The Hunt event page in the menu (a live event)
+    warning: u.pendingWarning || null, // a warning from the staff not seen yet (a popup)
   });
 
   // Owners, admins and the people they add to Team Create can edit a place.
@@ -1972,6 +1974,7 @@ export function createApi(db, manager, opts = {}) {
   const adminUser = (u) => ({
     ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, perms: u.perms || [], permOpts: u.permOpts || {}, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
     items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
+    warnings: (u.warnings || []).length,
   });
   const target = (req, res) => {
     const u = D.users[toInt(req.params.id)];
@@ -1983,7 +1986,11 @@ export function createApi(db, manager, opts = {}) {
   if (!D.adminLog) D.adminLog = [];
   const ACTIONS = {
     robits: (b) => `Robits ${+b.amount > 0 ? '+' : ''}${Math.trunc(+b.amount || 0)}`,
-    membership: (b) => `Membership: ${MEMBERSHIPS[b.tier]?.name || b.tier}`,
+    membership: (b) => `Membership: ${MEMBERSHIPS[b.tier]?.name || b.tier}${+b.days ? ` for ${Math.trunc(+b.days)} days` : ''}`,
+    give: (b) => `Gave ${(b.itemIds || []).length} item(s): ${(b.itemIds || []).slice(0, 5).map((id) => D.items[toInt(id)]?.name || '?').join(', ')}`,
+    robitsset: (b) => `Robits set to ${Math.trunc(+b.value || 0)}`,
+    warn: (b) => `Warning: ${String(b.reason || '').slice(0, 120)}`,
+    notes: (b) => (b.remove ? 'Deleted a staff note' : 'Added a staff note'),
     items: (b) => (b.all ? 'Gave all items' : `Gave item: ${D.items[toInt(b.itemId)]?.name || '?'}`),
     remove: (b) => (b.all ? 'Took all items' : `Took item: ${D.items[toInt(b.itemId)]?.name || '?'}`),
     admin: (b) => (b.isAdmin ? 'Made admin' : 'Removed admin'),
@@ -2209,7 +2216,8 @@ export function createApi(db, manager, opts = {}) {
     const u = target(req, res); if (!u) return;
     if (!MEMBERSHIPS[req.body?.tier]) return bad(res, 'Unknown membership.');
     u.membership = req.body.tier;
-    u.membershipUntil = 0; // set by staff: no end date
+    const days = Math.max(0, Math.min(3650, Math.trunc(+req.body?.days || 0)));
+    u.membershipUntil = days && req.body.tier !== 'None' ? Date.now() + days * 86400e3 : 0; // no days: no end date
     delete u.membershipAfter;
     log(u.id, 0, `Membership set by ${req.user.username}`);
     db.save();
@@ -2337,7 +2345,7 @@ export function createApi(db, manager, opts = {}) {
         friends: (D.friends[u.id] || []).length, tradePrivacy: u.tradePrivacy || 'everyone',
         trades: (D.trades || []).filter((t) => t.from === u.id || t.to === u.id).length,
       },
-      transactions: D.transactions.filter((t) => t.userId === u.id).slice(-40).reverse(),
+      transactions: D.transactions.filter((t) => t.userId === u.id).slice(-80).reverse(),
       log: D.adminLog.filter((e) => e.targetId === u.id).slice(-40).reverse(),
     });
   });
@@ -2438,6 +2446,7 @@ export function createApi(db, manager, opts = {}) {
 
   installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial });
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
+  installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });
 
   api.use((req, res) => bad(res, 'Not found', 404));
   return api;

@@ -1,6 +1,6 @@
-// Admin Panel: players (with a full "Manage" card: password reset, rename,
-// kick, Robits, items, rights, bans), games, Limited and player-made items,
-// the log of every admin action, and a site-wide announcement.
+// Admin Panel 2.0 ("Control Center"): a sidebar with every section, live numbers
+// and a search for everything (Ctrl+K), a player panel with tabs (inventory: give
+// any item; economy, warnings, notes, history), reports, activity, Gift Center.
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
 import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner, nameBadges, itemCard, presenceText } from '../ui.js';
@@ -14,12 +14,43 @@ if (!perm('moderator') && !perm('economy')) {
   await new Promise(() => {});
 }
 
-app.append(el('div', { class: 'admin-title' }, el('h1', { text: 'Admin Panel' }),
-  el('span', { class: 'admin-role', text: me.isAdmin ? 'Administrator' : 'Staff' })));
+// ---------------------------------------------------------------- layout
+// Admin Panel 2.0: a sidebar with every section in groups, a top bar with the
+// live numbers and the search (Ctrl+K: players, items, sections, actions).
+const ICONS = {
+  home: 'M3 11l9-8 9 8v10a1 1 0 01-1 1h-5v-7H9v7H4a1 1 0 01-1-1z',
+  pulse: 'M2 12h4l3-8 4 16 3-8h6',
+  users: 'M9 11a4 4 0 100-8 4 4 0 000 8zm-7 10a7 7 0 0114 0zm14-10a3.5 3.5 0 100-7M18 21h4a6 6 0 00-5-6',
+  flag: 'M5 21V4m0 0h11l-2 4 2 4H5',
+  badge: 'M12 2l3 6 6 1-4.5 4.5 1 6.5L12 17l-5.5 3 1-6.5L3 9l6-1z',
+  gift: 'M3 10h18v4H3zm2 4h14v8H5zm7-4v12M12 10c-2-4-7-5-7-2s5 2 7 2zm0 0c2-4 7-5 7-2s-5 2-7 2',
+  box: 'M3 7l9-4 9 4v10l-9 4-9-4zm0 0l9 4 9-4M12 11v10',
+  ticket: 'M3 7h18v4a2 2 0 000 4v4H3v-4a2 2 0 000-4zm11 0v12',
+  game: 'M6 8h12a4 4 0 014 4v2a3 3 0 01-5 2l-2-2H9l-2 2a3 3 0 01-5-2v-2a4 4 0 014-4zm1 3v4m-2-2h4m7-1h.01M18 14h.01',
+  hunt: 'M12 2l7 10-7 10-7-10z',
+  server: 'M3 4h18v6H3zm0 10h18v6H3zm3-7h.01M6 17h.01',
+  megaphone: 'M3 10v4h4l6 5V5L7 10zm13-2a5 5 0 010 8',
+  gear: 'M12 15a3 3 0 100-6 3 3 0 000 6zm8-3l2-1-2-4-2 1a7 7 0 00-2-1V5h-4v2a7 7 0 00-2 1L8 7 6 11l2 1v2l-2 1 2 4 2-1a7 7 0 002 1v2h4v-2a7 7 0 002-1l2 1 2-4-2-1z',
+  list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  search: 'M11 18a7 7 0 100-14 7 7 0 000 14zm10 3l-5-5',
+  bolt: 'M13 2L4 14h7l-1 8 9-12h-7z',
+};
+const ic = (name, cls = 'adm-ic') => el('span', { class: cls, html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[name] || ICONS.box}"/></svg>` });
+
 const announceBox = el('div');
-const tabs = el('div', { class: 'tabs admin-tabs' });
-const body = el('div', { class: 'panel admin-body' }, spinner());
-app.append(tabs, body);
+const nav = el('nav', { class: 'adm-nav' });
+const pageTitle = el('div', { class: 'adm-page-title' });
+const liveBox = el('div', { class: 'adm-live' });
+const body = el('div', { class: 'adm-body' }, spinner());
+const searchBtn = el('button', { class: 'adm-search', onclick: () => palette() }, ic('search'), el('span', { class: 'adm-search-text', text: 'Search players, items, sections...' }), el('kbd', { text: 'Ctrl K' }));
+app.append(el('div', { class: 'adm' },
+  el('aside', { class: 'adm-side' },
+    el('div', { class: 'adm-brand' }, el('div', { class: 'adm-logo' }, ic('bolt')), el('div', {}, el('b', { text: 'Control Center' }), el('div', { class: 'adm-brand-sub', text: me.isAdmin ? 'Administrator' : 'Staff' }))),
+    nav,
+    el('div', { class: 'adm-side-foot' }, el('span', { class: 'no-i18n', text: me.username }), el('span', { class: 'muted', text: ' · Admin Panel 2.0' }))),
+  el('main', { class: 'adm-main' },
+    el('div', { class: 'adm-top' }, pageTitle, searchBtn, liveBox),
+    body)));
 
 let data;
 async function load() {
@@ -46,38 +77,62 @@ function drawAnnouncement() {
       a ? el('button', { class: 'btn', text: 'Remove', onclick: () => post('') }) : null)));
 }
 
-// ---------------------------------------------------------------- tabs
+// ---------------------------------------------------------------- sections
 const TABS = {
-  dashboard: { label: 'Dashboard', draw: drawDashboard },
-  players: { label: 'Players', draw: drawPlayers },
-  servers: { label: 'Servers', draw: drawServers },
-  badges: { label: 'Badges', draw: drawBadges, admin: true },
-  promo: { label: 'Promo Codes', draw: drawPromo, perm: 'economy' },
-  hunt: { label: 'The Hunt', draw: drawHunt, admin: true },
-  games: { label: 'Games', draw: drawGames },
-  items: { label: 'Items', draw: drawItems },
-  broadcast: { label: 'Broadcast', draw: drawBroadcast, admin: true },
-  settings: { label: 'Settings', draw: drawSettings, admin: true },
-  log: { label: 'Admin Log', draw: drawLog },
+  dashboard: { label: 'Dashboard', group: 'Overview', icon: 'home', draw: drawDashboard },
+  activity: { label: 'Activity', group: 'Overview', icon: 'pulse', draw: drawActivity },
+  players: { label: 'Players', group: 'People', icon: 'users', draw: drawPlayers },
+  reports: { label: 'Reports', group: 'People', icon: 'flag', draw: drawReports, perm: 'moderator' },
+  badges: { label: 'Badges', group: 'People', icon: 'badge', draw: drawBadges, admin: true },
+  gifts: { label: 'Gift Center', group: 'Economy', icon: 'gift', draw: drawGifts, admin: true },
+  items: { label: 'Items', group: 'Economy', icon: 'box', draw: drawItems },
+  promo: { label: 'Promo Codes', group: 'Economy', icon: 'ticket', draw: drawPromo, perm: 'economy' },
+  games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
+  hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
+  servers: { label: 'Servers', group: 'Live', icon: 'server', draw: drawServers },
+  broadcast: { label: 'Broadcast', group: 'Live', icon: 'megaphone', draw: drawBroadcast, admin: true },
+  settings: { label: 'Settings', group: 'System', icon: 'gear', draw: drawSettings, admin: true },
+  log: { label: 'Admin Log', group: 'System', icon: 'list', draw: drawLog },
 };
 for (const [id, t] of Object.entries(TABS)) if ((t.admin && !me.isAdmin) || (t.perm && !perm(t.perm))) delete TABS[id];
 let current = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard';
+const navBtns = {};
 function openTab(id) {
   current = id;
-  [...tabs.children].forEach((b) => b.classList.toggle('active', b.dataset.tab === id));
+  for (const [k, b] of Object.entries(navBtns)) b.classList.toggle('active', k === id);
+  pageTitle.replaceChildren(ic(TABS[id].icon), el('span', { text: TABS[id].label }));
+  closeDrawer();
   TABS[id].draw();
 }
+let lastGroup = '';
 for (const [id, t] of Object.entries(TABS)) {
-  const b = el('button', { class: id === current ? 'active' : '', text: t.label, onclick: () => { history.replaceState(null, '', '#' + id); openTab(id); } });
-  b.dataset.tab = id;
-  tabs.append(b);
+  if (t.group !== lastGroup) { nav.append(el('div', { class: 'adm-group', text: t.group })); lastGroup = t.group; }
+  const b = el('button', { class: 'adm-link' + (id === current ? ' active' : ''), onclick: () => { history.replaceState(null, '', '#' + id); openTab(id); } },
+    ic(t.icon), el('span', { text: t.label }), el('span', { class: 'adm-count' }));
+  navBtns[id] = b;
+  nav.append(b);
 }
 addEventListener('hashchange', () => { const id = location.hash.slice(1); if (TABS[id] && id !== current) openTab(id); });
+
+// The live numbers at the top (and the open reports in the sidebar).
+async function pollLive() {
+  try {
+    const l = await api.get('/admin/live');
+    liveBox.replaceChildren(
+      el('span', { class: 'adm-chip green', title: 'Online now' }, el('i', { class: 'dot' }), el('b', { text: String(l.online) }), el('span', { text: ' online' })),
+      el('span', { class: 'adm-chip blue', title: 'Playing now' }, el('b', { text: String(l.playing) }), el('span', { text: ' playing' })),
+      el('span', { class: 'adm-chip', title: 'Game servers' }, el('b', { text: String(l.servers) }), el('span', { text: ' servers' })));
+    const rc = navBtns.reports && navBtns.reports.querySelector('.adm-count');
+    if (rc) { rc.textContent = l.reports ? String(l.reports) : ''; rc.classList.toggle('on', !!l.reports); }
+  } catch { /* offline for a moment */ }
+}
+pollLive();
+setInterval(pollLive, 15000);
 
 // ---------------------------------------------------------------- players
 const search = el('input', { class: 'input', placeholder: 'Search players' });
 const filter = el('select', { class: 'input', style: { width: 'auto', flex: 'none', minWidth: 0 } },
-  [['all', 'Everyone'], ['online', 'Online'], ['banned', 'Banned'], ['staff', 'Staff'], ['badges', 'With badges'], ['new', 'New today']].map(([v, t]) => el('option', { value: v, text: t })));
+  [['all', 'Everyone'], ['online', 'Online'], ['banned', 'Banned'], ['warned', 'With warnings'], ['staff', 'Staff'], ['badges', 'With badges'], ['new', 'New today'], ['rich', 'Richest first']].map(([v, t]) => el('option', { value: v, text: t })));
 const list = el('div');
 search.addEventListener('input', () => drawList());
 filter.addEventListener('change', () => drawList());
@@ -93,10 +148,13 @@ const FILTERS = {
   staff: (u) => u.isAdmin || (u.perms || []).length,
   badges: (u) => (u.flags || []).length > 0,
   new: (u) => Date.now() - u.created < 24 * 3600e3,
+  warned: (u) => (u.warnings || 0) > 0,
+  rich: () => true,
 };
 function drawList() {
   const q = search.value.trim().toLowerCase();
-  const users = data.users.filter((u) => (!q || u.username.toLowerCase().includes(q)) && FILTERS[filter.value](u));
+  const users = data.users.filter((u) => (!q || u.username.toLowerCase().includes(q) || String(u.id) === q) && FILTERS[filter.value](u));
+  if (filter.value === 'rich') users.sort((a, b) => b.robits - a.robits);
   list.replaceChildren(...(users.length ? users.slice(0, 200).map(row) : [el('div', { class: 'empty', text: 'No players found.' })]));
 }
 
@@ -139,77 +197,195 @@ function row(u) {
       self || !perm('moderator') ? null : el('button', { class: 'btn btn-small' + (u.banned ? '' : ' btn-red'), text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) })));
 }
 
-// The player card: everything about one account, grouped.
-async function manage(u0) {
-  const box = el('div', { class: 'manage' }, spinner());
-  const m = modal({ title: u0.username, width: 760, body: box });
+// ---------------------------------------------------------------- the player drawer
+// Everything about one account in a panel from the right, in tabs:
+// overview, inventory, economy, moderation, notes and history.
+let drawerEl = null;
+function closeDrawer() {
+  if (!drawerEl) return;
+  drawerEl.classList.remove('open');
+  const d = drawerEl;
+  drawerEl = null;
+  setTimeout(() => d.remove(), 200);
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && drawerEl && !document.querySelector('.modal-backdrop')) closeDrawer(); });
+
+async function manage(u0, tab = 'overview') {
+  closeDrawer();
+  const panel = el('div', { class: 'adm-drawer-panel' }, spinner());
+  const back = el('div', { class: 'adm-drawer' }, el('div', { class: 'adm-drawer-shade', onclick: closeDrawer }), panel);
+  document.body.append(back);
+  drawerEl = back;
+  requestAnimationFrame(() => back.classList.add('open'));
   let info;
-  try { info = await api.get(`/admin/users/${u0.id}`); } catch (e) { box.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  try { info = await api.get(`/admin/users/${u0.id}`); } catch (e) { panel.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
   const u = info.user;
   const self = u.id === me.id;
   const lockedAdmin = u.isAdmin && !me.isAdmin;
-  const go = (fn) => () => { m.close(); fn(u); };
-  const fact = (k, v) => el('div', { class: 'fact' }, el('span', { class: 'muted', text: k }), el('b', { text: String(v) }));
-  const section = (title, ...btns) => {
-    const b = btns.filter(Boolean);
-    return b.length ? el('div', { class: 'manage-section' }, el('h4', { text: title }), el('div', { class: 'row wrap' }, b)) : null;
-  };
-  const tier = el('select', { class: 'input', style: { width: 'auto' } },
-    data.memberships.map((t) => el('option', { value: t.id, text: t.name, selected: (u.membership || 'None') === t.id })));
-  tier.onchange = () => act(`/admin/users/${u.id}/membership`, { tier: tier.value }, 'Membership updated');
   const canMod = perm('moderator') && !self && !lockedAdmin;
+  const reopen = (t = tab) => { if (drawerEl === back) manage(u, t); };
+  // runs an action, then shows the player again on the same tab
+  const doAct = async (path, b, msg, t) => { await act(path, b, msg); reopen(t); };
+  const go = (fn) => () => fn(u);
+  const fact = (k, v, cls = '') => el('div', { class: 'fact ' + cls }, el('span', { class: 'muted', text: k }), el('b', { text: String(v) }));
+  const ingame = u.presence?.status === 'ingame';
 
-  box.replaceChildren(
-    el('div', { class: 'manage-top' },
-      el('a', { class: 'admin-head big', href: `/profile?id=${u.id}` }, headshotImg(u, 150)),
-      el('div', {},
-        el('div', {}, el('b', { class: 'no-i18n', style: { fontSize: '20px' }, text: u.username }), nameBadges(u), ...pills(u)),
-        el('div', { class: 'small muted', text: presenceText(u.presence) }),
-        u.previousNames.length ? el('div', { class: 'small muted' }, 'Previously: ', el('span', { class: 'no-i18n', text: u.previousNames.join(', ') })) : null,
-        u.banned && u.banReason ? el('div', { class: 'small', style: { color: '#d0021b' } }, 'Ban reason: ', el('span', { class: 'no-i18n', text: u.banReason })) : null)),
+  const tabsBar = el('div', { class: 'adm-dtabs' });
+  const content = el('div', { class: 'adm-dbody' });
+  const TABS2 = {
+    overview: ['Overview', () => overview()],
+    inventory: ['Inventory', () => inventory()],
+    economy: ['Economy', () => economy(), perm('economy')],
+    moderation: ['Moderation', () => moderation(), perm('moderator')],
+    notes: ['Notes', () => notes()],
+    history: ['History', () => history()],
+  };
+  const show = (t) => {
+    tab = t;
+    for (const b of tabsBar.children) b.classList.toggle('active', b.dataset.t === t);
+    content.replaceChildren(spinner());
+    Promise.resolve(TABS2[t][1]()).then((node) => content.replaceChildren(node)).catch((e) => content.replaceChildren(el('div', { class: 'empty', text: e.message })));
+  };
+  for (const [t, [label, , ok = true]] of Object.entries(TABS2)) {
+    if (!ok) continue;
+    const b = el('button', { text: label, onclick: () => show(t) });
+    b.dataset.t = t;
+    tabsBar.append(b);
+  }
+
+  const overview = () => el('div', {},
     el('div', { class: 'facts' },
-      fact('Robits', fmtFull(u.robits)), fact('Items', u.items), fact('Games', u.games), fact('Friends', u.friends), fact('Trades', u.trades),
-      fact('Joined', new Date(u.created).toLocaleDateString()), fact('Devices', u.devices), fact('IPs', u.ips), fact('Logged in on', u.sessions)),
-    section('Account',
-      canMod ? el('button', { class: 'btn btn-small btn-primary', text: 'Reset password', onclick: go(resetPassword) }) : null,
-      perm('moderator') && !lockedAdmin ? el('button', { class: 'btn btn-small', text: 'Change username', onclick: go(rename) }) : null,
-      canMod ? el('button', { class: 'btn btn-small', text: 'Log out everywhere', onclick: () => act(`/admin/users/${u.id}/logout`, {}, `${u.username} was logged out`) }) : null,
-      canMod && u.presence?.status === 'ingame' ? el('button', { class: 'btn btn-small', text: 'Kick from game', onclick: go(kick) }) : null),
-    section('Economy',
-      perm('economy') ? el('button', { class: 'btn btn-small btn-green', text: 'Give Robits', onclick: go(giveRobits) }) : null,
-      perm('economy') ? el('button', { class: 'btn btn-small', text: 'Give all items', onclick: () => act(`/admin/users/${u.id}/items`, { all: true }, `${u.username} now owns every item`) }) : null,
-      perm('economy') ? el('button', { class: 'btn btn-small', text: 'Take items', onclick: go(takeItems) }) : null,
-      perm('economy') ? tier : null),
-    me.isAdmin ? section('Rights',
-      self ? null : el('button', { class: 'btn btn-small', text: u.isAdmin ? 'Remove admin' : 'Make admin', onclick: () => { m.close(); act(`/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin }, u.isAdmin ? 'Admin removed' : `${u.username} is now an admin`); } }),
-      self || u.isAdmin ? null : el('button', { class: 'btn btn-small', text: 'Permissions', onclick: go(permsDialog) })) : null,
-    me.isAdmin ? el('div', { class: 'manage-section' }, el('h4', { text: 'Badges' }), badgePicker(u, (nu) => {
-      Object.assign(u, { flags: nu.flags });
-      box.querySelector('.manage-top .name-badges')?.remove();
-      const nb = nameBadges(nu);
-      if (nb) box.querySelector('.manage-top b').after(nb);
-    })) : null,
-    section('Moderation',
-      canMod ? el('button', { class: 'btn btn-small' + (u.banned ? '' : ' btn-red'), text: u.banned ? 'Unban' : 'Ban', onclick: go(ban) }) : null,
-      canMod ? el('button', { class: 'btn btn-small btn-red', text: 'Delete account', onclick: go(deleteAccount) }) : null),
+      fact('Robits', 'R$ ' + fmtFull(u.robits), 'big'), fact('Items', u.items), fact('Games', u.games), fact('Friends', u.friends), fact('Trades', u.trades),
+      fact('Warnings', u.warnings || 0, u.warnings ? 'warn' : ''), fact('Joined', new Date(u.created).toLocaleDateString()), fact('Devices', u.devices), fact('IPs', u.ips), fact('Logged in on', u.sessions)),
+    u.previousNames.length ? el('div', { class: 'small muted', style: { margin: '8px 0' } }, 'Previously: ', el('span', { class: 'no-i18n', text: u.previousNames.join(', ') })) : null,
+    me.isAdmin ? el('div', { class: 'manage-section' }, el('h4', { text: 'Badges' }), badgePicker(u, () => {})) : null,
+    me.isAdmin ? el('div', { class: 'manage-section' }, el('h4', { text: 'Rights' }), el('div', { class: 'row wrap' },
+      self ? null : el('button', { class: 'btn btn-small', text: u.isAdmin ? 'Remove admin' : 'Make admin', onclick: () => doAct(`/admin/users/${u.id}/admin`, { isAdmin: !u.isAdmin }, u.isAdmin ? 'Admin removed' : `${u.username} is now an admin`) }),
+      self || u.isAdmin ? null : el('button', { class: 'btn btn-small', text: 'Permissions', onclick: go(permsDialog) }))) : null,
     el('div', { class: 'manage-section' }, el('h4', { text: 'Alt accounts (same device or IP)' }), (() => {
       const box = el('div', { class: 'promo-chosen' }, el('span', { class: 'muted small', text: 'Loading...' }));
-      api.get(`/admin/users/${u.id}/alts`).then(({ alts }) => box.replaceChildren(...(alts.length ? alts.map((a) => el('span', { class: 'holder-chip' + (a.banned ? ' banned-chip' : '') },
-        el('a', { class: 'no-i18n', href: `/profile?id=${a.id}`, text: a.username }),
-        el('span', { class: 'muted small', text: [a.device ? 'device' : '', a.ip ? 'IP' : ''].filter(Boolean).join(' + ') + (a.banned ? ' · banned' : '') })))
+      api.get(`/admin/users/${u.id}/alts`).then(({ alts }) => box.replaceChildren(...(alts.length ? alts.map((a) => el('button', { class: 'holder-chip' + (a.banned ? ' banned-chip' : ''), onclick: () => manage(a) },
+        el('span', { class: 'no-i18n', text: a.username }),
+        el('span', { class: 'muted small', text: ' ' + [a.device ? 'device' : '', a.ip ? 'IP' : ''].filter(Boolean).join(' + ') + (a.banned ? ' · banned' : '') })))
         : [el('span', { class: 'muted small', text: 'None found.' })]))).catch(() => box.replaceChildren());
       return box;
-    })()),
-    el('div', { class: 'manage-cols' },
-      el('div', {}, el('h4', { text: 'Recent transactions' }),
-        info.transactions.length ? el('div', { class: 'mini-list' }, info.transactions.map((t) => el('div', { class: 'mini-row' },
-          el('span', { class: 'mini-amount ' + (t.amount > 0 ? 'plus' : t.amount < 0 ? 'minus' : ''), text: t.amount ? (t.amount > 0 ? '+' : '') + fmtFull(t.amount) : '·' }),
-          el('span', { class: 'mini-text', text: t.desc }), el('span', { class: 'muted small', text: timeAgo(t.time) }))))
-          : el('div', { class: 'muted small', text: 'Nothing yet.' })),
-      el('div', {}, el('h4', { text: 'Admin actions' }),
-        info.log.length ? el('div', { class: 'mini-list' }, info.log.map((e) => el('div', { class: 'mini-row' },
-          el('span', { class: 'mini-text' }, el('b', { class: 'no-i18n', text: e.byName }), ' · ', el('span', { text: e.action })), el('span', { class: 'muted small', text: timeAgo(e.time) }))))
-          : el('div', { class: 'muted small', text: 'Nothing yet.' }))));
+    })()));
+
+  const inventory = async () => {
+    const { items } = await api.get(`/users/${u.id}/inventory`);
+    const q = el('input', { class: 'input', placeholder: 'Filter this inventory' });
+    const grid = el('div', { class: 'adm-inv' });
+    const draw = () => {
+      const f = q.value.trim().toLowerCase();
+      const list = items.filter((it) => !f || it.name.toLowerCase().includes(f));
+      grid.replaceChildren(...(list.length ? list.map((it) => el('div', { class: 'adm-inv-item' },
+        itemCard(it),
+        perm('economy') ? el('button', { class: 'btn btn-small btn-red adm-take', text: 'Take', onclick: async () => {
+          if (!confirm(`Take ${it.name} from ${u.username}?`)) return;
+          await doAct(`/admin/users/${u.id}/items/remove`, { itemId: it.id }, `${it.name} taken`, 'inventory');
+        } }) : null)) : [el('div', { class: 'empty', text: items.length ? 'Nothing matches.' : 'This player has no items.' })]));
+    };
+    q.addEventListener('input', draw);
+    draw();
+    return el('div', {},
+      perm('economy') ? el('div', { class: 'adm-inv-actions' },
+        el('button', { class: 'btn btn-green', onclick: () => itemPicker({ title: `Give items to ${u.username}`, owned: items.map((i) => i.id), onPick: async (picked) => {
+          const r = await api.post(`/admin/users/${u.id}/give`, { itemIds: picked.map((i) => i.id) });
+          toast(r.given.length ? `Given: ${r.given.join(', ')}` : 'They already have these items', 'success');
+          replaceUser(r.user);
+          reopen('inventory');
+        } }) }, '+ Give items'),
+        el('button', { class: 'btn', text: 'Give every item', onclick: () => { if (confirm(`Give ${u.username} every item for sale?`)) doAct(`/admin/users/${u.id}/items`, { all: true }, `${u.username} now owns every item`, 'inventory'); } }),
+        items.length ? el('button', { class: 'btn btn-red', text: 'Take all', onclick: () => { if (confirm(`Take ALL items from ${u.username}?`)) doAct(`/admin/users/${u.id}/items/remove`, { all: true }, 'All items taken', 'inventory'); } }) : null) : null,
+      el('div', { class: 'row', style: { margin: '10px 0' } }, q, el('span', { class: 'muted small', text: `${items.length} items` })),
+      grid);
+  };
+
+  const economy = () => {
+    const amount = el('input', { class: 'input', type: 'number', value: 1000, step: 100 });
+    const exact = el('input', { class: 'input', type: 'number', min: 0, value: u.robits });
+    const tier = el('select', { class: 'input' }, data.memberships.map((t) => el('option', { value: t.id, text: t.name, selected: (u.membership || 'None') === t.id })));
+    const days = el('input', { class: 'input', type: 'number', min: 0, max: 3650, value: 0, style: { width: '110px' } });
+    return el('div', {},
+      el('div', { class: 'adm-robits' }, el('span', { class: 'muted', text: 'Balance' }), el('b', { text: 'R$ ' + fmtFull(u.robits) })),
+      el('div', { class: 'manage-section' }, el('h4', { text: 'Give or take Robits' }),
+        el('div', { class: 'row wrap' }, [100, 1000, 10000, 100000].map((n) => el('button', { class: 'btn btn-small', text: `+${fmtNum(n)}`, onclick: () => { amount.value = n; } })),
+          el('button', { class: 'btn btn-small', text: '-1,000', onclick: () => { amount.value = -1000; } })),
+        el('div', { class: 'row', style: { marginTop: '8px' } }, amount,
+          el('button', { class: 'btn btn-green', text: 'Apply', onclick: () => doAct(`/admin/users/${u.id}/robits`, { amount: +amount.value }, 'Robits updated', 'economy') }))),
+      el('div', { class: 'manage-section' }, el('h4', { text: 'Set the balance to exactly' }),
+        el('div', { class: 'row' }, exact, el('button', { class: 'btn btn-primary', text: 'Set', onclick: () => doAct(`/admin/users/${u.id}/robitsset`, { value: +exact.value }, 'Balance set', 'economy') }))),
+      el('div', { class: 'manage-section' }, el('h4', { text: 'Builders Club' }),
+        el('div', { class: 'row wrap' }, tier, el('span', { text: 'for' }), days, el('span', { class: 'muted small', text: 'days (0 = forever)' }),
+          el('button', { class: 'btn btn-primary', text: 'Apply', onclick: () => doAct(`/admin/users/${u.id}/membership`, { tier: tier.value, days: +days.value }, 'Membership updated', 'economy') }))));
+  };
+
+  const moderation = () => {
+    const reason = el('input', { class: 'input', maxlength: 300, placeholder: 'What is the warning for?' });
+    const quick = ['Bad words in chat', 'Being mean to other players', 'Spamming', 'Scamming in trades', 'Exploiting a bug'];
+    return el('div', {},
+      canMod ? el('div', { class: 'manage-section' }, el('h4', { text: 'Warn' }),
+        el('p', { class: 'small muted', text: 'The player sees a popup (on the site or in their game) and gets a message.' }),
+        el('div', { class: 'promo-chosen', style: { marginBottom: '6px' } }, quick.map((t) => el('button', { class: 'holder-chip', text: t, onclick: () => { reason.value = t; } }))),
+        el('div', { class: 'row' }, reason, el('button', { class: 'btn btn-orange', text: 'Warn', onclick: async () => {
+          if (!reason.value.trim()) return toast('Write what the warning is for.', 'error');
+          await doAct(`/admin/users/${u.id}/warn`, { reason: reason.value }, `${u.username} was warned`, 'moderation');
+        } }))) : null,
+      el('div', { class: 'manage-section' }, el('h4', { text: 'Account' }), el('div', { class: 'row wrap' },
+        canMod ? el('button', { class: 'btn btn-small' + (u.banned ? '' : ' btn-red'), text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) }) : null,
+        canMod && ingame ? el('button', { class: 'btn btn-small', text: 'Kick from game', onclick: go(kick) }) : null,
+        canMod ? el('button', { class: 'btn btn-small', text: 'Reset password', onclick: go(resetPassword) }) : null,
+        perm('moderator') && !lockedAdmin ? el('button', { class: 'btn btn-small', text: 'Change username', onclick: go(rename) }) : null,
+        canMod ? el('button', { class: 'btn btn-small', text: 'Log out everywhere', onclick: () => doAct(`/admin/users/${u.id}/logout`, {}, `${u.username} was logged out`, 'moderation') }) : null,
+        canMod ? el('button', { class: 'btn btn-small btn-red', text: 'Delete account', onclick: go(deleteAccount) }) : null)),
+      u.banned && u.banReason ? el('div', { class: 'adm-banbox' }, el('b', { text: 'Ban reason: ' }), el('span', { class: 'no-i18n', text: u.banReason })) : null);
+  };
+
+  const notes = async () => {
+    const r = await api.get(`/admin/users/${u.id}/notes`);
+    const text = el('textarea', { class: 'input', rows: 2, maxlength: 500, placeholder: 'A note only the staff can see (e.g. "warned about trading scams")' });
+    const list = (arr) => el('div', { class: 'adm-notes' }, arr.length ? arr.map((n) => el('div', { class: 'adm-note' },
+      el('div', { class: 'small muted' }, el('b', { class: 'no-i18n', text: n.byName }), ' · ' + timeAgo(n.time)),
+      el('div', { class: 'no-i18n', text: n.text }),
+      n.by === me.id || me.isAdmin ? el('button', { class: 'adm-note-x', text: '×', title: 'Delete', onclick: async () => { await api.post(`/admin/users/${u.id}/notes`, { remove: n.id }); show('notes'); } }) : null))
+      : [el('div', { class: 'muted small', text: 'No notes yet.' })]);
+    return el('div', {},
+      el('div', { class: 'row' }, text, el('button', { class: 'btn btn-primary', text: 'Add note', onclick: async () => {
+        try { await api.post(`/admin/users/${u.id}/notes`, { text: text.value }); show('notes'); } catch (e) { toast(e.message, 'error'); }
+      } })),
+      el('h4', { text: 'Staff notes' }), list(r.notes),
+      el('h4', { text: `Warnings (${r.warnings.length})` }),
+      r.warnings.length ? el('div', { class: 'adm-notes' }, r.warnings.map((w) => el('div', { class: 'adm-note warn' }, el('div', { class: 'small muted' }, el('b', { class: 'no-i18n', text: w.byName }), ' · ' + timeAgo(w.time)), el('div', { class: 'no-i18n', text: w.reason }))))
+        : el('div', { class: 'muted small', text: 'No warnings.' }));
+  };
+
+  const history = () => el('div', { class: 'manage-cols' },
+    el('div', {}, el('h4', { text: 'Transactions' }),
+      info.transactions.length ? el('div', { class: 'mini-list tall' }, info.transactions.map((t) => el('div', { class: 'mini-row' },
+        el('span', { class: 'mini-amount ' + (t.amount > 0 ? 'plus' : t.amount < 0 ? 'minus' : ''), text: t.amount ? (t.amount > 0 ? '+' : '') + fmtFull(t.amount) : '·' }),
+        el('span', { class: 'mini-text', text: t.desc }), el('span', { class: 'muted small', text: timeAgo(t.time) }))))
+        : el('div', { class: 'muted small', text: 'Nothing yet.' })),
+    el('div', {}, el('h4', { text: 'Admin actions' }),
+      info.log.length ? el('div', { class: 'mini-list tall' }, info.log.map((e) => el('div', { class: 'mini-row' },
+        el('span', { class: 'mini-text' }, el('b', { class: 'no-i18n', text: e.byName }), ' · ', el('span', { text: e.action })), el('span', { class: 'muted small', text: timeAgo(e.time) }))))
+        : el('div', { class: 'muted small', text: 'Nothing yet.' })));
+
+  panel.replaceChildren(
+    el('div', { class: 'adm-dhead' },
+      el('button', { class: 'adm-dclose', text: '×', title: 'Close (Esc)', onclick: closeDrawer }),
+      el('a', { class: 'admin-head big', href: `/profile?id=${u.id}` }, headshotImg(u, 150), u.presence && u.presence.status !== 'offline' ? el('span', { class: 'presence-dot ' + u.presence.status }) : null),
+      el('div', { class: 'adm-dname' },
+        el('div', {}, el('b', { class: 'no-i18n', text: u.username }), nameBadges(u)),
+        el('div', {}, ...pills(u), u.warnings ? el('span', { class: 'pill warn-pill', text: `${u.warnings} warning${u.warnings === 1 ? '' : 's'}` }) : null),
+        el('div', { class: 'small muted', text: `#${u.id} · ${presenceText(u.presence)}` }),
+        el('div', { class: 'row wrap', style: { gap: '6px', marginTop: '6px' } },
+          ingame ? el('button', { class: 'btn btn-small btn-green', text: 'Join their server', onclick: async () => {
+            try { const w = await api.get(`/admin/users/${u.id}/where`); location.href = `/play?placeId=${w.gameId}${w.place ? '&place=' + w.place : ''}&serverId=${encodeURIComponent(w.serverId)}`; } catch (e) { toast(e.message, 'error'); }
+          } }) : null,
+          el('a', { class: 'btn btn-small', href: `/messages?to=${encodeURIComponent(u.username)}`, text: 'Message' }),
+          el('a', { class: 'btn btn-small', href: `/profile?id=${u.id}`, text: 'Profile' })))),
+    tabsBar, content);
+  show(TABS2[tab] ? tab : 'overview');
 }
 
 // Sets a new password and logs the player out everywhere.
@@ -729,6 +905,245 @@ function huntPlayerBox(quests) {
     out);
 }
 
+// ---------------------------------------------------------------- item picker
+// Find any item (also event prizes and items not for sale) and pick one or more.
+function itemPicker({ title = 'Pick items', owned = [], onPick, multi = true, button = 'Give' }) {
+  const picked = new Map();
+  const q = el('input', { class: 'input', placeholder: 'Search by name or ID' });
+  const type = el('select', { class: 'input', style: { width: 'auto', flex: 'none' } }, el('option', { value: '', text: 'All types' }));
+  const grid = el('div', { class: 'adm-pick-grid' }, spinner());
+  const chosen = el('div', { class: 'adm-pick-chosen' });
+  const drawChosen = () => chosen.replaceChildren(...(picked.size ? [...picked.values()].map((it) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: it.name }),
+    el('button', { class: 'chip-x', text: '×', onclick: () => { picked.delete(it.id); drawChosen(); load(); } }))) : [el('span', { class: 'muted small', text: multi ? 'Click items to pick them.' : 'Click an item.' })]));
+  let typesLoaded = false;
+  let timer = 0;
+  const load = async () => {
+    const r = await api.get(`/admin/items/search?q=${encodeURIComponent(q.value.trim())}&type=${encodeURIComponent(type.value)}&limit=60`);
+    if (!typesLoaded) { typesLoaded = true; type.append(...r.types.map((t) => el('option', { value: t, text: t }))); }
+    grid.replaceChildren(...(r.items.length ? r.items.map((it) => {
+      const card = el('button', { class: 'adm-pick' + (picked.has(it.id) ? ' on' : '') + (owned.includes(it.id) ? ' owned' : ''), onclick: () => {
+        if (!multi) { picked.clear(); picked.set(it.id, it); finish(); return; }
+        if (picked.has(it.id)) picked.delete(it.id); else picked.set(it.id, it);
+        card.classList.toggle('on', picked.has(it.id));
+        drawChosen();
+      } }, itemCard(it),
+      el('div', { class: 'adm-pick-tags' },
+        el('span', { class: 'muted small', text: `#${it.id} · ${it.type}` }),
+        it.offsale ? el('span', { class: 'pill', text: 'not for sale' }) : null,
+        it.limited ? el('span', { class: 'pill limited-pill', text: 'Limited' }) : null,
+        owned.includes(it.id) ? el('span', { class: 'pill online-pill', text: 'owned' }) : null));
+      return card;
+    }) : [el('div', { class: 'empty', text: 'No items found.' })]));
+  };
+  q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 200); });
+  type.addEventListener('change', load);
+  let m;
+  const finish = async () => {
+    if (!picked.size) { toast('Pick at least one item.', 'error'); return false; }
+    try { await onPick([...picked.values()]); m.close(); } catch (e) { toast(e.message, 'error'); }
+    return false;
+  };
+  m = modal({
+    title, width: 900,
+    body: el('div', { class: 'adm-picker' }, el('div', { class: 'row' }, q, type), chosen, grid),
+    buttons: multi ? [{ text: button, cls: 'btn-green', onClick: finish }, { text: 'Cancel' }] : [{ text: 'Cancel' }],
+  });
+  drawChosen();
+  load();
+  setTimeout(() => q.focus(), 50);
+}
+
+// ---------------------------------------------------------------- search (Ctrl+K)
+// Players, items, sections and actions in one box.
+function palette() {
+  if (document.querySelector('.adm-palette')) return;
+  const input = el('input', { class: 'adm-pal-input', placeholder: 'Type a player, an item, a section... (Esc to close)' });
+  const list = el('div', { class: 'adm-pal-list' });
+  const back = el('div', { class: 'adm-palette' }, el('div', { class: 'adm-pal-box' }, el('div', { class: 'adm-pal-top' }, ic('search'), input), list));
+  const close = () => back.remove();
+  back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
+  document.body.append(back);
+  let rows = [];
+  let sel = 0;
+  let itemTimer = 0;
+  const actions = [
+    ['Give an item to a player', 'gift', () => giveToPlayerDialog()],
+    me.isAdmin ? ['Send a gift to many players', 'gift', () => { location.hash = 'gifts'; }] : null,
+    me.isAdmin ? ['Message every player', 'megaphone', () => { location.hash = 'broadcast'; }] : null,
+    perm('moderator') ? ['Open reports', 'flag', () => { location.hash = 'reports'; }] : null,
+  ].filter(Boolean);
+  const draw = () => {
+    list.replaceChildren(...rows.map((r, i) => {
+      const b = el('button', { class: 'adm-pal-row' + (i === sel ? ' sel' : ''), onclick: () => { close(); r.run(); } }, r.icon, el('span', { class: 'adm-pal-label no-i18n', text: r.label }), el('span', { class: 'adm-pal-kind', text: r.kind }));
+      b.addEventListener('mousemove', () => { if (sel !== i) { sel = i; draw(); } });
+      return b;
+    }));
+    if (!rows.length) list.append(el('div', { class: 'muted small', style: { padding: '12px' }, text: 'Nothing found.' }));
+  };
+  const update = () => {
+    const q = input.value.trim().toLowerCase();
+    const tabs = Object.entries(TABS).filter(([, t]) => !q || t.label.toLowerCase().includes(q)).map(([id, t]) => ({ label: t.label, kind: 'Section', icon: ic(t.icon), run: () => { location.hash = id; } }));
+    const acts = actions.filter(([l]) => !q || l.toLowerCase().includes(q)).map(([l, i, run]) => ({ label: l, kind: 'Action', icon: ic(i), run }));
+    const players = q ? data.users.filter((u) => u.username.toLowerCase().includes(q) || String(u.id) === q).slice(0, 8).map((u) => ({ label: u.username, kind: 'Player', icon: el('span', { class: 'adm-pal-head' }, headshotImg(u, 48)), run: () => manage(u) })) : [];
+    rows = [...players, ...tabs, ...acts];
+    sel = 0;
+    draw();
+    clearTimeout(itemTimer);
+    if (q.length >= 2) itemTimer = setTimeout(async () => {
+      try {
+        const r = await api.get(`/admin/items/search?q=${encodeURIComponent(q)}&limit=6`);
+        if (input.value.trim().toLowerCase() !== q) return;
+        rows = [...rows, ...r.items.map((it) => ({ label: it.name, kind: 'Item', icon: ic('box'), run: () => giveToPlayerDialog(it) }))];
+        draw();
+      } catch { /* ignore */ }
+    }, 180);
+  };
+  input.addEventListener('input', update);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowDown') { sel = Math.min(rows.length - 1, sel + 1); draw(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { sel = Math.max(0, sel - 1); draw(); e.preventDefault(); }
+    else if (e.key === 'Enter' && rows[sel]) { close(); rows[sel].run(); }
+  });
+  update();
+  input.focus();
+}
+addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); palette(); }
+});
+
+// "Give an item to a player": pick the player (and the item if not given).
+function giveToPlayerDialog(item) {
+  const who = el('input', { class: 'input', placeholder: 'Player name', list: 'adm-names', autocomplete: 'off' });
+  const names = el('datalist', { id: 'adm-names' }, data.users.map((u) => el('option', { value: u.username })));
+  const go = async (items) => {
+    const u = data.users.find((x) => x.username.toLowerCase() === who.value.trim().toLowerCase());
+    if (!u) throw new Error('No player with that name.');
+    const r = await api.post(`/admin/users/${u.id}/give`, { itemIds: items.map((i) => i.id) });
+    replaceUser(r.user);
+    toast(r.given.length ? `${u.username} got: ${r.given.join(', ')}` : `${u.username} already has it`, 'success');
+  };
+  modal({
+    title: item ? `Give ${item.name}` : 'Give an item to a player',
+    body: el('div', {}, item ? el('div', { class: 'adm-give-item' }, itemCard(item)) : null, el('label', { class: 'field' }, 'To', who), names),
+    buttons: [{ text: item ? 'Give' : 'Pick the items...', cls: 'btn-green', onClick: async () => {
+      if (!data.users.some((x) => x.username.toLowerCase() === who.value.trim().toLowerCase())) { toast('No player with that name.', 'error'); return false; }
+      if (item) { try { await go([item]); } catch (e) { toast(e.message, 'error'); return false; } return undefined; }
+      itemPicker({ title: `Give items to ${who.value.trim()}`, onPick: go });
+      return undefined;
+    } }, { text: 'Cancel' }],
+  });
+  setTimeout(() => who.focus(), 50);
+}
+
+// ---------------------------------------------------------------- activity
+const ACT_KIND = { signup: ['New player', 'users', 'blue'], earn: ['Robits in', 'bolt', 'green'], spend: ['Robits out', 'bolt', 'orange'], admin: ['Staff', 'gear', 'purple'], ban: ['Ban', 'flag', 'red'], report: ['Report', 'flag', 'orange'] };
+async function drawActivity(kind = '') {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get(`/admin/activity${kind ? '?kind=' + kind : ''}`); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const chips = el('div', { class: 'adm-filters' }, [['', 'Everything'], ...Object.entries(ACT_KIND).map(([k, [l]]) => [k, l])].map(([k, l]) => el('button', { class: 'adm-filter' + (k === kind ? ' on' : ''), text: l, onclick: () => drawActivity(k) })));
+  let lastDay = '';
+  const rows = [];
+  for (const e of r.events) {
+    const day = new Date(e.time).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    if (day !== lastDay) { rows.push(el('div', { class: 'adm-day', text: day })); lastDay = day; }
+    const [label, icon, color] = ACT_KIND[e.kind] || ['', 'list', ''];
+    const user = e.userId ? data.users.find((u) => u.id === e.userId) : null;
+    rows.push(el('div', { class: 'adm-feed-row' },
+      el('span', { class: 'adm-feed-ic ' + color, title: label }, ic(icon)),
+      el('div', { class: 'adm-feed-text' },
+        e.byName && e.kind !== 'report' ? el('b', { class: 'no-i18n', text: e.byName + ' ' }) : null,
+        e.kind === 'report' ? el('span', {}, el('b', { class: 'no-i18n', text: e.byName }), ' ') : null,
+        user ? el('button', { class: 'adm-link-btn no-i18n', text: e.username, onclick: () => manage(user) }) : e.username ? el('span', { class: 'no-i18n', text: e.username }) : null,
+        el('span', { text: ' ' }), el('span', { class: 'adm-feed-what', text: e.text })),
+      e.amount ? el('span', { class: 'mini-amount ' + (e.amount > 0 ? 'plus' : 'minus'), text: (e.amount > 0 ? '+' : '') + fmtFull(e.amount) }) : null,
+      el('span', { class: 'muted small', text: new Date(e.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })));
+  }
+  body.replaceChildren(chips, rows.length ? el('div', { class: 'adm-feed' }, rows) : el('div', { class: 'empty', text: 'Nothing happened this week.' }));
+}
+
+// ---------------------------------------------------------------- reports
+async function drawReports(status = 'open') {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get(`/admin/reports?status=${status}`); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const handle = async (rep, st, all) => {
+    const note = st === 'open' ? '' : prompt(st === 'resolved' ? 'What did you do? (optional)' : 'Why is it dismissed? (optional)') ?? null;
+    if (note === null) return;
+    try { await api.post(`/admin/reports/${rep.id}`, { status: st, note, all }); toast(st === 'resolved' ? 'Resolved' : st === 'dismissed' ? 'Dismissed' : 'Opened again', 'success'); drawReports(status); pollLive(); } catch (e) { toast(e.message, 'error'); }
+  };
+  body.replaceChildren(
+    el('div', { class: 'adm-filters' }, [['open', `Open (${r.open})`], ['resolved', 'Resolved'], ['dismissed', 'Dismissed'], ['all', 'All']].map(([k, l]) => el('button', { class: 'adm-filter' + (k === status ? ' on' : ''), text: l, onclick: () => drawReports(k) }))),
+    el('p', { class: 'small muted', text: 'Players report others from their profile page. The reporter gets a thank-you message when you close the report.' }),
+    r.reports.length ? el('div', { class: 'adm-reports' }, r.reports.map((rep) => el('div', { class: 'adm-report ' + rep.status },
+      el('div', { class: 'adm-report-head' },
+        rep.user ? el('button', { class: 'admin-head', onclick: () => manage(rep.user) }, headshotImg(rep.user, 96)) : null,
+        el('div', { style: { flex: 1 } },
+          el('div', {}, rep.user ? el('button', { class: 'adm-link-btn no-i18n', style: { fontWeight: 700, fontSize: '16px' }, text: rep.user.username, onclick: () => manage(rep.user) }) : '?', rep.user ? pills(rep.user) : null,
+            rep.reportsOnUser > 1 ? el('span', { class: 'pill warn-pill', text: `${rep.reportsOnUser} reports` }) : null,
+            rep.user?.warnings ? el('span', { class: 'pill warn-pill', text: `${rep.user.warnings} warnings` }) : null),
+          el('div', { class: 'small muted' }, 'Reported by ', el('span', { class: 'no-i18n', text: rep.fromName }), ` · ${timeAgo(rep.time)} · #${rep.id}`)),
+        el('span', { class: 'pill report-state ' + rep.status, text: rep.status })),
+      el('div', { class: 'adm-report-reason', text: rep.reason }),
+      rep.details ? el('div', { class: 'adm-report-details no-i18n', text: `“${rep.details}”` }) : null,
+      rep.status !== 'open' ? el('div', { class: 'small muted' }, `${rep.status === 'resolved' ? 'Resolved' : 'Dismissed'} by `, el('span', { class: 'no-i18n', text: rep.handledName || '?' }), rep.note ? el('span', { class: 'no-i18n', text: ': ' + rep.note }) : null) : null,
+      el('div', { class: 'row wrap', style: { gap: '6px', marginTop: '8px' } },
+        rep.user ? el('button', { class: 'btn btn-small btn-primary', text: 'Open player', onclick: () => manage(rep.user, 'moderation') }) : null,
+        rep.status === 'open' ? el('button', { class: 'btn btn-small btn-green', text: 'Resolve', onclick: () => handle(rep, 'resolved', rep.reportsOnUser > 1 && confirm('Close the other open reports about this player too?')) }) : null,
+        rep.status === 'open' ? el('button', { class: 'btn btn-small', text: 'Dismiss', onclick: () => handle(rep, 'dismissed') }) : el('button', { class: 'btn btn-small', text: 'Open again', onclick: () => handle(rep, 'open') }))))) : el('div', { class: 'adm-empty-big' }, ic('flag', 'adm-empty-ic'), el('div', { text: status === 'open' ? 'No open reports. All good!' : 'Nothing here.' })));
+}
+
+// ---------------------------------------------------------------- gift center
+function drawGifts() {
+  const items = new Map();
+  const to = el('select', { class: 'input' }, [['all', 'Every player'], ['online', 'Players online now'], ['names', 'Only these players...']].map(([v, t]) => el('option', { value: v, text: t })));
+  const names = el('textarea', { class: 'input', rows: 2, placeholder: 'Player names, separated by commas or spaces' });
+  const preview = el('div', { class: 'small muted' });
+  const robits = el('input', { class: 'input', type: 'number', min: 0, max: 1000000, value: 0 });
+  const tier = el('select', { class: 'input' }, [el('option', { value: '', text: 'No Builders Club' }), ...data.memberships.filter((t) => t.id !== 'None').map((t) => el('option', { value: t.id, text: t.name }))]);
+  const days = el('input', { class: 'input', type: 'number', min: 0, max: 3650, value: 30 });
+  const message = el('textarea', { class: 'input', rows: 2, maxlength: 500, placeholder: 'A message with the gift (optional), e.g. "Thanks for playing!"' });
+  const chosen = el('div', { class: 'adm-pick-chosen' });
+  const drawItems2 = () => chosen.replaceChildren(...(items.size ? [...items.values()].map((it) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: it.name }), el('button', { class: 'chip-x', text: '×', onclick: () => { items.delete(it.id); drawItems2(); } }))) : [el('span', { class: 'muted small', text: 'No items.' })]));
+  const syncTo = () => { names.style.display = to.value === 'names' ? '' : 'none'; refresh(); };
+  let t = 0;
+  const refresh = () => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      try {
+        const r = await api.post('/admin/gift/preview', { to: to.value, names: names.value });
+        preview.replaceChildren(...[el('b', { text: `${r.count} players` }), r.sample.length ? el('span', { class: 'no-i18n', text: ` · ${r.sample.join(', ')}${r.count > r.sample.length ? '...' : ''}` }) : null,
+          r.missing.length ? el('div', { style: { color: '#d0021b' } }, 'Not found: ', el('span', { class: 'no-i18n', text: r.missing.join(', ') })) : null].filter(Boolean));
+      } catch { /* ignore */ }
+    }, 250);
+  };
+  to.addEventListener('change', syncTo);
+  names.addEventListener('input', refresh);
+  const send = async () => {
+    const what = [...[...items.values()].map((i) => i.name), +robits.value ? `R$ ${robits.value}` : '', tier.value ? `${tier.selectedOptions[0].text}${+days.value ? ` (${days.value} days)` : ''}` : ''].filter(Boolean);
+    if (!what.length) return toast('Add items, Robits or Builders Club.', 'error');
+    if (!confirm(`Send ${what.join(', ')} to ${preview.querySelector('b')?.textContent || 'them'}?`)) return;
+    try {
+      const r = await api.post('/admin/gift', { to: to.value, names: names.value, itemIds: [...items.keys()], robits: +robits.value, membership: tier.value, days: +days.value, message: message.value });
+      toast(`Sent to ${r.players} players!`, 'success');
+      items.clear(); drawItems2(); robits.value = 0; tier.value = ''; message.value = '';
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  body.replaceChildren(el('div', { class: 'adm-gift' },
+    el('div', { class: 'adm-gift-hero' }, ic('gift', 'adm-gift-ic'), el('div', {}, el('h3', { text: 'Gift Center' }), el('p', { class: 'muted', text: 'Give items, Robits or Builders Club to everyone, to who is online, or to a list of players. Each of them gets a message with the gift.' }))),
+    el('div', { class: 'adm-gift-grid' },
+      el('div', { class: 'adm-card' }, el('h4', { text: '1. Who gets it' }), to, names, preview),
+      el('div', { class: 'adm-card' }, el('h4', { text: '2. What they get' }),
+        el('label', { class: 'field' }, 'Items', chosen, el('button', { class: 'btn btn-small', text: '+ Add items', onclick: () => itemPicker({ title: 'Items for the gift', button: 'Add', onPick: (list) => { for (const it of list) items.set(it.id, it); drawItems2(); } }) })),
+        el('label', { class: 'field' }, 'Robits', robits),
+        el('div', { class: 'row wrap' }, el('label', { class: 'field' }, 'Builders Club', tier), el('label', { class: 'field' }, 'Days (0 = forever)', days))),
+      el('div', { class: 'adm-card' }, el('h4', { text: '3. Message' }), message,
+        el('button', { class: 'btn btn-green btn-large', style: { marginTop: '10px', width: '100%' }, text: 'Send the gift', onclick: send })))));
+  drawItems2();
+  syncTo();
+}
+
 // ---------------------------------------------------------------- dashboard
 const fmtUptime = (s) => (s >= 86400 ? `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h` : s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}m`);
 // A 14-day bar chart of one number: hover a bar for its value; the last day and
@@ -755,7 +1170,18 @@ async function drawDashboard() {
   const k = d.kpis;
   const tile = (label, value, sub, cls = '') => el('div', { class: 'dash-tile ' + cls }, el('div', { class: 'dash-value', text: String(value) }), el('div', { class: 'dash-label', text: label }), sub ? el('div', { class: 'dash-sub', text: sub }) : null);
   const list = (title, rows) => el('div', { class: 'dash-card' }, el('h3', { text: title }), rows.length ? el('div', { class: 'mini-list' }, rows) : el('div', { class: 'muted small', text: 'Nothing yet.' }));
+  const qa = (label, icon, run, cls = '') => el('button', { class: 'adm-qa ' + cls, onclick: run }, ic(icon), el('span', { text: label }));
+  const hour = new Date().getHours();
   body.replaceChildren(
+    el('div', { class: 'adm-welcome' },
+      el('div', {}, el('h2', { text: hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening' }, el('span', { class: 'no-i18n', text: ', ' + me.username + '!' })),
+        el('p', { class: 'muted', text: `${k.online} players online, ${k.playing} playing, ${k.newToday} new today. Press Ctrl+K to find anything.` })),
+      el('div', { class: 'adm-qas' },
+        perm('economy') ? qa('Give an item', 'gift', () => giveToPlayerDialog(), 'green') : null,
+        me.isAdmin ? qa('Gift Center', 'gift', () => { location.hash = 'gifts'; }) : null,
+        perm('moderator') ? qa('Reports', 'flag', () => { location.hash = 'reports'; }, 'orange') : null,
+        me.isAdmin ? qa('Broadcast', 'megaphone', () => { location.hash = 'broadcast'; }) : null,
+        me.isAdmin ? qa('The Hunt', 'hunt', () => { location.hash = 'hunt'; }, 'purple') : null)),
     el('div', { class: 'dash-tiles' },
       tile('Players', fmtFull(k.users), `+${k.newToday} today`, 'blue'),
       tile('Online now', k.online, `${k.activeToday} visited today`, 'green'),

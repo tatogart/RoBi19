@@ -33,6 +33,19 @@ function renderActions() {
   } }));
   actions.append(el('a', { class: 'btn', href: `/messages?to=${encodeURIComponent(user.username)}`, text: 'Message' }));
   actions.append(el('a', { class: 'btn', href: `/trades?with=${uid}` }, icon('trade'), 'Trade Items'));
+  actions.append(el('button', { class: 'btn btn-report', title: 'Report this player to the Robis team', text: 'Report', onclick: async () => {
+    const { reasons } = await api.get('/reports/reasons');
+    const reason = el('select', { class: 'input' }, reasons.map((r) => el('option', { value: r, text: r })));
+    const details = el('textarea', { class: 'input', rows: 3, maxlength: 500, placeholder: 'What happened? (optional)' });
+    modal({
+      title: `Report ${user.username}`,
+      body: el('div', {}, el('p', { class: 'small muted', text: 'The Robis team will look at your report. Fake reports can get you banned.' }),
+        el('label', { class: 'field' }, 'Reason', reason), el('label', { class: 'field' }, 'Details', details)),
+      buttons: [{ text: 'Send report', cls: 'btn-red', onClick: async () => {
+        try { await api.post('/reports', { userId: uid, reason: reason.value, details: details.value }); toast('Thanks! Your report was sent.', 'success'); } catch (e) { toast(e.message, 'error'); return false; }
+      } }, { text: 'Cancel' }],
+    });
+  } }));
   if (user.presence.status === 'ingame' && user.presence.gameId) actions.append(el('button', { class: 'btn btn-green', text: 'Join Game', onclick: () => launchGame(user.presence.gameId) }));
 }
 renderActions();

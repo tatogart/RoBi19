@@ -74,6 +74,7 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     return new Promise(() => {});
   }
   if (me) refreshCounts(me);
+  if (me && me.warning) showWarning(me.warning);
   showAnnouncement();
   if (me) startInvites();
   if (me && nav) startChatParty(me);
@@ -230,3 +231,16 @@ function buildFooter(site) {
 }
 
 export { toast };
+
+// A warning from the Robis team: shown once, until the player presses OK.
+function showWarning(w) {
+  modal({
+    title: 'Warning from the Robis team',
+    body: el('div', { class: 'warning-popup' },
+      el('div', { class: 'warning-icon', text: '!' }),
+      el('p', { class: 'no-i18n', style: { fontWeight: 700 }, text: w.reason }),
+      el('p', { class: 'small muted', text: `This is warning number ${w.count}. Please follow the rules - more warnings can lead to a ban.` })),
+    buttons: [{ text: 'I understand', cls: 'btn-primary', onClick: () => api.post('/me/warning/seen', {}).catch(() => {}) }],
+    onClose: () => api.post('/me/warning/seen', {}).catch(() => {}),
+  });
+}

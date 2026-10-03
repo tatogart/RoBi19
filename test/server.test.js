@@ -1439,3 +1439,59 @@ test('The Hunt private preview: only testers, on their own servers; first win co
   await call('POST', '/admin/hunt/control', { action: 'launch', key: 'dimension', public: true }, admin);
   await call('POST', '/admin/hunt', { autoPlayers: keepAuto, games: keepGames }, admin);
 });
+
+test('Admin Panel 2.0: give items, set Robits, gifts, warnings, notes, reports, activity', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = await call('POST', '/auth/signup', { username: 'PanelTwoKid', password: 'secret123' });
+  const snitch = (await call('POST', '/auth/signup', { username: 'PanelSnitch', password: 'secret123' })).cookie;
+  const kidId = kid.data.user.id;
+  // find an item that is not for sale (an event prize) and give it
+  const found = (await call('GET', '/admin/items/search?q=Crown', null, admin)).data.items;
+  const prize = found.find((i) => i.offsale);
+  assert.ok(prize, JSON.stringify(found.map((i) => i.name)));
+  assert.equal((await call('GET', '/admin/items/search?q=a', null, kid.cookie)).status, 403);
+  let r = (await call('POST', `/admin/users/${kidId}/give`, { itemIds: [prize.id, found[0].id] }, admin)).data;
+  assert.ok(r.given.includes(prize.name));
+  assert.ok((await call('GET', `/users/${kidId}/inventory`)).data.items.some((i) => i.id === prize.id));
+  assert.equal((await call('POST', `/admin/users/${kidId}/give`, { itemIds: [prize.id] }, admin)).data.given.length, 0);
+  // the exact balance
+  r = (await call('POST', `/admin/users/${kidId}/robitsset`, { value: 4321 }, admin)).data;
+  assert.equal(r.user.robits, 4321);
+  // membership for some days
+  await call('POST', `/admin/users/${kidId}/membership`, { tier: 'BuildersClub', days: 7 }, admin);
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.membership, 'BuildersClub');
+  // gift center: by names, with a message in the inbox
+  const pv = (await call('POST', '/admin/gift/preview', { to: 'names', names: 'PanelTwoKid, nobody_here_xyz' }, admin)).data;
+  assert.deepEqual([pv.count, pv.missing], [1, ['nobody_here_xyz']]);
+  r = (await call('POST', '/admin/gift', { to: 'names', names: 'PanelTwoKid', robits: 79, message: 'Thanks!' }, admin)).data;
+  assert.equal(r.players, 1);
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.robits, 4321 + 79);
+  assert.ok((await call('GET', '/messages', null, kid.cookie)).data.messages.some((m) => /gift/i.test(m.subject)));
+  // a warning: a popup on the next page, until seen
+  await call('POST', `/admin/users/${kidId}/warn`, { reason: 'Spamming the chat' }, admin);
+  let me = (await call('GET', '/auth/me', null, kid.cookie)).data.user;
+  assert.equal(me.warning.reason, 'Spamming the chat');
+  await call('POST', '/me/warning/seen', {}, kid.cookie);
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.warning, null);
+  // staff notes
+  let n = (await call('POST', `/admin/users/${kidId}/notes`, { text: 'Watch the trades' }, admin)).data.notes;
+  assert.equal(n[0].text, 'Watch the trades');
+  assert.equal((await call('GET', `/admin/users/${kidId}/notes`, null, kid.cookie)).status, 403);
+  n = (await call('GET', `/admin/users/${kidId}/notes`, null, admin)).data;
+  assert.equal(n.warnings.length, 1);
+  // reports: a player reports, a moderator resolves, the reporter gets a thank-you
+  assert.equal((await call('POST', '/reports', { userId: kidId, reason: 'nope' }, snitch)).status, 400);
+  assert.equal((await call('POST', '/reports', { userId: kidId, reason: 'Spam', details: 'spams' }, snitch)).status, 200);
+  assert.equal((await call('POST', '/reports', { userId: kidId, reason: 'Spam' }, snitch)).status, 400); // already open
+  const rep = (await call('GET', '/admin/reports', null, admin)).data;
+  assert.ok(rep.open >= 1);
+  const mine = rep.reports.find((x) => x.userId === kidId);
+  assert.equal((await call('GET', '/admin/live', null, admin)).data.reports, rep.open);
+  await call('POST', `/admin/reports/${mine.id}`, { status: 'resolved', note: 'warned' }, admin);
+  assert.ok((await call('GET', '/messages', null, snitch)).data.messages.some((m) => /report/i.test(m.subject)));
+  // the activity feed and "where is the player"
+  const act = (await call('GET', '/admin/activity', null, admin)).data.events;
+  assert.ok(act.some((e) => e.kind === 'signup' && e.username === 'PanelTwoKid'));
+  assert.ok(act.some((e) => e.kind === 'report'));
+  assert.equal((await call('GET', `/admin/users/${kidId}/where`, null, admin)).status, 400);
+});
