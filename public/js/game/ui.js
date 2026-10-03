@@ -444,6 +444,18 @@ export class HUD {
     }
   }
 
+  // player:ShowMessage(): big text in the middle of the screen for a moment.
+  bigMessage(text, secs = 3, color = '#ffffff') {
+    if (this.bigMsg) this.bigMsg.remove();
+    const b = h('div', 'big-message');
+    b.textContent = text;
+    b.style.color = /^#[0-9a-f]{6}$/i.test(color) ? color : '#fff';
+    this.root.append(b);
+    this.bigMsg = b;
+    setTimeout(() => b.classList.add('out'), secs * 1000);
+    setTimeout(() => { b.remove(); if (this.bigMsg === b) this.bigMsg = null; }, secs * 1000 + 500);
+  }
+
   huntBanner(count, total, reward, robits, kind) {
     const b = h('div', 'hunt-banner' + (kind === 'quests' ? ' relic' : ''), `<div class="hunt-token"></div><div><div class="hunt-title">${kind === 'quests' ? 'QUEST COMPLETE!' : 'SHARD FOUND!'}</div>
       <div class="hunt-count">${count} / ${total}${robits ? `<span class="hunt-robits">+${robits} R$</span>` : ''}</div>${reward ? `<div class="hunt-reward">You won: ${esc(reward.name)}!</div>` : ''}</div>`);

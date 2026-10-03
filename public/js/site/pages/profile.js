@@ -31,6 +31,9 @@ function renderActions() {
     if (r.status === 'friends') { user.isFriend = true; toast(`You are now friends with ${user.username}!`, 'success'); } else user.requestSent = true;
     renderActions();
   } }));
+  if (user.isFriend) actions.append(el('button', { class: 'btn btn-poke', title: 'Poke your friend', text: '👉 Poke', onclick: async () => {
+    try { await api.post(`/users/${uid}/poke`, {}); toast(`You poked ${user.username}!`, 'success'); } catch (e) { toast(e.message, 'error'); }
+  } }));
   actions.append(el('a', { class: 'btn', href: `/messages?to=${encodeURIComponent(user.username)}`, text: 'Message' }));
   actions.append(el('a', { class: 'btn', href: `/trades?with=${uid}` }, icon('trade'), 'Trade Items'));
   actions.append(el('button', { class: 'btn btn-report', title: 'Report this player to the Robis team', text: 'Report', onclick: async () => {

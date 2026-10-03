@@ -1,5 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
+import { confetti } from '../fun.js';
 import { el, icon, fmtFull, fmtDate, qs, modal, toast, userLink, headshotImg } from '../ui.js';
 import { itemThumbnail } from '../../render/thumbs.js';
 
@@ -80,7 +81,7 @@ function buyResale(r) {
       try {
         const res = await api.post(`/resales/${r.id}/buy`);
         me.robits = res.robits; setRobits(res.robits);
-        toast('Purchase completed!', 'success');
+        toast('Purchase completed!', 'success'); confetti();
         refreshItem();
       } catch (e) { toast(e.message, 'error'); refreshItem(); }
     } }, { text: 'Cancel' }],
@@ -99,7 +100,7 @@ async function buy() {
         try {
           const r = await api.post(`/catalog/${item.id}/buy`);
           item = r.item; me.robits = r.robits; setRobits(r.robits); renderBuy();
-          toast('Purchase completed!', 'success');
+          toast('Purchase completed!', 'success'); confetti();
         } catch (e) { toast(e.message, 'error'); }
       } },
       { text: 'Cancel' },

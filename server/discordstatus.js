@@ -75,6 +75,9 @@ export function installDiscordStatus(api, { db, manager, requireUser, bad, prese
 
 // A .bat that runs the PowerShell code written after the #PSBEGIN# line
 // (Windows 10/11 have PowerShell, so there's nothing to install).
+// Opened by the player: it copies itself to %APPDATA%\Robis, starts with
+// Windows (a hidden launcher in the Startup folder) and runs in the background
+// with no window. Opened again: it asks whether to turn it off.
 export function helperBat({ key, appId, site }) {
   const safe = (v) => String(v).replace(/[^0-9A-Za-z:/._-]/g, '');
   const ps = `
@@ -82,8 +85,53 @@ $ErrorActionPreference = 'Stop'
 $key = '${safe(key)}'
 $app = '${safe(appId)}'
 $site = '${safe(site)}'
+$self = $env:ROBIS_SELF
+$mode = $env:ROBIS_MODE
+$dir = Join-Path $env:APPDATA 'Robis'
+$installed = Join-Path $dir 'RobisDiscordStatus.bat'
+$pidFile = Join-Path $dir 'discord-status.pid'
+$launcher = Join-Path ([Environment]::GetFolderPath('Startup')) 'Robis Discord status.vbs'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
-$host.UI.RawUI.WindowTitle = 'Robis - Discord status'
+
+function Show-Box($text, $buttons = 'OK') {
+  Add-Type -AssemblyName System.Windows.Forms
+  return [System.Windows.Forms.MessageBox]::Show($text, 'Robis - Discord status', $buttons, 'Information')
+}
+function Stop-Old {
+  if (Test-Path $pidFile) {
+    try { Stop-Process -Id ([int](Get-Content $pidFile)) -Force -ErrorAction SilentlyContinue } catch {}
+    Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+  }
+}
+function Is-Running {
+  if (-not (Test-Path $pidFile)) { return $false }
+  try { return [bool](Get-Process -Id ([int](Get-Content $pidFile)) -ErrorAction SilentlyContinue) } catch { return $false }
+}
+
+# ---------------------------------------------------------------- opened by the player
+if ($mode -ne 'run') {
+  $sameFile = $self -and ((Resolve-Path $self).Path -eq $installed)
+  if ((Test-Path $launcher) -and (Is-Running)) {
+    # Yes: turn it off. No: keep it on (and update it with this file).
+    if ((Show-Box "The Robis Discord status is on: it runs in the background and starts with Windows.\`n\`nTurn it off?" 'YesNo') -eq 'Yes') {
+      Stop-Old
+      Remove-Item $launcher -Force -ErrorAction SilentlyContinue
+      Show-Box 'Turned off. Open RobisDiscordStatus.bat again to turn it back on.' | Out-Null
+      exit
+    }
+  }
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  Stop-Old
+  if (-not $sameFile) { Copy-Item -LiteralPath $self -Destination $installed -Force }
+  $line = 'CreateObject("WScript.Shell").Run """' + $installed + '"" run", 0, False'
+  Set-Content -LiteralPath $launcher -Value $line -Encoding Unicode
+  Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $launcher + '"')
+  Show-Box "Done! Your Discord profile now shows what you play on Robis.\`n\`nIt works in the background (no window) and starts with Windows by itself - you never have to open this file again.\`n\`nTo turn it off, open RobisDiscordStatus.bat again.\`nThe Discord app must be open, with 'Share your activity' on." | Out-Null
+  exit
+}
+
+# ---------------------------------------------------------------- the background part
+Set-Content -LiteralPath $pidFile -Value $PID
 
 function Send-Frame($pipe, [int]$op, $obj) {
   $body = [Text.Encoding]::UTF8.GetBytes(($obj | ConvertTo-Json -Depth 10 -Compress))
@@ -105,6 +153,7 @@ function Read-Frame($pipe) {
 }
 function Connect-Discord {
   for ($i = 0; $i -lt 10; $i++) {
+    $p = $null
     try {
       $p = New-Object IO.Pipes.NamedPipeClientStream('.', "discord-ipc-$i", [IO.Pipes.PipeDirection]::InOut)
       $p.Connect(500)
@@ -116,19 +165,14 @@ function Connect-Discord {
   return $null
 }
 
-Write-Host ''
-Write-Host '  Robis - Discord status' -ForegroundColor Cyan
-Write-Host '  Shows what you play on Robis in your Discord profile.'
-Write-Host '  Keep this window open (you can minimize it). Close it to stop.'
-Write-Host ''
 $pipe = $null
 $last = ''
 while ($true) {
+  $wait = 15
   try {
     if (-not $pipe) {
       $pipe = Connect-Discord
-      if (-not $pipe) { Write-Host '  Waiting for Discord (open the Discord app)...'; Start-Sleep 15; continue }
-      Write-Host '  Connected to Discord.' -ForegroundColor Green
+      if (-not $pipe) { Start-Sleep 20; continue }
       $last = ''
     }
     $st = Invoke-RestMethod -Uri "$site/api/presence/discord/$key" -TimeoutSec 10 -UseBasicParsing
@@ -144,22 +188,22 @@ while ($true) {
       Send-Frame $pipe 1 @{ cmd = 'SET_ACTIVITY'; args = @{ pid = $PID; activity = $activity }; nonce = [guid]::NewGuid().ToString() }
       [void](Read-Frame $pipe)
       $last = $now
-      $time = Get-Date -Format 'HH:mm'
-      if ($activity) { Write-Host "  [$time] $($st.details)" } else { Write-Host "  [$time] Not on Robis right now" }
     }
   } catch {
-    Write-Host ('  ' + $_.Exception.Message) -ForegroundColor Yellow
-    if ($_.Exception.Message -match '404') { Write-Host '  Download the file again: Robis -> Settings -> Discord.' -ForegroundColor Yellow; Start-Sleep 60 }
+    # a new file was made (this key is gone): stop for good
+    if ($_.Exception.Message -match '404') { Remove-Item $pidFile -Force -ErrorAction SilentlyContinue; exit }
     if ($pipe) { try { $pipe.Dispose() } catch {} }
     $pipe = $null
+    $wait = 30
   }
-  Start-Sleep 15
+  Start-Sleep $wait
 }
 `;
   const bat = [
     '@echo off',
-    'title Robis - Discord status',
-    'powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((Get-Content -Raw -LiteralPath \'%~f0\') -split (\'#PS\'+\'BEGIN#\'),2)[1]"',
+    'set "ROBIS_SELF=%~f0"',
+    'set "ROBIS_MODE=%~1"',
+    'powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((Get-Content -Raw -LiteralPath $env:ROBIS_SELF) -split (\'#PS\'+\'BEGIN#\'),2)[1]"',
     'exit /b',
     '#PSBEGIN#',
     ps.trim(),

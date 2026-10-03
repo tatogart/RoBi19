@@ -2,6 +2,7 @@ import { initPage } from '../layout.js';
 import { api } from '../api.js';
 import { el, icon, iconSvg, fmtNum, fmtFull, fmtDate, qs, toast, launchGame, headshotImg, gameCard, spinner, joinFriendDialog, userLink, modal } from '../ui.js';
 import { setRobits } from '../layout.js';
+import { confetti } from '../fun.js';
 import { gameThumbnail } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'games', requireAuth: false });
@@ -130,6 +131,7 @@ function buyPass(p, done) {
         const r = await api.post(`/gamepasses/${p.id}/buy`);
         setRobits(r.robits);
         toast(`You bought ${p.name}!`, 'success');
+        confetti();
         done();
       } catch (e) { toast(e.message, 'error'); return false; }
     } }, { text: 'Cancel' }],

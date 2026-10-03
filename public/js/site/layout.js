@@ -5,6 +5,7 @@ import { el, icon, iconSvg, fmtNum, headshotImg, toast, modal, joinFriendDialog 
 import { installApp, isInstalled } from './install.js';
 import { startInvites } from './invites.js';
 import { startChatParty } from './chatparty.js';
+import { installSecret } from './fun.js';
 
 const isStaff = (me) => me.isAdmin || (me.perms || []).some((p) => p === 'moderator' || p === 'economy');
 
@@ -82,7 +83,7 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     setDiscordStatus(site.discord.appId, where, me ? `as ${me.username}` : undefined);
   }
   showAnnouncement();
-  if (me) startInvites();
+  if (me) { startInvites(); installSecret(setRobits); }
   if (me && nav) startChatParty(me);
   return me;
 }
@@ -186,6 +187,7 @@ function buildNav(me, active) {
   nav.append(el('div', { class: 'section-label', text: 'Events' }));
   if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-dot' }), el('span', { text: 'The Hunt' })));
   nav.append(el('a', { href: '/game?id=2' }, icon('star'), el('span', { text: 'Obby Week!' })));
+  nav.append(el('a', { href: '#', class: 'spin-nav', onclick: (e) => { e.preventDefault(); import('./fun.js').then((f) => f.spinDialog(setRobits)); } }, el('span', { class: 'spin-dot' }), el('span', { text: 'Daily Spin' })));
   document.addEventListener('click', (e) => {
     if (document.body.classList.contains('nav-open') && !nav.contains(e.target) && !e.target.closest('.menu-btn')) document.body.classList.remove('nav-open');
   });

@@ -258,3 +258,7 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .hunt-banner.relic .hunt-token { background: linear-gradient(135deg, #fff1c4, #ffc94a 45%, #8a6a1e); box-shadow: 0 0 22px #ffc94a; }
 .hunt-banner.relic .hunt-title { color: #ffd27a; text-shadow: 0 0 12px #c8a165; }
 @media (max-width: 700px) { .hunt-quest { width: 170px; font-size: 11px; top: 30%; } }
+.big-message { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); font-size: 52px; font-weight: 900; letter-spacing: 2px; text-align: center; text-shadow: 0 4px 0 rgba(0,0,0,.55), 0 0 24px rgba(0,0,0,.6); z-index: 36; pointer-events: none; animation: big-in .35s cubic-bezier(.2,1.5,.4,1); transition: opacity .5s; max-width: 90vw; }
+.big-message.out { opacity: 0; }
+@keyframes big-in { from { transform: translateX(-50%) scale(.4); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+@media (max-width: 700px) { .big-message { font-size: 32px; } }

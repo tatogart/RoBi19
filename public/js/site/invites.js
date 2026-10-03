@@ -17,6 +17,8 @@ html[data-theme="dark"] .invite-card { background: #393b3d; color: #fff; }
 .invite-card button { border: 0; border-radius: 4px; padding: 4px 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
 .invite-card .join { background: #02b757; color: #fff; }
 .invite-card .no { background: transparent; color: inherit; opacity: .7; }
+.poke-hand { font-size: 30px; animation: poke-wiggle .5s ease-in-out 3; }
+@keyframes poke-wiggle { 50% { transform: translateX(8px) rotate(-10deg); } }
 @keyframes invite-pop { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
 `;
 
@@ -50,7 +52,37 @@ function card(inv) {
   return c;
 }
 
+// A friend poked me: a little card with "Poke back".
+function pokeCard(pk) {
+  const c = document.createElement('div');
+  c.className = 'invite-card poke-card';
+  const hand = document.createElement('span');
+  hand.className = 'poke-hand';
+  hand.textContent = '👉';
+  const txt = document.createElement('div');
+  txt.className = 'txt';
+  txt.textContent = `${pk.from.username} poked you!`;
+  const btns = document.createElement('div');
+  btns.className = 'btns';
+  const back = document.createElement('button');
+  back.className = 'join';
+  back.textContent = 'Poke back';
+  back.onclick = () => { c.remove(); api.post(`/users/${pk.from.id}/poke`, {}).catch(() => {}); };
+  const no = document.createElement('button');
+  no.className = 'no';
+  no.textContent = 'OK';
+  no.onclick = () => c.remove();
+  btns.append(back, no);
+  c.append(hand, txt, btns);
+  setTimeout(() => c.remove(), 30000);
+  return c;
+}
+
 async function check() {
+  try {
+    const { pokes } = await api.get('/pokes');
+    for (const pk of pokes) box.append(pokeCard(pk));
+  } catch { /* logged out or offline */ }
   try {
     const { invites } = await api.get('/invites');
     for (const inv of invites) {

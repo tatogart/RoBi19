@@ -42,9 +42,9 @@ app.append(discordPanel);
         el('div', {}, el('b', { text: 'Robis' }), el('div', { class: 'small', text: st.now.clear ? 'Playing DOORS' : st.now.details }), el('div', { class: 'small', text: st.now.clear ? 'With 3 other players' : st.now.state || '' })))),
     el('ol', { class: 'discord-how' },
       el('li', { text: 'Download the Robis Discord status app (a small file for Windows, nothing to install).' }),
-      el('li', { text: 'Open it (if Windows asks, press More info -> Run anyway). A small window opens - keep it open or minimize it.' }),
+      el('li', { text: 'Open it once (if Windows asks, press More info -> Run anyway). That\'s it: it works in the background with no window and starts with Windows by itself.' }),
       el('li', { text: 'Make sure the Discord app is open and Settings -> Activity Privacy -> "Share your activity" is on.' }),
-      el('li', { text: 'Play on Robis - your Discord profile shows the game!' })),
+      el('li', { text: 'Play on Robis - your Discord profile shows the game! To turn it off, open the file again.' })),
     el('div', { class: 'row wrap', style: { gap: '8px' } },
       el('a', { class: 'btn btn-primary discord-btn', href: '/api/me/discord-status/RobisDiscordStatus.bat', download: 'RobisDiscordStatus.bat', text: 'Download for Windows' }),
       el('button', { class: 'btn btn-small', text: 'Make a new file (stops the old one)', onclick: async () => {

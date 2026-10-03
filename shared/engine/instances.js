@@ -751,6 +751,8 @@ export const Player = defineClass('Player', Instance, {
     IsInGroup(id) { return this.GetRankInGroup(id) > 0; }
     // Robis extra: a private system message in this player's chat.
     Notify(text) { const r = this.getRoot(); r._notify && r._notify(this, String(text)); }
+    // Robis extra: big text in the middle of this player's screen (for a few seconds).
+    ShowMessage(text, seconds = 3, color) { const r = this.getRoot(); r._showMessage && r._showMessage(this, String(text), +seconds || 3, color); }
     DistanceFromCharacter(pos) {
       const c = this._p.Character;
       const hrp = c && c.FindFirstChild('HumanoidRootPart');

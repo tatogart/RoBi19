@@ -711,3 +711,53 @@ html[data-theme="dark"] .adm-note { background: #2b2d2f; }
 }
 .discord-steps { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 .discord-more { margin-top: 12px; } .discord-more summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
+
+/* ------------------------------------------------------------ 2026 polish (still 2019 at heart) */
+:root { --radius: 6px; --shadow: 0 1px 3px rgba(25,25,25,.08), 0 4px 14px rgba(25,25,25,.07); --ease: cubic-bezier(.2,.8,.2,1); }
+html[data-theme="dark"] { --shadow: 0 1px 3px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.25); }
+.rbx-header { background: linear-gradient(90deg, #0090e6, var(--blue) 40%, #19adff); box-shadow: 0 2px 8px rgba(0,60,110,.25); }
+.rbx-header nav.main a { transition: background .15s; }
+.rbx-header nav.main a:hover { background: rgba(255,255,255,.16); text-decoration: none; }
+.rbx-header nav.main a.active { background: rgba(255,255,255,.22); }
+.rbx-content > * { animation: page-in .35s var(--ease) both; }
+.rbx-content > *:nth-child(2) { animation-delay: .04s; }
+.rbx-content > *:nth-child(3) { animation-delay: .08s; }
+.rbx-content > *:nth-child(n+4) { animation-delay: .12s; }
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.btn { transition: background .15s, transform .1s, box-shadow .15s, filter .15s; }
+.btn:not(:disabled):active { transform: scale(.96); }
+.btn-primary:not(:disabled):hover, .btn-green:not(:disabled):hover { box-shadow: 0 3px 10px rgba(0,120,200,.25); }
+.btn-green:not(:disabled):hover { box-shadow: 0 3px 10px rgba(2,140,70,.3); }
+.game-card, .item-card { transition: transform .18s var(--ease), box-shadow .18s; }
+.game-card:hover, .item-card:hover { transform: translateY(-4px); box-shadow: 0 8px 22px rgba(0,0,0,.18); }
+.game-card .thumb img, .item-card .thumb img { transition: transform .35s var(--ease); }
+.game-card:hover .thumb img, .item-card:hover .thumb img { transform: scale(1.06); }
+.rbx-leftnav a { margin: 1px 8px; border-radius: 8px; padding: 8px 10px; transition: background .15s; }
+.rbx-leftnav a.active { background: rgba(0,162,255,.12); color: var(--blue); }
+.rbx-leftnav a.active::before { display: none; }
+.rbx-leftnav a.active svg { opacity: 1; }
+.modal { border-radius: 10px; overflow: hidden; animation: modal-in .2s var(--ease); }
+@keyframes modal-in { from { opacity: 0; transform: scale(.94) translateY(10px); } }
+.modal-backdrop { backdrop-filter: blur(3px); }
+.section-header h2 { position: relative; }
+.input, input.input, select.input, textarea.input { transition: border-color .15s, box-shadow .15s; }
+.input:focus { box-shadow: 0 0 0 3px rgba(0,162,255,.2); }
+@media (prefers-reduced-motion: reduce) { .rbx-content > *, .modal { animation: none; } .game-card:hover, .item-card:hover { transform: none; } }
+
+/* ------------------------------------------------------------ fun: confetti, Daily Spin, secret, poke */
+.confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 5000; }
+.spin-banner { align-items: center; gap: 14px; background: linear-gradient(100deg, var(--panel) 55%, rgba(255,196,0,.18)); }
+.spin-mini { width: 40px; height: 40px; border-radius: 50%; flex: none; background: conic-gradient(#00a2ff 0 45deg,#02b757 0 90deg,#f5a623 0 135deg,#7b5cff 0 180deg,#ff4d8d 0 225deg,#e8590c 0 270deg,#00c2c2 0 315deg,#ffc400 0); animation: spin-idle 6s linear infinite; box-shadow: 0 0 0 3px #fff, 0 2px 8px rgba(0,0,0,.25); }
+@keyframes spin-idle { to { transform: rotate(360deg); } }
+.spin-nav .spin-dot { width: 18px; height: 18px; margin: 0 2px; border-radius: 50%; flex: none; background: conic-gradient(#00a2ff 0 90deg,#02b757 0 180deg,#ffc400 0 270deg,#ff4d8d 0); }
+.spin-box { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.spin-wrap { position: relative; width: 260px; height: 260px; }
+.spin-wheel { width: 100%; height: 100%; border-radius: 50%; position: relative; border: 6px solid #fff; box-shadow: 0 0 0 3px #393b3d, 0 8px 24px rgba(0,0,0,.3); transition: transform 4s cubic-bezier(.12,.75,.1,1); }
+.spin-label { position: absolute; left: 50%; top: 50%; width: 80px; margin-left: -40px; margin-top: -8px; color: #fff; font-weight: 800; font-size: 12px; text-shadow: 0 1px 2px rgba(0,0,0,.6); transform-origin: 50% 50%; white-space: nowrap; }
+.spin-pointer { position: absolute; left: 50%; top: -10px; margin-left: -14px; width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 26px solid #e2231a; z-index: 2; filter: drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
+.spin-hub { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px; border-radius: 50%; background: #fff url(/img/icon.svg) center/26px no-repeat; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+.spin-result { min-height: 24px; font-size: 18px; }
+body.secret-spin .rbx-content { animation: secret-spin 1.2s var(--ease); }
+@keyframes secret-spin { to { transform: rotate(360deg); } }
+.btn-poke:hover { animation: poke-nudge .4s; }
+@keyframes poke-nudge { 50% { transform: translateX(4px); } }

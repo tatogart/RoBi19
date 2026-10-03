@@ -134,6 +134,11 @@ export class GameServer {
       const s = this.sessions.get(player._p.UserId);
       if (s) this.send(s, { t: 'sys', text: text.slice(0, 300) });
     };
+    game._showMessage = (player, text, secs, color) => {
+      const s = this.sessions.get(player._p.UserId);
+      const hex = color && color.toHex ? color.toHex() : /^#[0-9a-f]{6}$/i.test(String(color || '')) ? String(color) : '#ffffff';
+      if (s) this.send(s, { t: 'bigmsg', text: text.slice(0, 120), secs: Math.min(15, Math.max(1, secs)), color: hex });
+    };
     game._getTouchingParts = (part) => {
       const out = [];
       for (const [a, b] of this.touching.values()) {
@@ -908,6 +913,17 @@ export class GameServer {
       if (perk === 'speed') hum.WalkSpeed = Math.max(hum.WalkSpeed, 26);
       if (perk === 'jump') hum.JumpPower = Math.max(hum.JumpPower, 80);
       if (perk === 'fly') hum.Flying = true;
+      if (perk === 'health') { hum.MaxHealth = Math.max(hum.MaxHealth, 200); hum.Health = hum.MaxHealth; }
+      const model = hum.Parent;
+      if ((perk === 'sparkles' || perk === 'vip') && model) {
+        const at = perk === 'vip' ? model.FindFirstChild('Head') : model.FindFirstChild('Torso') || model.FindFirstChild('HumanoidRootPart');
+        if (at && !at.FindFirstChild('Pass_' + perk)) {
+          const fx = createInstance(perk === 'vip' ? 'BillboardText' : 'Sparkles');
+          fx.Name = 'Pass_' + perk;
+          if (perk === 'vip') { fx.Text = '★ VIP'; fx.TextColor3 = Color3.fromHex('#ffc400'); fx.StudsOffset = new Vector3(0, 2.6, 0); }
+          fx.Parent = at;
+        }
+      }
     }
   }
 

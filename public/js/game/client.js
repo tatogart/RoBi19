@@ -214,6 +214,7 @@ export class GameClient {
         return;
       case 'huntSignal': this.hud.huntScanner(m.level); return;
       case 'huntQuest': this.hud.huntQuest(m); return;
+      case 'bigmsg': this.hud.bigMessage(m.text, m.secs, m.color); return;
       case 'warning':
         this.hud.dialog('Warning from the Robis team', `${m.reason}\n\nThis is warning number ${m.count}. Please follow the rules - more warnings can lead to a ban.`, [{ text: 'I understand', primary: true }]);
         return;

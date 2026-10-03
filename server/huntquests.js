@@ -31,6 +31,7 @@ export const QUESTS = {
   freezetag: { type: 'runes' },
   brickbattle: { type: 'runes' },
   speeddraw: { type: 'runes' },
+  mm2: { type: 'runes' },
 };
 export const RUNES_TEXT = 'Find the 3 ancient runes hidden in this game and touch them in order (I, II, III) within 3 minutes';
 export const RUNE_TIME = 180;

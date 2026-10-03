@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 21); // 20 showcase games + The Hunt hub
+  assert.equal(data.games, 22); // 21 showcase games + The Hunt hub
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -1546,6 +1546,8 @@ test('Discord status: the helper app, what it shows, the private key', async () 
   const bat = await res.text();
   assert.ok(bat.startsWith('@echo off\r\n'));
   assert.ok(bat.includes(`$key = '${st.key}'`) && bat.includes("$app = '123456789012345678'") && bat.includes('#PSBEGIN#'));
+  // installs itself: runs in the background and starts with Windows
+  assert.ok(bat.includes('ROBIS_MODE') && bat.includes("GetFolderPath('Startup')") && bat.includes('" run", 0, False'));
   assert.ok(!bat.includes('\n') || bat.split('\n').every((l, i, a) => i === a.length - 1 || l.endsWith('\r')));
   // what the helper sees: on the site, then in a game
   let p = (await call('GET', `/presence/discord/${st.key}`)).data;
@@ -1562,4 +1564,47 @@ test('Discord status: the helper app, what it shows, the private key', async () 
   await call('POST', '/me/discord-status/reset', {}, kid);
   assert.equal((await call('GET', `/presence/discord/${st.key}`)).status, 404);
   await call('POST', '/admin/settings', { discord: { status: false, appId: '' } }, admin);
+});
+
+test('official games have passes, and classic MM2 is there', async () => {
+  const games = (await call('GET', '/games?sort=featured')).data.games;
+  const mm2 = (await call('GET', '/games?q=Murder')).data.games.find((g) => g.name === 'Murder Mystery 2') || games.find((g) => g.name === 'Murder Mystery 2');
+  assert.ok(mm2, 'MM2 is seeded');
+  const passes = (await call('GET', `/games/${mm2.id}/passes`)).data.passes;
+  assert.ok(passes.length >= 2 && passes.every((p) => p.onSale && p.price > 0));
+  const doors = games.concat((await call('GET', '/games?q=DOORS')).data.games).find((g) => g.name === 'DOORS');
+  if (doors) assert.ok((await call('GET', `/games/${doors.id}/passes`)).data.passes.length > 0);
+});
+
+test('fun: daily spin, the secret code and pokes', async () => {
+  const a = (await call('POST', '/auth/signup', { username: 'Spinner', password: 'secret123' })).cookie;
+  const b = (await call('POST', '/auth/signup', { username: 'Poked', password: 'secret123' })).cookie;
+  const aid = (await call('GET', '/auth/me', null, a)).data.user.id;
+  const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
+  // the spin: once a day
+  const info = (await call('GET', '/fun/spin', null, a)).data;
+  assert.equal(info.canSpin, true);
+  assert.equal(info.segments.length, 8);
+  const before = (await call('GET', '/auth/me', null, a)).data.user.robits;
+  const r = (await call('POST', '/fun/spin', {}, a)).data;
+  assert.ok(r.index >= 0 && r.index < 8 && r.streak === 1);
+  assert.ok(r.robits >= before);
+  assert.equal((await call('POST', '/fun/spin', {}, a)).status, 400);
+  assert.equal((await call('GET', '/fun/spin', null, a)).data.canSpin, false);
+  // the secret: R$ 100 and a badge, once
+  assert.equal((await call('POST', '/fun/secret', { code: 'nope' }, a)).status, 400);
+  const s1 = (await call('POST', '/fun/secret', { code: 'uuddlrlrba' }, a)).data;
+  assert.equal(s1.first, true);
+  assert.equal((await call('POST', '/fun/secret', { code: 'uuddlrlrba' }, a)).data.first, false);
+  assert.ok((await call('GET', `/users/${aid}`)).data.user.achievements.some((x) => x.id === 'secret'));
+  // pokes: friends only, with a cooldown, each shown once
+  assert.equal((await call('POST', `/users/${bid}/poke`, {}, a)).status, 400);
+  await call('POST', `/friends/${bid}/request`, {}, a);
+  await call('POST', `/friends/${aid}/request`, {}, b);
+  assert.equal((await call('POST', `/users/${bid}/poke`, {}, a)).status, 200);
+  assert.equal((await call('POST', `/users/${bid}/poke`, {}, a)).status, 429);
+  const { pokes } = (await call('GET', '/pokes', null, b)).data;
+  assert.equal(pokes.length, 1);
+  assert.equal(pokes[0].from.username, 'Spinner');
+  assert.equal((await call('GET', '/pokes', null, b)).data.pokes.length, 0);
 });

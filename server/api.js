@@ -12,6 +12,7 @@ import { PLACE_FORMAT } from '../shared/engine/serialize.js';
 import { filterChat } from './game/chatfilter.js';
 import { installAdminTools } from './admintools.js';
 import { installDiscordStatus } from './discordstatus.js';
+import { installFun } from './fun.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -310,6 +311,8 @@ export function createApi(db, manager, opts = {}) {
   // Robis Badges: earned automatically for what you do on the site (shown on profiles).
   const ACHIEVEMENTS = [
     ['admin', '🛡️', 'Administrator', 'Runs this Robis.', (u) => u.isAdmin],
+    ['secret', '🕹️', 'Secret Finder', 'Found the secret code hidden somewhere on Robis.', (u) => !!u.secretFound],
+    ['lucky', '🍀', 'Lucky Spinner', 'Spun the Daily Spin 7 days in a row.', (u) => (u.spinStreak || 0) >= 7],
     ['hunter', '🗝️', 'The Hunter', 'Found every token in The Hunt.', (u) => (D.hunt?.rewarded?.[u.id] || []).includes('all')],
     ['club', '🏗️', 'Welcome To The Club', 'Has a Builders Club membership.', (u) => u.membership && u.membership !== 'None'],
     ['veteran', '🎖️', 'Veteran', 'Has been on Robis for a year.', (u) => Date.now() - u.created > 365 * 86400e3],
@@ -1485,7 +1488,10 @@ export function createApi(db, manager, opts = {}) {
   // built-in perk that works with no scripting (applied on every spawn).
   if (!D.gamepasses) D.gamepasses = {};
   if (!D.passOwners) D.passOwners = {}; // userId -> [passId]
-  const PASS_PERKS = { none: 'No perk (use it in scripts)', speed: 'Speed: run faster', jump: 'Super jump', fly: 'Flying' };
+  const PASS_PERKS = {
+    none: 'No perk (use it in scripts)', speed: 'Speed: run faster', jump: 'Super jump', fly: 'Flying',
+    health: 'Extra health (200 instead of 100)', vip: 'VIP sign over your head', sparkles: 'Sparkles around you',
+  };
   const PASS_ICONS = ['⭐', '👑', '⚡', '🚀', '🪽', '💎', '🔫', '🗡️', '🛡️', '🎁', '🐾', '💰', '🔥', '❤️', '🎵', '🏆'];
   const ownsPass = (uid, pid) => (D.passOwners[uid] || []).includes(pid);
   const isGameOwner = (g, u) => !!u && (u.id === g.creatorId || !!u.isAdmin);
@@ -1535,6 +1541,48 @@ export function createApi(db, manager, opts = {}) {
     perks: (uid, gameId) => (D.passOwners[uid] || []).map((pid) => D.gamepasses[pid]).filter((p) => p && p.gameId === gameId && p.perk !== 'none').map((p) => p.perk),
     forGame: (gameId, uid) => Object.values(D.gamepasses).filter((p) => p.gameId === gameId && (p.onSale || ownsPass(uid, p.id))).map((p) => publicPass(p, D.users[uid])),
   };
+
+  // Passes for the showcase games (made once per game; the main account sells them).
+  const SEED_PASSES = {
+    obby: [['speed', 'Speed Coil', 'speed', 120, '⚡', '#f5cd30', 'Run faster through every stage.'], ['jump', 'Gravity Coil', 'jump', 150, '🚀', '#a347ff', 'Jump higher - skip the hard parts!'], ['vip', 'VIP', 'vip', 250, '👑', '#ffc400', 'A golden VIP sign over your head.']],
+    tower: [['speed', 'Speed Boost', 'speed', 100, '⚡', '#f5cd30', 'Climb faster than everyone.'], ['jump', 'Super Jump', 'jump', 180, '🚀', '#00a2ff', 'Jump higher on the tower.']],
+    lava: [['speed', 'Lava Runner', 'speed', 100, '🔥', '#e8590c', 'Outrun the lava.'], ['health', 'Heat Shield', 'health', 150, '🛡️', '#c4281c', '200 health: the lava needs longer to get you.']],
+    disaster: [['health', 'Extra Health', 'health', 150, '❤️', '#c4281c', 'Survive disasters with 200 health.'], ['speed', 'Speed', 'speed', 100, '⚡', '#f5cd30', 'Run from the disasters faster.']],
+    speedrun: [['speed', 'Turbo Shoes', 'speed', 200, '⚡', '#00ffaa', 'Break your records.'], ['vip', 'VIP', 'vip', 150, '👑', '#ffc400', 'Show off on the leaderboard.']],
+    coins: [['speed', 'Coin Magnet Shoes', 'speed', 120, '💰', '#f5cd30', 'Get to the coins first.'], ['sparkles', 'Golden Sparkles', 'sparkles', 80, '⭐', '#ffd27a', 'Shine while you collect.']],
+    tycoon: [['speed', 'Fast Builder', 'speed', 100, '⚡', '#f5cd30', 'Run around your tycoon faster.'], ['vip', 'Tycoon VIP', 'vip', 250, '👑', '#ffc400', 'The boss of the server.']],
+    cafe: [['vip', 'Head Chef', 'vip', 120, '🎁', '#ff8a3d', 'A sign that says who runs this kitchen.'], ['sparkles', 'Sparkles', 'sparkles', 60, '⭐', '#ffd27a', 'Sparkly service.']],
+    ctf: [['speed', 'Swift Feet', 'speed', 150, '⚡', '#00a2ff', 'Carry the flag faster.'], ['health', 'Armor', 'health', 150, '🛡️', '#635f62', '200 health.']],
+    freezetag: [['speed', 'Ice Skates', 'speed', 150, '⚡', '#9fe8ff', 'Run from the tagger.']],
+    koth: [['health', 'Royal Armor', 'health', 150, '🛡️', '#ffc400', 'Hold the hill longer.'], ['vip', 'Crown', 'vip', 120, '👑', '#ffc400', 'Look like the king.']],
+    minigames: [['speed', 'Speed', 'speed', 100, '⚡', '#f5cd30', 'Faster in every minigame.'], ['jump', 'Jump Boost', 'jump', 100, '🚀', '#00a2ff', 'Higher jumps.']],
+    themepark: [['fly', 'Jetpack', 'fly', 200, '🪽', '#00a2ff', 'Fly over the park.'], ['sparkles', 'Fun Sparkles', 'sparkles', 50, '⭐', '#ff66cc', 'Sparkles!']],
+    crossroads: [['fly', 'Flying', 'fly', 200, '🪽', '#00a2ff', 'Fly over the town.'], ['vip', 'VIP', 'vip', 150, '👑', '#ffc400', 'A VIP sign.']],
+    happyhome: [['vip', 'House VIP', 'vip', 100, '👑', '#ffc400', 'Everybody knows who lives here.']],
+    doors: [['speed', 'Sprint', 'speed', 200, '⚡', '#f5cd30', 'Run from Seek faster.'], ['vip', 'VIP', 'vip', 150, '👑', '#ffc400', 'Brave enough for a sign.']],
+    brickbattle: [['health', 'Heavy Armor', 'health', 250, '🛡️', '#635f62', '200 health in battle.'], ['speed', 'Quick Feet', 'speed', 150, '⚡', '#f5cd30', 'Dodge rockets.']],
+    speeddraw: [['vip', 'Artist VIP', 'vip', 100, '🎨', '#ff66cc', 'A sign for the best artist.']],
+    mm2: [['vip', 'Elite', 'vip', 250, '👑', '#ffc400', 'The classic Elite sign.'], ['sparkles', 'Sparkles', 'sparkles', 100, '⭐', '#ffd27a', 'Sparkle while you hide.']],
+  };
+  const seedPasses = () => {
+    if (!D.seedPasses) D.seedPasses = [];
+    let n = 0;
+    for (const g of Object.values(D.games)) {
+      const list = g.seedKey && SEED_PASSES[g.seedKey];
+      if (!list) continue;
+      for (const [key, name, perk, price, icon, color, description] of list) {
+        const tag = `${g.seedKey}:${key}`;
+        if (D.seedPasses.includes(tag)) continue;
+        D.seedPasses.push(tag);
+        const id = db.nextId('gamepass');
+        D.gamepasses[id] = { id, gameId: g.id, name, description, price, icon, color, perk, onSale: true, sales: 0, created: Date.now(), seed: tag };
+        (D.passOwners[g.creatorId] || (D.passOwners[g.creatorId] = [])).push(id);
+        n++;
+      }
+    }
+    if (n) db.save();
+  };
+  seedPasses();
 
   api.get('/games/:id/passes', (req, res) => {
     const g = D.games[toInt(req.params.id)];
@@ -2449,6 +2497,7 @@ export function createApi(db, manager, opts = {}) {
 
   installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial });
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
+  installFun(api, { db, requireUser, bad, log, giveSerial, publicUser });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });
 
