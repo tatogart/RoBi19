@@ -12,6 +12,9 @@ import { Input } from './input.js';
 import { HUD } from './ui.js';
 import { CharacterView } from './characters.js';
 import * as sound from './sound.js';
+import { discordSession } from '../discord.js';
+// inside Discord (no cookies) the game socket carries the session
+const wsSession = () => { const t = discordSession.get(); return t ? `?rs=${t}` : ''; };
 
 const SEND_HZ = 20;
 const SETTINGS_KEY = 'robis.settings';
@@ -75,7 +78,7 @@ export class GameClient {
     this.hud.showLoading(gameInfo?.name || 'Robis', gameInfo?.creator?.username);
     this.hud.setLoadingStatus('Connecting to server...');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    this.ws = new WebSocket(`${proto}://${location.host}/ws`);
+    this.ws = new WebSocket(`${proto}://${location.host}/ws${wsSession()}`);
     this.ws.onopen = () => {
       this.hud.setLoadingStatus('Joining game...');
       const msg = { t: 'join', placeId: this.opts.placeId || 0 };

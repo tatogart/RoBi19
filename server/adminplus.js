@@ -33,8 +33,11 @@ export function siteSettings(D) {
   if (S.startRobits === undefined) S.startRobits = 100;
   if (!S.maintenance) S.maintenance = { on: false, message: '' };
   if (!S.bannedWords) S.bannedWords = [];
+  if (!S.discord) S.discord = { on: false, appId: '', secret: '' };
   return S;
 }
+// Settings for the Admin Panel: the Discord secret never leaves the server.
+const adminView = (S) => ({ ...S, discord: { on: !!S.discord.on, appId: S.discord.appId, hasSecret: !!S.discord.secret } });
 export const isStaffUser = (u) => !!u && (u.isAdmin || (u.perms || []).length > 0);
 
 export function installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version }) {
@@ -45,7 +48,30 @@ export function installAdminPlus(api, { db, manager, requireAdmin, requireStaff,
 
   // Public: what every page needs (social links, maintenance notice, sign-ups).
   api.get('/site', (req, res) => {
-    res.json({ socials: S.socials, maintenance: S.maintenance.on ? S.maintenance : null, signups: S.signups !== false, staff: isStaffUser(req.user) });
+    res.json({ socials: S.socials, maintenance: S.maintenance.on ? S.maintenance : null, signups: S.signups !== false, staff: isStaffUser(req.user),
+      discord: S.discord.on && S.discord.appId ? { appId: S.discord.appId } : null });
+  });
+
+  // Discord Activity: the page inside Discord trades the code from
+  // discordSdk.commands.authorize() for an access token (that needs the secret),
+  // so it can show what the player does in their Discord status.
+  api.post('/discord/token', async (req, res) => {
+    const d = S.discord;
+    const code = String(req.body?.code || '');
+    if (!d.on || !d.appId || !d.secret) return bad(res, 'Discord is not set up on this Robis.', 404);
+    if (!/^[A-Za-z0-9]{10,100}$/.test(code)) return bad(res, 'Bad code.');
+    try {
+      const r = await fetch('https://discord.com/api/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ client_id: d.appId, client_secret: d.secret, grant_type: 'authorization_code', code }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.access_token) return bad(res, 'Discord did not accept the code.', 502);
+      res.json({ access_token: data.access_token });
+    } catch {
+      bad(res, 'Could not reach Discord.', 502);
+    }
   });
 
   // ---------------------------------------------------------------- dashboard
@@ -113,7 +139,7 @@ export function installAdminPlus(api, { db, manager, requireAdmin, requireStaff,
   });
 
   // ---------------------------------------------------------------- site settings
-  api.get('/admin/settings', requireAdmin, (req, res) => res.json({ settings: S, socialTypes: SOCIAL_TYPES }));
+  api.get('/admin/settings', requireAdmin, (req, res) => res.json({ settings: adminView(S), socialTypes: SOCIAL_TYPES }));
   api.post('/admin/settings', requireAdmin, (req, res) => {
     const b = req.body || {};
     if (b.maintenance) S.maintenance = { on: !!b.maintenance.on, message: String(b.maintenance.message || '').slice(0, 300) };
@@ -137,8 +163,16 @@ export function installAdminPlus(api, { db, manager, requireAdmin, requireStaff,
       }
       S.socials = list;
     }
+    if (b.discord) {
+      const appId = String(b.discord.appId ?? S.discord.appId).trim();
+      if (appId && !/^\d{15,25}$/.test(appId)) return bad(res, 'The Discord Application ID is a long number (Developer Portal -> your app -> General Information).');
+      S.discord.appId = appId;
+      if (typeof b.discord.secret === 'string' && b.discord.secret.trim()) S.discord.secret = b.discord.secret.trim().slice(0, 100);
+      if (b.discord.clearSecret) S.discord.secret = '';
+      S.discord.on = !!b.discord.on && !!appId;
+    }
     db.save();
-    res.json({ settings: S });
+    res.json({ settings: adminView(S) });
   });
 
   // ---------------------------------------------------------------- broadcasts

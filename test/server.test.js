@@ -1495,3 +1495,36 @@ test('Admin Panel 2.0: give items, set Robits, gifts, warnings, notes, reports, 
   assert.ok(act.some((e) => e.kind === 'report'));
   assert.equal((await call('GET', `/admin/users/${kidId}/where`, null, admin)).status, 400);
 });
+
+test('Discord Activity: session without cookies, settings, token exchange is off until set up', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  // logging in from inside Discord gives the session to the page
+  const res = await fetch(base + '/api/auth/signup', { method: 'POST', headers: { 'content-type': 'application/json', 'x-robis-discord': '1' }, body: JSON.stringify({ username: 'DiscordKid', password: 'secret123' }) });
+  const data = await res.json();
+  assert.match(data.session, /^[0-9a-f]{64}$/);
+  // the header works instead of the cookie
+  const me = await (await fetch(base + '/api/auth/me', { headers: { 'x-robis-session': data.session } })).json();
+  assert.equal(me.user.username, 'DiscordKid');
+  // normal logins don't show the session
+  assert.equal((await call('POST', '/auth/login', { username: 'DiscordKid', password: 'secret123' })).data.session, undefined);
+  // the game socket with ?rs=
+  const game = (await call('GET', '/games?sort=popular')).data.games[0];
+  const ws = new WebSocket(base.replace('http', 'ws') + '/ws?rs=' + data.session);
+  const first = await new Promise((resolve, reject) => {
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'join', placeId: game.id })));
+    ws.on('message', (d) => { const m = JSON.parse(d); if (m.t === 'welcome' || m.t === 'error') resolve(m); });
+    ws.on('error', reject);
+  });
+  assert.equal(first.t, 'welcome');
+  ws.close();
+  // not set up: no token exchange, nothing in /site
+  assert.equal((await call('POST', '/discord/token', { code: 'abcdefghijkl' })).status, 404);
+  assert.equal((await call('GET', '/site')).data.discord, null);
+  // set up: the secret is kept on the server
+  assert.equal((await call('POST', '/admin/settings', { discord: { on: true, appId: 'robis' } }, admin)).status, 400);
+  const s = (await call('POST', '/admin/settings', { discord: { on: true, appId: '123456789012345678', secret: 'topsecretvalue' } }, admin)).data.settings;
+  assert.deepEqual(s.discord, { on: true, appId: '123456789012345678', hasSecret: true });
+  assert.ok(!JSON.stringify((await call('GET', '/admin/settings', null, admin)).data).includes('topsecretvalue'));
+  assert.deepEqual((await call('GET', '/site')).data.discord, { appId: '123456789012345678' });
+  await call('POST', '/admin/settings', { discord: { on: false, appId: '', clearSecret: true } }, admin);
+});

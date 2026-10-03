@@ -71,6 +71,12 @@ const client = new GameClient(document.body, {
 });
 client.start();
 window.robis = client;
+// Inside a Discord Activity: "Playing <game>" in the player's Discord status.
+import('/js/discord.js').then(async (d) => {
+  if (!d.inDiscord()) return;
+  const site = await fetch('/api/site').then((r) => r.json()).catch(() => null);
+  if (site && site.discord) d.setDiscordStatus(site.discord.appId, `Playing ${gameInfo?.name || 'a game'}`, gameInfo?.creator?.username ? `by ${gameInfo.creator.username}` : 'On Robis');
+});
 if (me) import('/js/site/invites.js').then((m) => m.startInvites());
 </script>
 </body>

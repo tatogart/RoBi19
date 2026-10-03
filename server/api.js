@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import {
-  checkPassword, createSession, destroySession, sessionCookie, validUsername, COOKIE, parseCookies, bannedClient, noteClient, isBanned, banDetails,
+  checkPassword, createSession, destroySession, sessionCookie, sessionToken, validUsername, COOKIE, parseCookies, bannedClient, noteClient, isBanned, banDetails,
 } from './auth.js';
 import { createUser, addSeedGames, addCatalogItems, ensureOwner, officialAccount, OWNER_NAME } from './seed/seed.js';
 import { hashPassword } from './auth.js';
@@ -453,7 +453,8 @@ export function createApi(db, manager, opts = {}) {
     noteClient(db, user, req.client);
     const token = createSession(db, user.id);
     setCookie(res, sessionCookie(token));
-    res.json({ user: me(user) });
+    // inside a Discord Activity cookies don't work: the page keeps the session itself
+    res.json({ user: me(user), ...(req.headers['x-robis-discord'] ? { session: token } : {}) });
   });
 
   api.post('/auth/login', (req, res) => {
@@ -468,11 +469,12 @@ export function createApi(db, manager, opts = {}) {
     const token = createSession(db, user.id);
     user.lastOnline = Date.now();
     setCookie(res, sessionCookie(token));
-    res.json({ user: me(user) });
+    // inside a Discord Activity cookies don't work: the page keeps the session itself
+    res.json({ user: me(user), ...(req.headers['x-robis-discord'] ? { session: token } : {}) });
   });
 
   api.post('/auth/logout', (req, res) => {
-    const token = parseCookies(req.headers.cookie)[COOKIE];
+    const token = sessionToken(req);
     if (token) destroySession(db, token);
     setCookie(res, sessionCookie('', 0));
     res.json({ ok: true });

@@ -1,5 +1,6 @@
 // Builds the shared page chrome (blue header, left navigation, footer).
 import { api, getMe } from './api.js';
+import { inDiscord, setDiscordStatus } from '../discord.js';
 import { el, icon, iconSvg, fmtNum, headshotImg, toast, modal, joinFriendDialog } from './ui.js';
 import { installApp, isInstalled } from './install.js';
 import { startInvites } from './invites.js';
@@ -75,6 +76,11 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
   }
   if (me) refreshCounts(me);
   if (me && me.warning) showWarning(me.warning);
+  // Inside a Discord Activity: what the player is doing goes in their Discord status.
+  if (site && site.discord && inDiscord()) {
+    const where = { home: 'On the home page', games: 'Looking for a game', catalog: 'Shopping in the catalog', avatar: 'Changing their avatar', create: 'Creating', hunt: 'On The Hunt', profile: 'Looking at a profile', trades: 'Trading', groups: 'In groups', admin: 'In the Admin Panel' }[active] || 'Browsing Robis';
+    setDiscordStatus(site.discord.appId, where, me ? `as ${me.username}` : undefined);
+  }
   showAnnouncement();
   if (me) startInvites();
   if (me && nav) startChatParty(me);

@@ -2,6 +2,9 @@
 // Local commits are sent as place-diff ops; ops from others are applied here.
 import { applyOps } from '/shared/engine/placediff.js';
 import { savePlace } from '/shared/engine/serialize.js';
+import { discordSession } from '../discord.js';
+// inside Discord (no cookies) the game socket carries the session
+const wsSession = () => { const t = discordSession.get(); return t ? `?rs=${t}` : ''; };
 
 export class TeamCreate {
   constructor(studio, gameId, place = 0) {
@@ -15,7 +18,7 @@ export class TeamCreate {
 
   connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    this.ws = new WebSocket(`${proto}://${location.host}/ws`);
+    this.ws = new WebSocket(`${proto}://${location.host}/ws${wsSession()}`);
     this.ws.onopen = () => this.ws.send(JSON.stringify({ t: 'tc.join', gameId: this.gameId, place: this.place || undefined }));
     this.ws.onmessage = (e) => { try { this.handle(JSON.parse(e.data)); } catch (err) { console.warn(err); } };
     this.ws.onclose = () => {

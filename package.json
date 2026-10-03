@@ -1,7 +1,7 @@
 {
   "name": "robis",
   "version": "1.0.0",
-  "description": "Robis \u2014 a 2019-era Roblox-style game platform: website, multiplayer 3D client, Lua scripting and Robis Studio.",
+  "description": "Robis — a 2019-era Roblox-style game platform: website, multiplayer 3D client, Lua scripting and Robis Studio.",
   "type": "module",
   "main": "server/index.js",
   "scripts": {
@@ -25,6 +25,7 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
     "esbuild": "^0.28.2",
     "peerjs": "^1.5.5"
   }

@@ -115,8 +115,20 @@ export function bannedClient(db, info) {
     && ((info.device && (b.bannedDevices || []).includes(info.device)) || (info.ip && (b.bannedIps || []).includes(info.ip)))) || null;
 }
 
+// The session comes from the cookie; inside a Discord Activity (a third-party
+// iframe, where cookies are blocked) from a header, or for the game socket
+// from ?rs= in its URL.
+export function sessionToken(req) {
+  const fromCookie = parseCookies(req.headers.cookie)[COOKIE];
+  if (fromCookie) return fromCookie;
+  const h = req.headers['x-robis-session'];
+  if (typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)) return h;
+  const m = /^\/ws\?(?:.*&)?rs=([0-9a-f]{64})(?:&|$)/.exec(req.url || '');
+  return m ? m[1] : null;
+}
+
 export function userFromRequest(db, req) {
-  return userFromToken(db, parseCookies(req.headers.cookie)[COOKIE]);
+  return userFromToken(db, sessionToken(req));
 }
 
 export function sessionCookie(token, maxAgeDays = SESSION_DAYS) {
