@@ -1002,6 +1002,7 @@ html[data-theme="dark"] .gift-btn { color: #5fe89b; }
 .appeal-snippet { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .adm-hero.sales { background: linear-gradient(120deg, #1b1b1b, #e8413c); }
 .adm-hero.overwatch { background: linear-gradient(120deg, #1b2a35, #ff8a3d); }
+.adm-hero.bots { background: linear-gradient(120deg, #3a4a5c, #00a2ff 55%, #02b757); }
 
 /* ------------------------------------------------------------ Overwatch */
 .ow-hero { display: flex; align-items: center; gap: 16px; padding: 18px 22px; border-radius: 14px; color: #fff; margin-bottom: 14px; background: linear-gradient(120deg, #11161d, #1b2a35 55%, #ff8a3d); }

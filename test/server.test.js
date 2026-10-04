@@ -1953,3 +1953,41 @@ test('the anti-cheat also sees teleports after standing still, and straight up',
   assert.ok(k && k.why.teleport >= 2, JSON.stringify(r.real.map((x) => x.username)));
   c.ws.close();
 });
+
+test('bots join games, play, and the cheater among them gets caught', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const before = (await call('GET', '/admin/bots', null, admin)).data;
+  assert.equal(before.settings.enabled, false); // off in tests unless turned on
+  const cross = (await call('GET', '/games?q=Crossroads')).data.games.find((g) => g.name === 'Crossroads');
+  let r = await call('POST', '/admin/bots', { op: 'spawn', gameId: cross.id, cheat: '' }, admin);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  r = await call('POST', '/admin/bots', { op: 'spawn', gameId: cross.id, cheat: 'teleport' }, admin);
+  assert.equal(r.data.bots.length, 2);
+  const [fair, cheater] = [r.data.bots.find((b) => !b.cheat), r.data.bots.find((b) => b.cheat === 'teleport')];
+  // bots are accounts like everyone else's (but can't be logged into)
+  const prof = (await call('GET', '/users/' + fair.uid)).data;
+  assert.equal(prof.user ? prof.user.username : prof.username, fair.name);
+  // a real player sees them in the server
+  const p = await call('POST', '/auth/signup', { username: 'BotWatcher', password: 'secret123' });
+  const c = await join(p.cookie, { placeId: cross.id });
+  const w = await c.wait((m) => m.t === 'welcome');
+  assert.ok([fair.name, cheater.name].every((n) => w.players.some((x) => x.name === n)), JSON.stringify(w.players.map((x) => x.name)));
+  // the cheater starts cheating right away
+  const bot = srv.manager.bots.live.get(cheater.uid);
+  bot.nextCheat = 0;
+  bot.session.spawnedAt = bot.server.time - 10;
+  let k = null;
+  for (let i = 0; i < 50 && !k; i++) { // (it may die and respawn first, like anyone)
+    await new Promise((res) => setTimeout(res, 500));
+    k = (await call('GET', '/admin/overwatch', null, admin)).data.real.find((x) => x.uid === cheater.uid);
+  }
+  assert.ok(k && k.why.teleport >= 1, 'the teleporting bot should be caught');
+  const ow = (await call('GET', '/admin/overwatch', null, admin)).data.real;
+  assert.ok(!ow.some((x) => x.uid === fair.uid), 'the fair bot is not a cheater');
+  // the fair one walked somewhere meanwhile, like a person
+  const fb = srv.manager.bots.live.get(fair.uid);
+  assert.ok(fb && fb.state && Number.isFinite(fb.state.x));
+  r = await call('POST', '/admin/bots', { op: 'clear' }, admin);
+  assert.equal(r.data.bots.length, 0);
+  c.ws.close();
+});

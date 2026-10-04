@@ -107,6 +107,7 @@ const TABS = {
   polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
   servers: { label: 'Servers', group: 'Live', icon: 'server', draw: drawServers },
   abuse: { label: 'Admin Abuse', group: 'Live', icon: 'crown', draw: drawAbuse, admin: true },
+  bots: { label: 'Bots', group: 'Live', icon: 'users', draw: drawBots, admin: true },
   live: { label: 'Live Events', group: 'Live', icon: 'sparkle', draw: drawLiveEvents, admin: true },
   broadcast: { label: 'Broadcast', group: 'Live', icon: 'megaphone', draw: drawBroadcast, admin: true },
   settings: { label: 'Settings', group: 'System', icon: 'gear', draw: drawSettings, admin: true },
@@ -197,6 +198,7 @@ const PERM_NAMES = { moderator: 'Moderator', economy: 'Economy', items: 'Item Cr
 function pills(u) {
   return [
     u.isAdmin ? el('span', { class: 'pill admin-pill', text: 'Admin' }) : null,
+    u.bot ? el('span', { class: 'pill', text: '🤖 Bot' }) : null,
     ...(u.perms || []).map((p) => el('span', { class: 'pill perm-pill', text: PERM_NAMES[p] || p })),
     u.banned ? el('span', { class: 'pill ban-pill', text: (u.deviceBan ? 'Device ban' : 'Banned') + (u.banUntil ? ' until ' + new Date(u.banUntil).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') }) : null,
   ];
@@ -2084,6 +2086,47 @@ async function drawSales() {
 }
 
 // ---------------------------------------------------------------- Overwatch
+// ---------------------------------------------------------------- bots
+var botsTimer = 0; // var: the page can open on this section before the module has finished loading
+async function drawBots() {
+  clearInterval(botsTimer);
+  let r;
+  try { r = await api.get('/admin/bots'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b, msg) => { try { await api.post('/admin/bots', b); if (msg) toast(msg, 'success'); drawBots(); } catch (e) { toast(e.message, 'error'); } };
+  const S = r.settings;
+  const num = (v, min, max) => el('input', { class: 'input', type: 'number', min, max, value: v, style: { width: '90px' } });
+  const max = num(S.max, 0, 60), perGame = num(S.perGame, 1, 20), cheaters = num(S.cheaters, 0, 100), ru = num(S.ru, 0, 100);
+  const game = el('select', { class: 'input' }, r.games.map((g) => el('option', { value: g.id, text: g.name })));
+  const CHEAT = { '': '😇 Fair player', speed: '⚡ Speed hack', fly: '🕊 Fly hack', teleport: '✨ Teleport hack', random: '🎲 Random cheater' };
+  const cheat = el('select', { class: 'input' }, Object.entries(CHEAT).map(([k, v]) => el('option', { value: k, text: v })));
+  const field = (label, input, hint) => el('div', { style: { margin: '6px 0' } },
+    el('label', { class: 'row', style: { gap: '8px', alignItems: 'center', justifyContent: 'space-between' } }, el('span', { text: label }), input),
+    hint ? el('div', { class: 'muted small', text: hint }) : null);
+  const ICON = { walk: '🚶', idle: '🧍', afk: '💤', follow: '👣', hide: '🙈', jump: '🦘', tool: '🗡', leaving: '👋' };
+  body.replaceChildren(
+    el('div', { class: 'adm-hero bots' }, el('div', {}, el('h2', { text: '🤖 Bots' }),
+      el('p', { text: `Bots join public games and play like people: walk, jump, follow someone, hide, go AFK, chat, dance, reset and leave. A few of them cheat, so the anti-cheat, reports and Overwatch have someone to catch. Online now: ${r.bots.length} (aiming for ${r.wanted}). Bot accounts: ${r.accounts}.` }))),
+    el('div', { class: 'adm-cards' },
+      card('Bots', 'Off: every bot leaves at once', segBtns([[true, 'On'], [false, 'Off']], S.enabled, (v) => post({ op: 'settings', enabled: v === true || v === 'true' }, 'Saved'))),
+      card('Settings', 'How many bots and how many cheaters',
+        field('Bots online at most', max, 'goes up and down during the day'),
+        field('Bots in one game at most', perGame),
+        field('Servers with a cheater, %', cheaters, 'one cheater per server at most'),
+        field('Russian-speaking bots, %', ru, 'for new bot accounts'),
+        el('button', { class: 'btn btn-primary', text: 'Save', onclick: () => post({ op: 'settings', max: +max.value, perGame: +perGame.value, cheaters: +cheaters.value, ru: +ru.value }, 'Saved') })),
+      card('Add a bot now', 'Into the game\'s public server', game, cheat,
+        el('button', { class: 'btn btn-primary', text: '➕ Add bot', onclick: () => post({ op: 'spawn', gameId: +game.value, cheat: cheat.value }, 'The bot joined') }))),
+    card(`Online bots (${r.bots.length})`, 'Cheaters are only shown here', r.bots.length ? el('div', { class: 'mini-list' }, r.bots.map((b) => el('div', { class: 'mini-row' },
+      el('span', { class: 'mini-text' }, el('a', { class: 'no-i18n', href: `/profile?id=${b.uid}`, text: b.name }), el('span', { class: 'muted no-i18n', text: ` · ${b.gameName} (${b.players} in server) · ${b.lang.toUpperCase()}` })),
+      b.cheat ? el('span', { class: 'pill ow-wrong', text: CHEAT[b.cheat] }) : el('span', { class: 'pill', text: '😇 Fair' }),
+      el('span', { class: 'small', text: b.doing.startsWith('cheating') ? '🚨 ' + b.doing : `${ICON[b.doing] || ''} ${b.doing}` }),
+      el('span', { class: 'muted small', text: Math.floor(b.online / 60) + ' min' }),
+      el('button', { class: 'btn btn-small', text: 'Kick', onclick: () => post({ op: 'kick', uid: b.uid }) }))))
+      : el('div', { class: 'muted small', text: S.enabled ? 'No bots online yet. They come in one by one.' : 'Bots are off.' }),
+    r.bots.length ? el('button', { class: 'btn btn-red', style: { marginTop: '8px' }, text: 'Everyone leave', onclick: () => post({ op: 'clear' }, 'All bots left') }) : null));
+  botsTimer = setInterval(() => { if (current === 'bots' && !document.hidden && !body.contains(document.activeElement)) drawBots(); else if (current !== 'bots') clearInterval(botsTimer); }, 8000);
+}
+
 async function drawOverwatch() {
   body.replaceChildren(spinner());
   let r;

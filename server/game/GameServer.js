@@ -245,6 +245,7 @@ export class GameServer {
       isDeveloper: this.isTest || user.id === this.creatorId || !!user.isAdmin || !!opts.developer,
       respawnAt: 0,
       joinedAt: Date.now(),
+      bot: opts.bot || null, // a bot player (server/game/bots.js)
     };
     this.sessions.set(user.id, session);
     this.emptySince = 0;
@@ -262,7 +263,7 @@ export class GameServer {
 
     // Send the world first so the client can build it while scripts react.
     this.flush();
-    this.send(session, {
+    if (!session.bot) this.send(session, {
       t: 'welcome',
       userId: user.id,
       serverId: this.id,
@@ -1289,6 +1290,7 @@ export class GameServer {
       this.rt.step();
       this.game.GetService('RunService')._fire('Stepped', this.time, dt);
       this.game.GetService('TweenService').step(dt);
+      if (this.bots) for (const b of [...this.bots]) { try { b.step(dt); } catch (e) { this.log('warn', 'Bot: ' + e.message); } }
       this._physics(dt);
       this._touches();
       this._checkCharacters();
@@ -1522,11 +1524,13 @@ export class GameServer {
     }
     if (!ops.length && !states.length) return;
     for (const s of this.sessions.values()) {
+      if (s.bot) continue; // bots see the world itself
       this.send(s, { t: 'tick', ops, st: states.filter((x) => x[0] !== s.user.id) });
     }
   }
 
   send(session, msg) {
+    if (session.bot) { session.bot.hear(msg); return; }
     try {
       if (session.ws.readyState === 1) session.ws.send(JSON.stringify(msg));
     } catch { /* ignore */ }
@@ -1536,6 +1540,7 @@ export class GameServer {
     const data = JSON.stringify(msg);
     for (const s of this.sessions.values()) {
       if (s === except) continue;
+      if (s.bot) { s.bot.hear(msg); continue; }
       try { if (s.ws.readyState === 1) s.ws.send(data); } catch { /* ignore */ }
     }
   }

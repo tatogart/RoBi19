@@ -15,6 +15,7 @@ import { installDiscordStatus } from './discordstatus.js';
 import { installFun } from './fun.js';
 import { installSocial } from './social.js';
 import { installOverwatch } from './overwatch.js';
+import { installBots } from './bots.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -2044,7 +2045,7 @@ export function createApi(db, manager, opts = {}) {
     next();
   };
   const adminUser = (u) => ({
-    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, perms: u.perms || [], permOpts: u.permOpts || {}, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
+    ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, bot: !!u.bot, perms: u.perms || [], permOpts: u.permOpts || {}, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
     items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
     warnings: (u.warnings || []).length,
   });
@@ -2083,6 +2084,7 @@ export function createApi(db, manager, opts = {}) {
     soften: (b) => `Ban removed${b.kind && b.kind !== 'unban' ? ` (now ${b.kind === 'both' ? 'muted + no trades' : b.kind === 'mute' ? 'muted' : 'no trades'} for ${b.time || '7d'})` : ''}`,
     restrict: (b) => (b.clear ? 'Restrictions lifted' : `${b.kind === 'both' ? 'Muted + no trades' : b.kind === 'mute' ? 'Muted' : 'No trades'} for ${b.time || '1d'}${b.reason ? ': ' + String(b.reason).slice(0, 80) : ''}`),
     sales: (b) => (b.op ? `Sale #${+b.id}: ${b.op}` : `Sale: ${String(b.name || 'Black Friday').slice(0, 40)} -${Math.trunc(+b.percent || 0)}% (${b.scope || 'all'})`),
+    bots: (b) => `Bots: ${b.op === 'spawn' ? `added to ${D.games[toInt(b.gameId)]?.name || '?'}${b.cheat ? ' (cheater)' : ''}` : b.op === 'settings' ? (b.enabled === false ? 'turned off' : b.enabled ? 'turned on' : 'settings') : b.op || '?'}`,
     overwatch: (b) => `Overwatch: ${b.op || 'settings'}${b.user ? ' ' + String(b.user).slice(0, 30) : ''}`,
     abuse: (b) => `Admin Abuse: ${b.op === 'start' ? `started in ${D.games[toInt(b.gameId)]?.name || '?'}` : b.op === 'effect' ? `${b.effect} ${b.on ? 'on' : 'off'}` : b.op === 'once' ? b.effect : b.op === 'message' ? `message: ${String(b.text || '').slice(0, 80)}` : b.op === 'robits' ? `R$${Math.trunc(+b.amount || 0)} to everyone in the game` : b.op}`,
     polls: (b) => (b.op === 'create' ? `Poll: ${String(b.question || '').slice(0, 100)}` : `Poll #${+b.id}: ${b.op}`),
@@ -2528,6 +2530,7 @@ export function createApi(db, manager, opts = {}) {
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
   installSocial(api, { db, requireUser, requireAdmin, requireStaff, bad, log, giveSerial, publicUser, publicItem, isBanned, setBan, hooks, banDetails });
   installOverwatch(api, { db, manager, requireUser, requireAdmin, bad, hooks, log });
+  installBots(api, { db, manager, requireAdmin, bad });
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });

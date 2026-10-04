@@ -142,5 +142,5 @@ export class GameManager {
     });
   }
 
-  shutdown() { for (const s of this.allServers()) s.close(); }
+  shutdown() { if (this.bots) this.bots.stop(); for (const s of this.allServers()) s.close(); }
 }
