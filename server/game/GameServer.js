@@ -1215,7 +1215,11 @@ export class GameServer {
         if (session.muted) { this.send(session, { t: 'sys', text: 'You are muted.' }); return; }
         const mutedWhy = this.manager && this.manager.admin && this.manager.admin.muted ? this.manager.admin.muted(session.user) : '';
         if (mutedWhy) { this.send(session, { t: 'sys', text: mutedWhy }); return; }
+        // Control Center switch: chat off (the staff can still talk)
+        const feats = this.manager && this.manager.features ? this.manager.features() : null;
+        if (feats && feats.chat === false && !session.user.isAdmin && !(session.user.perms || []).length) { this.send(session, { t: 'sys', text: 'Chat is turned off right now.' }); return; }
         const clean = filterChat(text);
+        if (this.manager && this.manager.chatlog && !this.isTest) this.manager.chatlog({ uid: session.user.id, name: session.user.username, gameId: this.gameId, server: this.id.slice(0, 8), text, shown: clean, bot: !!session.bot });
         this.broadcast({ t: 'chat', userId: session.user.id, name: session.user.username, text: clean });
         session.player._fire('Chatted', clean);
         break;

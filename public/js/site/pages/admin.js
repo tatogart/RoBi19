@@ -43,6 +43,13 @@ const ICONS = {
   scale: 'M12 3v18M7 21h10M4 7h16M4 7l-2 6a3 3 0 006 0zm16 0l-2 6a3 3 0 006 0z',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zm10 3a3 3 0 100-6 3 3 0 000 6z',
   tag: 'M3 12V3h9l9 9-9 9zm4-5h.01',
+  chat: 'M4 5h16v11H9l-5 4z',
+  note: 'M5 3h10l4 4v14H5zM15 3v4h4M8 12h8M8 16h5',
+  clock: 'M12 21a9 9 0 100-18 9 9 0 000 18zm0-13v5l3 2',
+  toggle: 'M8 7h8a5 5 0 010 10H8A5 5 0 018 7zm0 7a2 2 0 100-4 2 2 0 000 4z',
+  coins: 'M12 7c4.4 0 8-1.3 8-3s-3.6-3-8-3-8 1.3-8 3 3.6 3 8 3zM4 4v6c0 1.7 3.6 3 8 3s8-1.3 8-3V4M4 10v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6',
+  star: 'M12 3l2.6 5.6 6 .7-4.5 4 1.3 6L12 16.4 6.6 19.3l1.3-6-4.5-4 6-.7z',
+  sidebar: 'M3 4h18v16H3zM9 4v16',
 };
 const ic = (name, cls = 'adm-ic') => el('span', { class: cls, html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[name] || ICONS.box}"/></svg>` });
 
@@ -54,14 +61,21 @@ const body = el('div', { class: 'adm-body' }, spinner());
 // sections pass `cond ? panel : null`: leave the nulls out (the DOM would print "null")
 body.replaceChildren = (...kids) => Element.prototype.replaceChildren.apply(body, kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
 const searchBtn = el('button', { class: 'adm-search', onclick: () => palette() }, ic('search'), el('span', { class: 'adm-search-text', text: 'Search players, items, sections...' }), el('kbd', { text: 'Ctrl K' }));
-app.append(el('div', { class: 'adm' },
+// Control Center 4.0: full width (the site's menu steps aside), a sidebar that
+// folds to icons, favourite sections on top, groups that fold away.
+const store = { get: (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } } };
+document.body.classList.add('adm-full');
+const shell = el('div', { class: 'adm' + (store.get('adm.mini', false) ? ' mini' : '') });
+const foldBtn = el('button', { class: 'adm-fold', title: 'Fold the menu', onclick: () => { shell.classList.toggle('mini'); store.set('adm.mini', shell.classList.contains('mini')); } }, ic('sidebar'));
+app.append(shell);
+shell.append(
   el('aside', { class: 'adm-side' },
-    el('div', { class: 'adm-brand' }, el('div', { class: 'adm-logo' }, ic('bolt')), el('div', {}, el('b', { text: 'Control Center' }), el('div', { class: 'adm-brand-sub', text: me.isAdmin ? 'Administrator' : 'Staff' }))),
+    el('div', { class: 'adm-brand' }, el('div', { class: 'adm-logo' }, ic('bolt')), el('div', { class: 'adm-brand-text' }, el('b', {}, el('span', { text: 'Control Center' }), el('span', { class: 'adm-ver', text: '4.0' })), el('div', { class: 'adm-brand-sub', text: me.isAdmin ? 'Administrator' : 'Staff' })), foldBtn),
     nav,
-    el('div', { class: 'adm-side-foot' }, el('span', { class: 'no-i18n', text: me.username }), el('span', { class: 'muted', text: ' · Admin Panel 2.0' }))),
+    el('div', { class: 'adm-side-foot' }, el('span', { class: 'no-i18n', text: me.username }), el('span', { class: 'muted', text: ' · Control Center 4.0' }))),
   el('main', { class: 'adm-main' },
-    el('div', { class: 'adm-top' }, pageTitle, searchBtn, liveBox),
-    body)));
+    el('div', { class: 'adm-top' }, pageTitle, searchBtn, liveBox, el('a', { class: 'adm-back', href: '/home', title: 'Back to the site' }, ic('home'))),
+    body));
 
 let data;
 async function load() {
@@ -92,10 +106,12 @@ function drawAnnouncement() {
 // ---------------------------------------------------------------- sections
 const TABS = {
   dashboard: { label: 'Dashboard', group: 'Overview', icon: 'home', draw: drawDashboard },
+  notes: { label: 'Staff Notes', group: 'Overview', icon: 'note', draw: drawNotes },
   activity: { label: 'Activity', group: 'Overview', icon: 'pulse', draw: drawActivity },
   players: { label: 'Players', group: 'People', icon: 'users', draw: drawPlayers },
   reports: { label: 'Reports', group: 'People', icon: 'flag', draw: drawReports, perm: 'moderator' },
   appeals: { label: 'Appeals', group: 'People', icon: 'scale', draw: drawAppeals, perm: 'moderator' },
+  chat: { label: 'Chat Log', group: 'People', icon: 'chat', draw: drawChatLog, perm: 'moderator' },
   overwatch: { label: 'Overwatch', group: 'People', icon: 'eye', draw: drawOverwatch, admin: true },
   badges: { label: 'Badges', group: 'People', icon: 'badge', draw: drawBadges, admin: true },
   gifts: { label: 'Gift Center', group: 'Economy', icon: 'gift', draw: drawGifts, admin: true },
@@ -103,6 +119,7 @@ const TABS = {
   promo: { label: 'Promo Codes', group: 'Economy', icon: 'ticket', draw: drawPromo, perm: 'economy' },
   spin: { label: 'Daily Spin', group: 'Economy', icon: 'wheel', draw: drawSpin, admin: true },
   sales: { label: 'Sales', group: 'Economy', icon: 'tag', draw: drawSales, admin: true },
+  economy: { label: 'Economy', group: 'Economy', icon: 'coins', draw: drawEconomy, admin: true },
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
   polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
@@ -111,7 +128,9 @@ const TABS = {
   bots: { label: 'Bots', group: 'Live', icon: 'users', draw: drawBots, admin: true },
   live: { label: 'Live Events', group: 'Live', icon: 'sparkle', draw: drawLiveEvents, admin: true },
   broadcast: { label: 'Broadcast', group: 'Live', icon: 'megaphone', draw: drawBroadcast, admin: true },
+  schedule: { label: 'Scheduler', group: 'Live', icon: 'clock', draw: drawSchedule, admin: true },
   settings: { label: 'Settings', group: 'System', icon: 'gear', draw: drawSettings, admin: true },
+  switches: { label: 'Switches', group: 'System', icon: 'toggle', draw: drawSwitches, admin: true },
   console: { label: 'Console', group: 'System', icon: 'terminal', draw: drawConsole, admin: true },
   log: { label: 'Admin Log', group: 'System', icon: 'list', draw: drawLog },
 };
@@ -120,19 +139,57 @@ let current = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard
 const navBtns = {};
 function openTab(id) {
   current = id;
-  for (const [k, b] of Object.entries(navBtns)) b.classList.toggle('active', k === id);
+  buildNav();
   pageTitle.replaceChildren(ic(TABS[id].icon), el('span', { text: TABS[id].label }));
   closeDrawer();
   TABS[id].draw();
 }
-let lastGroup = '';
-for (const [id, t] of Object.entries(TABS)) {
-  if (t.group !== lastGroup) { nav.append(el('div', { class: 'adm-group', text: t.group })); lastGroup = t.group; }
-  const b = el('button', { class: 'adm-link' + (id === current ? ' active' : ''), onclick: () => { history.replaceState(null, '', '#' + id); openTab(id); } },
-    ic(t.icon), el('span', { text: t.label }), el('span', { class: 'adm-count' }));
-  navBtns[id] = b;
-  nav.append(b);
+const counts = {}; // tab -> [number, colour]
+function buildNav() {
+  const favs = store.get('adm.favs', []).filter((id) => TABS[id]);
+  const folded = new Set(store.get('adm.folded', []));
+  const link = (id) => {
+    const t = TABS[id];
+    const star = el('span', { class: 'adm-star' + (favs.includes(id) ? ' on' : ''), title: favs.includes(id) ? 'Take out of favourites' : 'Add to favourites', onclick: (e) => {
+      e.stopPropagation();
+      const f = store.get('adm.favs', []);
+      store.set('adm.favs', f.includes(id) ? f.filter((x) => x !== id) : [...f, id]);
+      buildNav();
+    } }, ic('star'));
+    const c = counts[id];
+    const b = el('button', { class: 'adm-link' + (id === current ? ' active' : ''), 'data-tab': id, title: t.label, onclick: () => { history.replaceState(null, '', '#' + id); openTab(id); } },
+      ic(t.icon), el('span', { class: 'adm-link-text', text: t.label }), el('span', { class: 'adm-count' + (c && c[0] ? ' on ' + (c[1] || '') : ''), text: c && c[0] ? String(c[0]) : '' }), star);
+    navBtns[id] = b;
+    return b;
+  };
+  const out = [];
+  if (favs.length) out.push(el('div', { class: 'adm-group fav' }, '★ ', el('span', { text: 'Favourites' })), ...favs.map(link));
+  const groups = [...new Set(Object.values(TABS).map((t) => t.group))];
+  for (const g of groups) {
+    const ids = Object.keys(TABS).filter((id) => TABS[id].group === g);
+    const isOpen = !folded.has(g) || ids.includes(current);
+    out.push(el('button', { class: 'adm-group' + (isOpen ? '' : ' folded'), onclick: () => {
+      const f = new Set(store.get('adm.folded', []));
+      if (f.has(g)) f.delete(g); else f.add(g);
+      store.set('adm.folded', [...f]);
+      buildNav();
+    } }, el('span', { text: g }), el('span', { class: 'adm-group-arrow', text: '▾' })));
+    if (isOpen) out.push(...ids.map(link));
+  }
+  nav.replaceChildren(...out);
 }
+buildNav();
+// what needs a look: open reports, appeals, Overwatch cases, flagged chat
+async function pollAttention() {
+  try {
+    const a = await api.get('/admin/attention');
+    Object.assign(counts, { reports: [a.reports, 'red'], appeals: [a.appeals, 'orange'], overwatch: [a.overwatch, 'orange'], chat: [a.chat, 'yellow'], schedule: [a.scheduled, 'blue'] });
+    window.__admAttention = a;
+    buildNav();
+  } catch { /* no rights or offline */ }
+}
+pollAttention();
+setInterval(pollAttention, 30000);
 addEventListener('hashchange', () => { const id = location.hash.slice(1); if (TABS[id] && id !== current) openTab(id); });
 
 // The live numbers at the top (and the open reports in the sidebar).
@@ -143,8 +200,7 @@ async function pollLive() {
       el('span', { class: 'adm-chip green', title: 'Online now' }, el('i', { class: 'dot' }), el('b', { text: String(l.online) }), el('span', { text: ' online' })),
       el('span', { class: 'adm-chip blue', title: 'Playing now' }, el('b', { text: String(l.playing) }), el('span', { text: ' playing' })),
       el('span', { class: 'adm-chip', title: 'Game servers' }, el('b', { text: String(l.servers) }), el('span', { text: ' servers' })));
-    const rc = navBtns.reports && navBtns.reports.querySelector('.adm-count');
-    if (rc) { rc.textContent = l.reports ? String(l.reports) : ''; rc.classList.toggle('on', !!l.reports); }
+    void l.reports;
   } catch { /* offline for a moment */ }
 }
 pollLive();
@@ -1273,6 +1329,7 @@ async function drawDashboard() {
   const qa = (label, icon, run, cls = '') => el('button', { class: 'adm-qa ' + cls, onclick: run }, ic(icon), el('span', { text: label }));
   const hour = new Date().getHours();
   body.replaceChildren(
+    attentionStrip(),
     el('div', { class: 'adm-welcome' },
       el('div', {}, el('h2', { text: hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening' }, el('span', { class: 'no-i18n', text: ', ' + me.username + '!' })),
         el('p', { class: 'muted', text: `${k.online} players online, ${k.playing} playing, ${k.newToday} new today. Press Ctrl+K to find anything.` })),
@@ -2188,4 +2245,222 @@ async function drawOverwatch() {
         el('span', { class: 'muted', text: ` · really: ${a.kind}` })),
       el('span', { class: 'small ' + (a.correct ? 'ow-right' : 'ow-wrong'), text: a.correct ? '✓ right' : '✗ wrong' }),
       el('span', { class: 'muted small', text: timeAgo(a.t) })))) : el('div', { class: 'muted small', text: 'No answers yet.' })));
+}
+
+// ================================================================ Control Center 4.0
+// "Needs attention" on the Dashboard: what is waiting for the staff.
+// replaceChildren without the nulls of `cond ? x : null` (the DOM would print "null")
+const fill = (node, ...kids) => node.replaceChildren(...kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
+function attentionStrip() {
+  const box = el('div', { class: 'cc-attn' });
+  const draw = (a) => {
+    if (!a) { box.replaceChildren(); return; }
+    const item = (n, label, icon, tab, tone) => el('button', { class: 'cc-attn-item ' + (n ? tone : 'calm'), onclick: () => { location.hash = tab; } },
+      el('span', { class: 'cc-attn-ic' }, ic(icon)), el('b', { text: String(n) }), el('span', { text: label }));
+    fill(box,
+      perm('moderator') ? item(a.reports, 'open reports', 'flag', 'reports', 'red') : null,
+      perm('moderator') ? item(a.appeals, 'appeals', 'scale', 'appeals', 'orange') : null,
+      me.isAdmin ? item(a.overwatch, 'Overwatch cases', 'eye', 'overwatch', 'orange') : null,
+      perm('moderator') ? item(a.chat, 'flagged chat (24h)', 'chat', 'chat', 'yellow') : null,
+      me.isAdmin ? item(a.scheduled, 'scheduled', 'clock', 'schedule', 'blue') : null,
+      a.maintenance ? el('div', { class: 'cc-warn' }, '🛠 ', el('span', { text: 'Maintenance is ON: players can\'t play.' })) : null,
+      a.off.length ? el('div', { class: 'cc-warn' }, '⏸ ', el('span', { text: 'Turned off: ' + a.off.join(', ') })) : null);
+    if (a.notes.length || a.online.length) {
+      box.append(el('div', { class: 'cc-attn-row' },
+        a.notes.length ? el('div', { class: 'cc-pinned' }, el('b', { text: '📌 Pinned notes' }), a.notes.map((n) => el('div', { class: 'cc-pinned-note' }, el('span', { class: 'no-i18n', text: n.text }), el('span', { class: 'muted small no-i18n', text: ' — ' + n.by })))) : null,
+        a.online.length ? el('div', { class: 'cc-online' }, el('b', {}, '🟢 ', el('span', { text: `In games now (${a.onlineCount})` })),
+          el('div', { class: 'cc-chips' }, a.online.map((o) => el('a', { class: 'cc-chip no-i18n', href: `/profile?id=${o.id}`, title: o.gameName, text: o.username })))) : null));
+    }
+  };
+  draw(window.__admAttention);
+  api.get('/admin/attention').then((a) => { window.__admAttention = a; draw(a); }).catch(() => {});
+  return box;
+}
+
+// ---------------------------------------------------------------- Chat Log
+var chatTimer = 0; // var: the page can open on this section before the module has finished loading
+async function drawChatLog() {
+  clearInterval(chatTimer);
+  const q = el('input', { class: 'input', placeholder: 'Search words or a player', style: { maxWidth: '280px' } });
+  const game = el('select', { class: 'input', style: { width: 'auto' } }, el('option', { value: '', text: 'All games' }));
+  const flagged = el('input', { type: 'checkbox' });
+  const bots = el('input', { type: 'checkbox' });
+  const list = el('div', { class: 'cc-chat' }, spinner());
+  const info = el('div', { class: 'muted small' });
+  const live = el('input', { type: 'checkbox', checked: true });
+  let gamesFilled = false;
+  const act = async (m, what) => {
+    const u = { id: m.uid, username: m.name };
+    if (what === 'profile') { open(`/profile?id=${m.uid}`, '_blank'); return; }
+    if (what === 'mute') { try { await api.post(`/admin/users/${m.uid}/restrict`, { kind: 'mute', time: '1h', reason: 'Chat: ' + m.text.slice(0, 80) }); toast(`${m.name} is muted for 1 hour`, 'success'); } catch (e) { toast(e.message, 'error'); } return; }
+    if (what === 'warn') { try { await api.post(`/admin/users/${m.uid}/warn`, { reason: 'Chat: ' + m.text.slice(0, 120) }); toast(`${m.name} got a warning`, 'success'); } catch (e) { toast(e.message, 'error'); } return; }
+    if (what === 'ban') ban(u);
+  };
+  const load = async () => {
+    let r;
+    try { r = await api.get(`/admin/chatlog?q=${encodeURIComponent(q.value.trim())}&game=${game.value}&flagged=${flagged.checked ? 1 : 0}&bots=${bots.checked ? 1 : 0}`); } catch (e) { list.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+    if (!gamesFilled) { gamesFilled = true; for (const g of r.games) game.append(el('option', { value: g.id, text: g.name })); }
+    info.textContent = tr(`${r.messages.length} shown · ${r.total} kept · ${r.flagged24} flagged in 24 hours`);
+    list.replaceChildren(...(r.messages.length ? r.messages.map((m) => el('div', { class: 'cc-msg' + (m.scam ? ' scam' : m.filtered ? ' filtered' : '') },
+      el('span', { class: 'cc-msg-time', text: new Date(m.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }),
+      el('a', { class: 'cc-msg-name no-i18n', href: `/profile?id=${m.uid}`, target: '_blank', text: m.name }),
+      m.bot ? el('span', { class: 'pill', text: '🤖' }) : null,
+      el('span', { class: 'cc-msg-text no-i18n', text: m.text }),
+      m.scam ? el('span', { class: 'pill cc-tag-red', text: m.scam === 'scam' ? 'SCAM' : 'LINK' }) : m.filtered ? el('span', { class: 'pill cc-tag-yellow', text: 'FILTERED' }) : null,
+      el('span', { class: 'cc-msg-game muted small no-i18n', text: m.gameName }),
+      m.bot ? null : el('span', { class: 'cc-msg-acts' },
+        el('button', { class: 'btn btn-small', text: 'Warn', onclick: () => act(m, 'warn') }),
+        el('button', { class: 'btn btn-small', text: 'Mute 1h', onclick: () => act(m, 'mute') }),
+        me.isAdmin || perm('moderator') ? el('button', { class: 'btn btn-small btn-red', text: 'Ban', onclick: () => act(m, 'ban') }) : null)))
+      : [el('div', { class: 'empty', text: 'No messages yet. Chat from every game shows up here.' })]));
+  };
+  for (const x of [game, flagged, bots]) x.addEventListener('change', load);
+  let t = 0; q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(load, 300); });
+  body.replaceChildren(
+    el('div', { class: 'adm-hero chat' }, el('div', {}, el('h2', { text: '💬 Chat Log' }), el('p', { text: 'Everything players write in games, as they wrote it (before the filter). Red: scam links, yellow: caught by the filter.' }))),
+    el('div', { class: 'panel' },
+      el('div', { class: 'row wrap', style: { marginBottom: '10px' } }, q, game,
+        el('label', { class: 'row', style: { gap: '6px' } }, flagged, el('span', { text: 'Only flagged' })),
+        el('label', { class: 'row', style: { gap: '6px' } }, bots, el('span', { text: 'Show bots' })),
+        el('label', { class: 'row', style: { gap: '6px' } }, live, el('span', { text: 'Live' })),
+        el('a', { class: 'btn btn-small', href: '#settings', text: 'Banned words →' })),
+      info, list));
+  await load();
+  chatTimer = setInterval(() => { if (current === 'chat' && live.checked && !document.hidden && document.activeElement !== q) load(); else if (current !== 'chat') clearInterval(chatTimer); }, 5000);
+}
+
+// ---------------------------------------------------------------- Scheduler
+async function drawSchedule() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/schedule'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b, msg) => { try { const x = await api.post('/admin/schedule', b); toast(msg + (x.result ? ': ' + x.result : ''), 'success'); drawSchedule(); } catch (e) { toast(e.message, 'error'); } };
+  const kind = el('select', { class: 'input' }, Object.entries(r.kinds).map(([k, v]) => el('option', { value: k, text: v })));
+  const pad = (n) => String(n).padStart(2, '0');
+  const soon = new Date(Date.now() + 3600e3);
+  const at = el('input', { class: 'input', type: 'datetime-local', value: `${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}T${pad(soon.getHours())}:00` });
+  const repeat = el('select', { class: 'input', style: { width: 'auto' } }, [['', 'Once'], ['daily', 'Every day'], ['hourly', 'Every hour']].map(([v, t]) => el('option', { value: v, text: t })));
+  const text = el('input', { class: 'input', maxlength: 300, placeholder: 'Text' });
+  const amount = el('input', { class: 'input', type: 'number', min: 1, max: 10000, value: 100, style: { width: '110px' } });
+  const on = segBtns([[true, 'Turn ON'], [false, 'Turn OFF']], true, (v) => { on.value = v === true || v === 'true'; });
+  on.value = true;
+  const color = el('select', { class: 'input', style: { width: 'auto' } }, [['blue', 'Blue'], ['green', 'Green'], ['orange', 'Orange'], ['red', 'Red']].map(([v, t]) => el('option', { value: v, text: t })));
+  const fields = el('div', { class: 'cc-fields' });
+  const showFields = () => {
+    const k = kind.value;
+    const f = (label, x) => el('label', { class: 'cc-field' }, el('span', { text: label }), x);
+    fill(fields,
+      k === 'announce' || k === 'gamemsg' || k === 'rain' || k === 'shutdown' || k === 'maintenance' ? f(k === 'rain' ? 'Message (optional)' : k === 'shutdown' ? 'What players see' : k === 'maintenance' ? 'Maintenance message (optional)' : 'Text', text) : null,
+      k === 'announce' ? f('Colour', color) : null,
+      k === 'rain' ? f('Robits each', amount) : null,
+      k === 'maintenance' || k === 'bots' ? f('', on) : null);
+  };
+  kind.addEventListener('change', showFields);
+  showFields();
+  const ICON = { announce: '📢', gamemsg: '💬', rain: '💸', maintenance: '🛠', bots: '🤖', shutdown: '🔄' };
+  const describe = (j) => {
+    const p = j.params || {};
+    return j.kind === 'rain' ? `R$${p.amount} each${p.text ? ' · ' + p.text : ''}` : j.kind === 'maintenance' || j.kind === 'bots' ? (p.on ? 'ON' : 'OFF') + (p.text ? ' · ' + p.text : '') : p.text || (j.kind === 'announce' ? '(remove the announcement)' : '');
+  };
+  body.replaceChildren(
+    el('div', { class: 'adm-hero schedule' }, el('div', {}, el('h2', { text: '⏰ Scheduler' }), el('p', { text: 'Make things happen by themselves at a set time: an announcement, a Robits rain, maintenance, bots, a restart of the game servers. Once, every day or every hour.' }))),
+    card('New timed action', null,
+      el('div', { class: 'cc-fields' },
+        el('label', { class: 'cc-field' }, el('span', { text: 'What' }), kind),
+        el('label', { class: 'cc-field' }, el('span', { text: 'When' }), at),
+        el('label', { class: 'cc-field' }, el('span', { text: 'Repeat' }), repeat)),
+      fields,
+      el('div', {}, el('button', { class: 'btn btn-primary', text: '⏰ Schedule', onclick: () => post({ kind: kind.value, at: new Date(at.value).toISOString(), repeat: repeat.value, text: text.value, amount: +amount.value, on: on.value, color: color.value }, 'Scheduled') }))),
+    card('Timeline', null, r.jobs.length ? el('div', { class: 'cc-timeline' }, r.jobs.map((j) => el('div', { class: 'cc-job' + (j.done ? ' done' : '') },
+      el('span', { class: 'cc-job-ic', text: ICON[j.kind] || '•' }),
+      el('div', { class: 'cc-job-main' },
+        el('b', { text: r.kinds[j.kind] || j.kind }),
+        el('div', { class: 'small no-i18n', text: describe(j) }),
+        el('div', { class: 'muted small' }, el('span', { text: (j.done ? '✓ ' : '') + new Date(j.done ? j.lastRun : j.at).toLocaleString() }), j.repeat ? el('span', { text: ' · ' + (j.repeat === 'daily' ? 'every day' : 'every hour') }) : null, el('span', { class: 'no-i18n', text: ' · ' + j.by }), j.result ? el('span', { class: 'no-i18n', text: ' · ' + j.result }) : null)),
+      j.done ? null : el('span', { class: 'cc-job-in', text: timeLeft(j.at - r.now) }),
+      j.done ? null : el('button', { class: 'btn btn-small', text: '▶ Now', title: 'Run it right now', onclick: () => post({ op: 'run', id: j.id }, 'Done') }),
+      el('button', { class: 'btn btn-small', text: '✕', title: 'Cancel', onclick: () => post({ op: 'cancel', id: j.id }, 'Removed') }))))
+      : el('div', { class: 'muted small', text: 'Nothing scheduled yet.' })));
+}
+function timeLeft(ms) {
+  if (ms <= 0) return 'now';
+  const m = Math.round(ms / 60000);
+  if (m < 60) return `in ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `in ${h} h ${m % 60} min`;
+  return `in ${Math.floor(h / 24)} days`;
+}
+
+// ---------------------------------------------------------------- Switches
+async function drawSwitches() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/features'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const ICON = { trades: '🔁', gifts: '🎁', friendRequests: '🤝', groups: '👥', purchases: '🛒', gameCreate: '🛠', spin: '🎡', chat: '💬' };
+  body.replaceChildren(
+    el('div', { class: 'adm-hero switches' }, el('div', {}, el('h2', { text: '🎚 Switches' }), el('p', { text: 'Turn parts of Robis off for everyone in one click (say, trading while there\'s a scam wave). The staff can still use everything.' }))),
+    el('div', { class: 'cc-switches' }, Object.entries(r.names).map(([k, name]) => {
+      const on = r.features[k] !== false;
+      return el('button', { class: 'cc-switch' + (on ? ' on' : ''), onclick: async () => {
+        try { await api.post('/admin/features', { key: k, on: !on }); toast(tr(`${name}: ${!on ? 'ON' : 'OFF'}`), 'success'); drawSwitches(); pollAttention(); } catch (e) { toast(e.message, 'error'); }
+      } },
+      el('span', { class: 'cc-switch-ic', text: ICON[k] || '•' }), el('b', { text: name }),
+      el('span', { class: 'cc-toggle' }, el('i')), el('span', { class: 'cc-switch-state', text: on ? 'ON' : 'OFF' }));
+    })),
+    el('div', { class: 'muted small', style: { marginTop: '10px' }, text: 'Sign-ups and maintenance are in Settings.' }));
+}
+
+// ---------------------------------------------------------------- Economy
+async function drawEconomy() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/economy'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const max = Math.max(1, ...r.days.map((d) => Math.max(d.made, d.spent)));
+  const chart = el('div', { class: 'cc-eco-chart' }, r.days.map((d) => el('div', { class: 'cc-eco-col', title: `${new Date(d.t).toLocaleDateString()}: +${fmtFull(d.made)} / -${fmtFull(d.spent)}` },
+    el('div', { class: 'cc-eco-bars' },
+      el('div', { class: 'cc-eco-bar made', style: { height: `${(d.made / max) * 100}%` } }),
+      el('div', { class: 'cc-eco-bar spent', style: { height: `${(d.spent / max) * 100}%` } })),
+    el('div', { class: 'cc-eco-day', text: new Date(d.t).getDate() + '' }))));
+  const made = r.days.reduce((a, d) => a + d.made, 0), spent = r.days.reduce((a, d) => a + d.spent, 0);
+  const tile = (label, value, cls = '') => el('div', { class: 'dash-tile ' + cls }, el('div', { class: 'dash-value', text: value }), el('div', { class: 'dash-label', text: label }));
+  body.replaceChildren(
+    el('div', { class: 'adm-hero economy' }, el('div', {}, el('h2', { text: '💰 Economy' }), el('p', { text: 'Where the Robits come from and where they go: the last 14 days, the richest players, the best-selling items and the biggest moves of the day. Bots and system accounts are left out.' }))),
+    el('div', { class: 'dash-tiles' },
+      tile('Robits held by players', fmtNum(r.total), 'blue'),
+      tile('Average per player', fmtFull(r.average)),
+      tile('Median per player', fmtFull(r.median)),
+      tile('Made in 14 days', '+' + fmtNum(made), 'green'),
+      tile('Spent in 14 days', '-' + fmtNum(spent), 'red'),
+      tile('Balance (14 days)', (made - spent >= 0 ? '+' : '') + fmtNum(made - spent), made >= spent ? 'orange' : 'green')),
+    card('Robits made and spent, by day', 'Green: made (stipends, sales, rewards). Red: spent.', chart),
+    el('div', { class: 'adm-cards' },
+      card('Richest players', null, el('div', { class: 'mini-list' }, r.richest.map((u, i) => el('div', { class: 'mini-row' },
+        el('span', { class: 'cc-rank', text: String(i + 1) }), el('a', { class: 'mini-text no-i18n', href: `/profile?id=${u.id}`, text: u.username + (u.admin ? ' 🛡' : '') }), el('b', { text: 'R$ ' + fmtFull(u.robits) }))))),
+      card('Best-selling items', null, r.items.length ? el('div', { class: 'mini-list' }, r.items.map((it, i) => el('div', { class: 'mini-row' },
+        el('span', { class: 'cc-rank', text: String(i + 1) }), el('a', { class: 'mini-text no-i18n', href: `/item?id=${it.id}`, text: it.name }), el('span', { class: 'small', text: tr(`${it.sales} sold`) }), el('b', { text: 'R$ ' + fmtNum(it.earned) }))))
+        : el('div', { class: 'muted small', text: 'Nothing sold yet.' })),
+      card('Biggest moves today', 'R$ 50 or more', r.big.length ? el('div', { class: 'mini-list' }, r.big.map((t) => el('div', { class: 'mini-row' },
+        el('a', { class: 'mini-text no-i18n', href: `/profile?id=${t.userId}`, text: t.username }), el('span', { class: 'small muted no-i18n', text: t.desc }), el('b', { class: t.amount > 0 ? 'cc-plus' : 'cc-minus', text: (t.amount > 0 ? '+' : '') + fmtFull(t.amount) }))))
+        : el('div', { class: 'muted small', text: 'Quiet day.' }))));
+}
+
+// ---------------------------------------------------------------- Staff Notes
+async function drawNotes() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/notes'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b) => { try { await api.post('/admin/notes', b); drawNotes(); pollAttention(); } catch (e) { toast(e.message, 'error'); } };
+  const text = el('textarea', { class: 'input', rows: 3, maxlength: 1000, placeholder: 'Write a note for the team: plans, who to keep an eye on, what was decided...' });
+  let color = 'yellow';
+  const colors = el('div', { class: 'cc-colors' }, ['yellow', 'blue', 'green', 'pink'].map((c) => el('button', { class: 'cc-color ' + c + (c === color ? ' on' : ''), title: c, onclick: (e) => { color = c; for (const b of colors.children) b.classList.toggle('on', b === e.currentTarget); } })));
+  body.replaceChildren(
+    el('div', { class: 'adm-hero notes' }, el('div', {}, el('h2', { text: '📝 Staff Notes' }), el('p', { text: 'A board for the whole team. Pinned notes also show on the Dashboard.' }))),
+    el('div', { class: 'panel cc-note-new' }, text, el('div', { class: 'row', style: { justifyContent: 'space-between', marginTop: '8px' } }, colors, el('button', { class: 'btn btn-primary', text: 'Add note', onclick: () => { if (text.value.trim()) post({ op: 'add', text: text.value, color }); } }))),
+    r.notes.length ? el('div', { class: 'cc-notes' }, r.notes.map((n) => el('div', { class: 'cc-note ' + n.color + (n.pinned ? ' pinned' : '') },
+      n.pinned ? el('div', { class: 'cc-note-pin', text: '📌' }) : null,
+      el('div', { class: 'cc-note-text no-i18n', text: n.text }),
+      el('div', { class: 'cc-note-foot' }, el('span', { class: 'small no-i18n', text: n.by }), el('span', { class: 'small muted', text: timeAgo(n.time) }), el('span', { class: 'spacer' }),
+        el('button', { class: 'cc-note-btn', title: n.pinned ? 'Unpin' : 'Pin', text: n.pinned ? 'Unpin' : 'Pin', onclick: () => post({ op: 'pin', id: n.id }) }),
+        n.by === me.username || me.isAdmin ? el('button', { class: 'cc-note-btn', title: 'Delete', text: '✕', onclick: () => { if (confirm(tr('Delete this note?'))) post({ op: 'delete', id: n.id }); } }) : null))))
+      : el('div', { class: 'panel empty', text: 'No notes yet.' }));
 }

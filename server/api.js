@@ -16,6 +16,7 @@ import { installFun } from './fun.js';
 import { installSocial } from './social.js';
 import { installOverwatch } from './overwatch.js';
 import { installBots } from './bots.js';
+import { installControl } from './control.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -234,6 +235,8 @@ export function createApi(db, manager, opts = {}) {
   // gets banned). opts.ms makes it temporary.
   const BAN_TIMES = { '1h': 3600e3, '1d': 86400e3, '3d': 3 * 86400e3, '7d': 7 * 86400e3, '30d': 30 * 86400e3 };
   // Filled in by server/social.js (sales, mutes, trade bans, appeals).
+  // Control Center switches (server/control.js) can turn features off
+  api.use((req, res, next) => (hooks.featureGate ? hooks.featureGate(req, res, next) : next()));
   const hooks = { salePrice: (it) => it.price, saleInfo: () => null, isMuted: () => false, isTradeBanned: () => false, muteMessage: () => 'You are muted.', tradeMessage: () => 'You can\'t trade right now.', appealKey: () => '', overwatchAccess: () => false };
   const setBan = (u, banned, reason, opts = {}) => {
     // every ban is remembered, so the player can appeal a ban from the list
@@ -2531,6 +2534,7 @@ export function createApi(db, manager, opts = {}) {
   installSocial(api, { db, requireUser, requireAdmin, requireStaff, bad, log, giveSerial, publicUser, publicItem, isBanned, setBan, hooks, banDetails });
   installOverwatch(api, { db, manager, requireUser, requireAdmin, bad, hooks, log });
   installBots(api, { db, manager, requireAdmin, bad, deleteAccount });
+  installControl(api, { db, manager, requireAdmin, requireStaff, bad, hooks, publicUser });
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });

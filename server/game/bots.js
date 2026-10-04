@@ -408,7 +408,8 @@ export class Bot {
     }
     const others = this.others();
     // in a round (a role, coins out): no AFK or resets, more hiding
-    const round = !!this._role() || this.world.pickups().length > 0;
+    const hs = this._hsRole();
+    const round = !!this._role() || this.world.pickups().length > 0 || hs === 'It' || hs === 'Hider';
     const w = [
       ['walk', 5 * this.p.active],
       ['idle', 1.5],
@@ -585,6 +586,9 @@ export class Bot {
       this._useTool(task);
       const o = task.target;
       if (this._alive(o) && Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z) > 5) goal = posOf(o);
+    } else if (task.kind === 'chase') {
+      const o = task.who;
+      if (!this._alive(o) || this._hsRole(o) !== 'Hider') this.task.until = t; else goal = { ...posOf(o), near: 1 };
     } else if (task.kind === 'hunt' || task.kind === 'shoot') {
       goal = this._fight(task, t);
     }
@@ -705,6 +709,50 @@ export class Bot {
 
   _role() { return this._has('Knife') ? 'murderer' : this._has('Gun') ? 'sheriff' : ''; }
 
+  // Hide and Seek: the game puts a "Role" value on the player (It / Hider).
+  _hsRole(sess = this.session) {
+    const v = sess.player && sess.player.FindFirstChild('Role');
+    return v && v.ClassName === 'StringValue' ? String(v.Value || '') : '';
+  }
+
+  // true when Hide and Seek decided what to do
+  _hideAndSeek(t, others) {
+    const s = this.state;
+    const hs = this._hsRole();
+    if (hs !== this.lastHs) {
+      this.lastHs = hs;
+      this.nav = null;
+      if (hs === 'Hider') this.setTask('hide', 40, { to: this._hideSpot(), wait: rnd(80, 160) });
+      else if (hs === 'It') this.setTask('idle', rnd(1, 3));
+    }
+    if (hs === 'It') {
+      if (s.y > 150) return true; // still counting in the cage
+      const near = others.filter((o) => this._hsRole(o) === 'Hider').map((o) => [o, Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z)]).filter(([o, d]) => d < 90 && this._sees(o)).sort((a, b) => a[1] - b[1]);
+      if (near.length) {
+        if (this.task.kind !== 'chase' || this.task.who !== near[0][0]) this.setTask('chase', rnd(8, 15), { who: near[0][0] });
+        if (near[0][1] < 30 && chance(0.01)) this.say('', pick(this.lang === 'ru' ? ['вижу тебя!', 'попался!', 'я тебя нашёл'] : ['i see u!', 'found u', 'gotcha!']));
+        return true;
+      }
+      if (this.task.kind === 'chase') { this.task.until = t; }
+      if (this.task.kind !== 'walk' || t >= this.task.until) {
+        // look in a new place: somewhere a person could hide
+        const to = this._hideSpot() || this._spot(120);
+        if (to) this.setTask('walk', rnd(8, 16), { to });
+      }
+      return true;
+    }
+    if (hs === 'Hider') {
+      const seeker = others.find((o) => this._hsRole(o) === 'It');
+      if (seeker && seeker.state.p[1] < 150) {
+        const d = Math.hypot(seeker.state.p[0] - s.x, seeker.state.p[2] - s.z);
+        if (d < 28 && this._sees(seeker) && this.task.kind !== 'flee') { this.setTask('flee', rnd(3, 6), { to: this._awayFrom(seeker) }); return true; }
+      }
+      if (!['hide', 'flee', 'idle'].includes(this.task.kind)) this.setTask('hide', 40, { to: this._hideSpot(), wait: rnd(60, 140) });
+      return true;
+    }
+    return false;
+  }
+
   _sees(o) {
     const s = this.state;
     const [ox, oy, oz] = o.state.p;
@@ -737,6 +785,7 @@ export class Bot {
     if (this.task.kind === 'afk') return;
     const busy = ['hunt', 'shoot', 'leaving'].includes(this.task.kind);
     const others = this.others().filter((o) => this._alive(o));
+    if (this._hideAndSeek(t, others)) return;
     if (role !== 'murderer') {
       // someone with a knife out, close and in sight
       const killer = others.find((o) => this._holds(o, 'Knife') && Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z) < (role ? 80 : 40) && this._sees(o));

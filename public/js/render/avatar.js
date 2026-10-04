@@ -177,6 +177,46 @@ export function drawFace(ctx, w, h, face) {
       ctx.fillStyle = '#111'; eye(cx - 34, cy - 12, 7, 7); eye(cx + 34, cy - 12, 7, 7);
       eye(cx, cy + 42, 16, 20);
       break;
+    case 'cute': {
+      // big shiny eyes and pink cheeks
+      for (const s of [-1, 1]) {
+        eye(cx + s * 34, cy - 10, 17, 21);
+        ctx.fillStyle = '#fff'; eye(cx + s * 34 - 5, cy - 18, 6, 7); eye(cx + s * 34 + 5, cy - 4, 3, 3); ctx.fillStyle = '#111';
+      }
+      ctx.fillStyle = '#ff8fb0'; ctx.globalAlpha = 0.55; eye(cx - 62, cy + 20, 15, 9); eye(cx + 62, cy + 20, 15, 9); ctx.globalAlpha = 1;
+      ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(cx, cy + 22, 12, Math.PI * 0.15, Math.PI * 0.85); ctx.stroke();
+      break;
+    }
+    case 'wink':
+      eye(cx - 32, cy - 12, 11, 15);
+      ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(cx + 32, cy - 8, 14, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+      ctx.lineWidth = 4; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(cx - 44 - i * 6, cy - 22 + i * 2); ctx.lineTo(cx - 52 - i * 8, cy - 30 + i * 2); ctx.stroke(); }
+      ctx.fillStyle = '#d0354a'; ctx.beginPath(); ctx.moveTo(cx - 28, cy + 30); ctx.quadraticCurveTo(cx, cy + 58, cx + 30, cy + 26); ctx.quadraticCurveTo(cx, cy + 40, cx - 28, cy + 30); ctx.fill();
+      break;
+    case 'kissy':
+      ctx.lineWidth = 7;
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + s * 34, cy - 8, 14, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke(); }
+      ctx.fillStyle = '#e0365a';
+      ctx.beginPath(); ctx.ellipse(cx - 7, cy + 36, 9, 11, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx + 7, cy + 36, 9, 11, -0.3, 0, Math.PI * 2); ctx.fill();
+      // a little heart
+      ctx.save(); ctx.translate(cx + 62, cy + 28); ctx.scale(0.5, 0.5);
+      ctx.beginPath(); ctx.moveTo(0, 18); ctx.bezierCurveTo(-36, -4, -12, -30, 0, -10); ctx.bezierCurveTo(12, -30, 36, -4, 0, 18); ctx.fill(); ctx.restore();
+      break;
+    case 'kawaii':
+      ctx.lineWidth = 8;
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(cx + s * 50, cy - 2); ctx.lineTo(cx + s * 34, cy - 18); ctx.lineTo(cx + s * 18, cy - 2); ctx.stroke(); }
+      ctx.fillStyle = '#ff8fb0'; ctx.globalAlpha = 0.6; eye(cx - 60, cy + 16, 14, 8); eye(cx + 60, cy + 16, 14, 8); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#111'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(cx - 14, cy + 24); ctx.quadraticCurveTo(cx - 7, cy + 34, cx, cy + 24); ctx.quadraticCurveTo(cx + 7, cy + 34, cx + 14, cy + 24); ctx.stroke();
+      break;
+    case 'sweet':
+      eye(cx - 32, cy - 10, 10, 14); eye(cx + 32, cy - 10, 10, 14);
+      ctx.lineWidth = 4;
+      for (const s of [-1, 1]) for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(cx + s * (24 + i * 7), cy - 22); ctx.lineTo(cx + s * (28 + i * 10), cy - 31); ctx.stroke(); }
+      ctx.fillStyle = '#ff9fb5'; ctx.globalAlpha = 0.45; eye(cx - 58, cy + 18, 13, 8); eye(cx + 58, cy + 18, 13, 8); ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#c0304a'; smile(cy + 14, 22, 0.2, 0.8, 6);
+      break;
     case 'smile':
     default:
       eye(cx - 30, cy - 15, 11, 18); eye(cx + 30, cy - 15, 11, 18);
@@ -237,6 +277,32 @@ function drawPattern(ctx, w, h, d, face) {
         ctx.beginPath(); ctx.ellipse(w * 0.5, 0, w * 0.35, h * 0.28, 0, 0, Math.PI); ctx.fill();
       }
       break;
+    case 'hearts': {
+      ctx.fillStyle = accent;
+      const heart = (x, y, r) => { ctx.beginPath(); ctx.moveTo(x, y + r); ctx.bezierCurveTo(x - r * 2, y - r * 0.2, x - r * 0.6, y - r * 1.4, x, y - r * 0.4); ctx.bezierCurveTo(x + r * 0.6, y - r * 1.4, x + r * 2, y - r * 0.2, x, y + r); ctx.fill(); };
+      for (let y = 6; y < h; y += 16) for (let x = (y / 16) % 2 ? 6 : 14; x < w; x += 16) heart(x, y, 3.2);
+      break;
+    }
+    case 'dots':
+      ctx.fillStyle = accent;
+      for (let y = 5; y < h; y += 12) for (let x = (y / 12) % 2 ? 5 : 11; x < w; x += 12) { ctx.beginPath(); ctx.arc(x, y, 2.6, 0, Math.PI * 2); ctx.fill(); }
+      break;
+    case 'dress':
+      if (face === 'front') {
+        // a collar and a bow at the waist
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.moveTo(w * 0.3, 0); ctx.lineTo(w * 0.5, h * 0.16); ctx.lineTo(w * 0.7, 0); ctx.fill();
+        ctx.fillStyle = shade(color, 0.75); ctx.fillRect(0, h * 0.78, w, h * 0.08);
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.moveTo(w * 0.5, h * 0.82); ctx.lineTo(w * 0.36, h * 0.74); ctx.lineTo(w * 0.36, h * 0.9); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(w * 0.5, h * 0.82); ctx.lineTo(w * 0.64, h * 0.74); ctx.lineTo(w * 0.64, h * 0.9); ctx.fill();
+        ctx.beginPath(); ctx.arc(w * 0.5, h * 0.82, 3, 0, Math.PI * 2); ctx.fill();
+      } else { ctx.fillStyle = shade(color, 0.75); ctx.fillRect(0, h * 0.78, w, h * 0.08); }
+      break;
+    case 'ruffle':
+      ctx.fillStyle = accent;
+      for (const y of face === 'front' ? [h * 0.08, h * 0.24] : [h * 0.08]) for (let x = 0; x < w; x += 8) { ctx.beginPath(); ctx.arc(x + 4, y, 4, 0, Math.PI); ctx.fill(); }
+      break;
     case 'bc':
       if (face === 'front') {
         ctx.fillStyle = accent;
@@ -266,6 +332,27 @@ function drawTShirt(ctx, w, h, g, image) {
     ctx.fillStyle = '#ffc400'; ctx.translate(cx, cy); ctx.beginPath();
     for (let i = 0; i < 10; i++) { const r = i % 2 ? s * 0.45 : s; const a = -Math.PI / 2 + (i * Math.PI) / 5; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
     ctx.fill();
+  } else if (g === 'rainbow') {
+    const cols = ['#e8243c', '#ff9f1a', '#f5cd30', '#4bc25e', '#2d7de0', '#7b5cff'];
+    ctx.lineWidth = s * 0.16;
+    cols.forEach((c, i) => { ctx.strokeStyle = c; ctx.beginPath(); ctx.arc(cx, cy + s * 0.6, s * (1.05 - i * 0.16), Math.PI, Math.PI * 2); ctx.stroke(); });
+    ctx.fillStyle = '#fff';
+    for (const x of [-0.9, 0.9]) { ctx.beginPath(); ctx.arc(cx + x * s, cy + s * 0.6, s * 0.22, 0, Math.PI * 2); ctx.arc(cx + x * s + s * 0.2, cy + s * 0.55, s * 0.18, 0, Math.PI * 2); ctx.fill(); }
+  } else if (g === 'kitty') {
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#222'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.8, cy - s * 0.3); ctx.lineTo(cx - s * 0.7, cy - s * 1.0); ctx.lineTo(cx - s * 0.3, cy - s * 0.6);
+    ctx.lineTo(cx + s * 0.3, cy - s * 0.6); ctx.lineTo(cx + s * 0.7, cy - s * 1.0); ctx.lineTo(cx + s * 0.8, cy - s * 0.3);
+    ctx.quadraticCurveTo(cx + s * 0.9, cy + s * 0.7, cx, cy + s * 0.7); ctx.quadraticCurveTo(cx - s * 0.9, cy + s * 0.7, cx - s * 0.8, cy - s * 0.3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#222'; for (const x of [-0.35, 0.35]) { ctx.beginPath(); ctx.ellipse(cx + x * s, cy, s * 0.08, s * 0.12, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#ff5fa2'; ctx.beginPath(); ctx.ellipse(cx + s * 0.55, cy - s * 0.75, s * 0.2, s * 0.12, 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f5cd30'; ctx.beginPath(); ctx.ellipse(cx, cy + s * 0.2, s * 0.07, s * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+  } else if (g === 'cherry') {
+    ctx.strokeStyle = '#3a7d2a'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.4, cy + s * 0.3); ctx.quadraticCurveTo(cx - s * 0.2, cy - s * 0.6, cx + s * 0.2, cy - s * 0.8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + s * 0.4, cy + s * 0.3); ctx.quadraticCurveTo(cx + s * 0.3, cy - s * 0.4, cx + s * 0.2, cy - s * 0.8); ctx.stroke();
+    ctx.fillStyle = '#d0142c';
+    for (const x of [-0.4, 0.4]) { ctx.beginPath(); ctx.arc(cx + x * s, cy + s * 0.5, s * 0.32, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; for (const x of [-0.5, 0.3]) { ctx.beginPath(); ctx.arc(cx + x * s, cy + s * 0.4, s * 0.08, 0, Math.PI * 2); ctx.fill(); }
   } else if (g === 'oof' || g === 'noob') {
     ctx.fillStyle = g === 'oof' ? '#111' : '#f5cd30';
     ctx.font = `900 ${Math.floor(w * 0.24)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -297,7 +384,19 @@ function limbMaterials(kind, skin, look) {
         ctx.fillStyle = 'rgba(0,0,0,.18)'; if (face !== 'top') ctx.fillRect(0, hgt - 2, S, 2);
       }
     } else if (kind === 'leg') {
-      if (look.pants) {
+      if (look.pants && look.pants.pattern === 'skirt') {
+        // a skirt: the upper part of the leg, with a frill; skin below
+        if (face !== 'bottom') {
+          const hgt = face === 'top' ? S : S * 0.5;
+          ctx.fillStyle = look.pants.color; ctx.fillRect(0, 0, S, hgt);
+          if (face !== 'top') {
+            ctx.fillStyle = look.pants.accent || '#fff';
+            for (let x = 0; x < S; x += 8) { ctx.beginPath(); ctx.arc(x + 4, hgt, 4, 0, Math.PI); ctx.fill(); }
+            // little shoes
+            ctx.fillStyle = shade(look.pants.color, 0.55); ctx.fillRect(0, S * 0.88, S, S * 0.12);
+          }
+        } else { ctx.fillStyle = shade(look.pants.color, 0.55); ctx.fillRect(0, 0, S, S); }
+      } else if (look.pants) {
         drawPattern(ctx, S, S, look.pants, 'leg-' + face);
         if (look.pants.pattern === 'suit' && face !== 'top' && face !== 'bottom') {
           ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 2;
@@ -522,6 +621,141 @@ const HATS = {
       const w = M(new THREE.SphereGeometry(1, 16, 10), mat(d.color, { roughness: 0.9 }), s * 0.9, 0.4, 0.7, 0, s * 0.5, s * 0.4);
       w.scale.set(0.9, 0.45, 0.1);
       g.add(w);
+    }
+    return g;
+  },
+  // ---- girls' collection
+  bow(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.55 });
+    for (const s of [-1, 1]) {
+      const loop = M(new THREE.SphereGeometry(0.26, 14, 10), m, s * 0.27, 0.78, 0.05, 0, 0, s * 0.5);
+      loop.scale.set(1.25, 0.8, 0.5);
+      g.add(loop);
+      const tail = M(new THREE.BoxGeometry(0.12, 0.3, 0.06), m, s * 0.16, 0.56, 0.08, 0, 0, s * 0.45);
+      g.add(tail);
+    }
+    g.add(M(new THREE.SphereGeometry(0.11, 10, 8), mat(d.accent || d.color), 0, 0.78, 0.05));
+    g.rotation.z = -0.35;
+    g.position.x = 0.12;
+    return g;
+  },
+  flowercrown(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.TorusGeometry(0.6, 0.04, 6, 30), mat(d.accent || '#5aa85a'), 0, 0.5, 0, Math.PI / 2, 0, 0));
+    const cols = [d.color, '#ffffff', '#ffd400', '#b79cff', d.color, '#ff9f1a'];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const c = cols[i % cols.length];
+      g.add(M(new THREE.SphereGeometry(0.11, 10, 8), mat(c, { roughness: 0.7 }), Math.sin(a) * 0.62, 0.52, Math.cos(a) * 0.62));
+      if (i % 2) g.add(M(new THREE.SphereGeometry(0.06, 8, 6), mat('#7ddc6a'), Math.sin(a + 0.25) * 0.64, 0.47, Math.cos(a + 0.25) * 0.64));
+    }
+    return g;
+  },
+  tiara(d) {
+    const g = new THREE.Group();
+    const silver = mat(d.color, { metalness: 0.85, roughness: 0.2 });
+    g.add(M(new THREE.TorusGeometry(0.6, 0.035, 6, 30, Math.PI), silver, 0, 0.42, 0, Math.PI / 2, 0, Math.PI));
+    for (let i = -2; i <= 2; i++) {
+      const a = Math.PI + i * 0.3;
+      const h = i === 0 ? 0.32 : 0.2 - Math.abs(i) * 0.03;
+      g.add(M(new THREE.ConeGeometry(0.06, h, 6), silver, Math.sin(a) * 0.6, 0.42 + h / 2, Math.cos(a) * 0.6));
+    }
+    g.add(M(new THREE.OctahedronGeometry(0.1), mat(d.accent, { emissive: d.accent, emissiveIntensity: 0.4, metalness: 0.3 }), 0, 0.82, -0.6));
+    return g;
+  },
+  catears(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.TorusGeometry(0.64, 0.035, 6, 24, Math.PI), mat(d.color), 0, 0.12, 0, 0, Math.PI / 2, 0));
+    for (const s of [-1, 1]) {
+      g.add(M(new THREE.ConeGeometry(0.2, 0.38, 4), mat(d.color), s * 0.36, 0.78, 0, 0, Math.PI / 4, -s * 0.35));
+      g.add(M(new THREE.ConeGeometry(0.1, 0.22, 4), mat(d.accent), s * 0.36, 0.76, -0.06, 0, Math.PI / 4, -s * 0.35));
+    }
+    return g;
+  },
+  bunnyears(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.TorusGeometry(0.64, 0.035, 6, 24, Math.PI), mat(d.color), 0, 0.12, 0, 0, Math.PI / 2, 0));
+    for (const s of [-1, 1]) {
+      const ear = M(new THREE.SphereGeometry(0.16, 12, 10), mat(d.color), s * 0.24, 1.08, 0.02, 0, 0, -s * 0.18);
+      ear.scale.set(0.9, 3.0, 0.45);
+      g.add(ear);
+      const inner = M(new THREE.SphereGeometry(0.09, 10, 8), mat(d.accent), s * 0.24, 1.08, -0.05, 0, 0, -s * 0.18);
+      inner.scale.set(0.9, 3.4, 0.3);
+      g.add(inner);
+    }
+    return g;
+  },
+  heartglasses(d) {
+    const g = new THREE.Group();
+    const lens = mat(d.color, { roughness: 0.2, metalness: 0.2 });
+    const shape = new THREE.Shape();
+    shape.moveTo(0, -0.12); shape.bezierCurveTo(-0.28, 0.04, -0.12, 0.2, 0, 0.08); shape.bezierCurveTo(0.12, 0.2, 0.28, 0.04, 0, -0.12);
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.04, bevelEnabled: false });
+    for (const s of [-1, 1]) g.add(M(geo, lens, s * 0.24, 0.12, -0.7));
+    g.add(M(new THREE.BoxGeometry(1.3, 0.04, 0.04), mat(d.accent), 0, 0.2, -0.67));
+    return g;
+  },
+  headband(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.TorusGeometry(0.65, 0.05, 8, 26, Math.PI), mat(d.color), 0, 0.28, 0, 0, Math.PI / 2, 0));
+    const fx = 0.42, fy = 0.72, fz = -0.32;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const p = M(new THREE.SphereGeometry(0.08, 8, 6), mat('#ffffff'), fx + Math.cos(a) * 0.1, fy + Math.sin(a) * 0.1, fz);
+      p.scale.set(1, 1, 0.5);
+      g.add(p);
+    }
+    g.add(M(new THREE.SphereGeometry(0.07, 8, 6), mat(d.accent), fx, fy, fz - 0.03));
+    return g;
+  },
+  pigtails(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.85 });
+    g.add(hairShell(m, { front: 0.36, back: -0.35, sides: -0.1, thick: 0.07 }));
+    for (const s of [-1, 1]) {
+      const tail = M(new THREE.SphereGeometry(0.26, 14, 10), m, s * 0.86, -0.12, 0.1, 0, 0, s * 0.25);
+      tail.scale.set(1, 2.3, 1);
+      g.add(tail);
+      g.add(M(new THREE.SphereGeometry(0.13, 10, 8), mat(d.accent || '#ffffff'), s * 0.7, 0.36, 0.1));
+    }
+    return g;
+  },
+  ponytail(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.85 });
+    g.add(hairShell(m, { front: 0.38, back: -0.2, sides: 0.05, thick: 0.07 }));
+    g.add(M(new THREE.TorusGeometry(0.1, 0.04, 6, 14), mat(d.accent || d.color), 0, 0.45, 0.62, 0.4, 0, 0));
+    const tail = M(new THREE.SphereGeometry(0.2, 14, 10), m, 0, 0.05, 0.78, 0.35, 0, 0);
+    tail.scale.set(0.9, 2.4, 0.8);
+    g.add(tail);
+    return g;
+  },
+  bun(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.85 });
+    g.add(hairShell(m, { front: 0.38, back: -0.2, sides: 0.05, thick: 0.07 }));
+    g.add(M(new THREE.SphereGeometry(0.3, 16, 12), m, 0, 0.82, 0.12));
+    g.add(M(new THREE.TorusGeometry(0.24, 0.06, 8, 16), mat(d.accent || d.color), 0, 0.7, 0.1, Math.PI / 2, 0, 0));
+    return g;
+  },
+  bob(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.8 });
+    g.add(hairShell(m, { front: 0.25, back: -0.42, sides: -0.4, thick: 0.1 }));
+    // straight bangs
+    g.add(M(new THREE.BoxGeometry(1.0, 0.22, 0.16), m, 0, 0.38, -0.6));
+    return g;
+  },
+  curly(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.95 });
+    g.add(hairShell(m, { front: 0.36, back: -0.45, sides: -0.25, thick: 0.08 }));
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2 * 3;
+      const y = 0.75 - (i / 26) * 1.15;
+      if (Math.cos(a) < 0.1 && y < 0.5) continue; // keep the face clear
+      g.add(M(new THREE.SphereGeometry(0.17, 10, 8), m, Math.sin(a) * 0.62, y, Math.cos(a) * 0.62));
     }
     return g;
   },

@@ -56,7 +56,8 @@ const STYLES = [
   // [weight, girls?, hair, face, shirt, pants, hats (some of the time)]
   [5, null, ['Bacon Hair', 'Pal Hair'], ['Smile'], ['Blue Hoodie'], ['Jeans'], []], // a new account: the starter look
   [5, false, ['Bacon Hair', 'Brown Charmer Hair', 'Pal Hair', 'Blonde Spiked Hair'], ['Smile', 'Man Face', 'Chill', 'Winning Smile', 'Silly Fun'], ['Blue Hoodie', 'Red Plaid Shirt', 'Striped Tee', 'Green Camo Jacket'], ['Jeans', 'Khakis', 'Black Pants', 'Camo Pants'], ['Classic Robis Cap', 'Beanie', 'Headphones', 'Sunglasses']],
-  [4, true, ['Long Pink Hair', 'Brown Charmer Hair', 'Blonde Spiked Hair'], ['Woman Face', 'Smile', 'Super Super Happy Face', 'Winning Smile'], ['Striped Tee', 'Blue Hoodie', 'Red Plaid Shirt'], ['Black Pants', 'Jeans', 'Khakis'], ['Party Hat', 'Beanie', 'Tiny Wings', 'Headphones']],
+  [3, true, ['Long Pink Hair', 'Long Brown Hair', 'Long Blonde Hair', 'Brown Charmer Hair'], ['Woman Face', 'Smile', 'Super Super Happy Face', 'Sweet Smile'], ['Striped Tee', 'Blue Hoodie', 'Red Plaid Shirt', 'Pink Hoodie'], ['Black Pants', 'Jeans', 'White Leggings'], ['Party Hat', 'Beanie', 'Tiny Wings', 'Headphones', 'Daisy Headband']],
+  [5, true, ['Pink Pigtails', 'Brown Pigtails', 'Blonde Ponytail', 'Black Ponytail', 'Cute Bun', 'Lavender Bob', 'Black Bob', 'Curly Hair'], ['Cute Face', 'Wink', 'Kissy Face', 'Kawaii Face', 'Sweet Smile', 'Woman Face'], ['Pink Heart Top', 'Polka Dot Blouse', 'Lavender Dress Top', 'Mint Ruffle Top', 'Pink Hoodie'], ['Pink Skirt', 'Lavender Skirt', 'Denim Skirt', 'White Leggings', 'Jeans'], ['Pink Bow', 'Red Polka Bow', 'Flower Crown', 'Princess Tiara', 'Cat Ears', 'Bunny Ears', 'Heart Shades', 'Daisy Headband']],
   [1.5, false, ['Brown Charmer Hair', 'Pal Hair'], ['Man Face', 'Chill'], ['Black Suit'], ['Suit Pants'], ['Stylish Top Hat', 'Sunglasses']],
   [1.5, null, ['Bacon Hair', 'Pal Hair'], ['Epic Face', 'Silly Fun', 'Shocked'], ['Green Camo Jacket', 'Blue Hoodie'], ['Camo Pants', 'Black Pants'], ['Headphones', 'Viking Helm', 'Pirate Hat', 'Traffic Cone']],
   [1, null, ['Bacon Hair'], ['Smile'], ['Builders Club Shirt'], ['Black Pants', 'Jeans'], ['Classic Robis Cap']],
@@ -75,8 +76,8 @@ function makeLook(girl, byName) {
   for (const x of fits) { if ((r -= x[0]) <= 0) { st = x; break; } }
   const [, , hair, face, shirt, pants, hats] = st;
   const wearing = [pick(hair), pick(face), pick(shirt), pick(pants)];
-  if (hats.length && Math.random() < 0.35) wearing.push(pick(hats));
-  if (Math.random() < 0.1) wearing.push(pick(['Robis Logo T-Shirt', 'I <3 Robis', 'Gold Star', 'Oof']));
+  if (hats.length && Math.random() < (girl ? 0.6 : 0.35)) wearing.push(pick(hats));
+  if (Math.random() < (girl ? 0.2 : 0.1)) wearing.push(pick(girl ? ['Rainbow Tee', 'Kitty Tee', 'Cherry Tee', 'I <3 Robis'] : ['Robis Logo T-Shirt', 'I <3 Robis', 'Gold Star', 'Oof']));
   const shirtItem = byName[wearing[2]], pantsItem = byName[wearing[3]];
   const tc = shirtItem?.data?.color || skin, lc = pantsItem?.data?.color || skin;
   return { bodyColors: { head: skin, leftArm: skin, rightArm: skin, torso: tc, leftLeg: lc, rightLeg: lc }, wearing: wearing.map(id).filter(Boolean) };
@@ -134,6 +135,12 @@ export function installBots(api, { db, manager, requireAdmin, bad, deleteAccount
     return u;
   };
 
+  // The girls' collection came out: bot girls go shopping (once).
+  if ((B.looks || 1) === 2) {
+    for (const u of Object.values(D.users)) if (u.bot && u.girl) dress(u, true);
+    B.looks = 3;
+    db.save();
+  }
   // Bot accounts from before: new names, outfits and sign-up dates (once).
   if ((B.looks || 1) < 2) {
     for (const u of Object.values(D.users)) {
@@ -146,7 +153,7 @@ export function installBots(api, { db, manager, requireAdmin, bad, deleteAccount
       if ((u.lastOnline || 0) < u.created) u.lastOnline = u.created;
       if (u.robits < 20) u.robits = Math.floor(rnd(20, 2500));
     }
-    B.looks = 2;
+    B.looks = 3;
     db.save();
   }
 

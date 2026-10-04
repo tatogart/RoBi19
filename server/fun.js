@@ -229,6 +229,15 @@ export function installFun(api, { db, manager, requireUser, requireAdmin, bad, l
     F.events.push({ id: (F.events.at(-1)?.id || 0) + 1, created: Date.now(), ...e });
     F.events = F.events.filter((x) => Date.now() - x.created < 10 * 60e3).slice(-50);
   };
+  // Robits rain for the Admin Panel's scheduler (server/control.js)
+  if (manager) manager.funRain = (amount, text, by, everyone = false) => {
+    const list = everyone ? players() : players().filter(isOnline);
+    for (const u of list) { u.robits += amount; log(u.id, amount, `Robits rain from ${by}`); }
+    if (list.length) pushEvent({ type: 'rain', amount, text: String(text || '').slice(0, 120), by, users: list.map((u) => u.id) });
+    db.save();
+    return list.length;
+  };
+
   api.post('/admin/fun', requireAdmin, (req, res) => {
     const b = req.body || {};
     if (b.op === 'rain') {

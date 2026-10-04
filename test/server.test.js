@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 22); // 21 showcase games + The Hunt hub
+  assert.equal(data.games, 23); // 22 showcase games + The Hunt hub
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -2011,4 +2011,56 @@ test('real Overwatch cases are extra: never "case 11 of 10"', async () => {
   assert.ok(real, 'a real case comes up');
   assert.equal(real.number, undefined);
   assert.ok(real.realLeft >= 1);
+});
+
+test('Control Center 4.0: switches, chat log, scheduler, economy, notes', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'CcPlayer', password: 'secret123' });
+  // switches: trading off for players
+  let r = await call('POST', '/admin/features', { key: 'friendRequests', on: false }, admin);
+  assert.equal(r.data.features.friendRequests, false);
+  r = await call('POST', '/friends/1/request', {}, p.cookie);
+  assert.equal(r.status, 403);
+  await call('POST', '/admin/features', { key: 'friendRequests', on: true }, admin);
+  // chat log: what players write in games, before the filter
+  const cross = (await call('GET', '/games?q=Crossroads')).data.games.find((g) => g.name === 'Crossroads');
+  const c = await join(p.cookie, { placeId: cross.id });
+  await c.wait((m) => m.t === 'welcome');
+  c.ws.send(JSON.stringify({ t: 'chat', text: 'hello control center' }));
+  await c.wait((m) => m.t === 'chat');
+  r = await call('GET', '/admin/chatlog?q=control', null, admin);
+  assert.ok(r.data.messages.some((m) => m.name === 'CcPlayer' && m.text === 'hello control center'));
+  // chat switch off: players can't talk in games
+  await call('POST', '/admin/features', { key: 'chat', on: false }, admin);
+  c.ws.send(JSON.stringify({ t: 'chat', text: 'can you hear me' }));
+  const sys = await c.wait((m) => m.t === 'sys' && /turned off/.test(m.text));
+  assert.ok(sys);
+  await call('POST', '/admin/features', { key: 'chat', on: true }, admin);
+  // scheduler: a game message, run right away
+  r = await call('POST', '/admin/schedule', { kind: 'gamemsg', at: new Date(Date.now() + 3600e3).toISOString(), text: 'Party at 8!' }, admin);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const id = r.data.id;
+  r = await call('POST', '/admin/schedule', { op: 'run', id }, admin);
+  assert.ok(/players saw it/.test(r.data.result));
+  await c.wait((m) => m.t === 'sys' && m.text.includes('Party at 8!'));
+  r = await call('GET', '/admin/schedule', null, admin);
+  assert.ok(r.data.jobs.some((j) => j.id === id));
+  await call('POST', '/admin/schedule', { op: 'cancel', id }, admin);
+  // economy and notes
+  r = await call('GET', '/admin/economy', null, admin);
+  assert.equal(r.data.days.length, 14);
+  r = await call('POST', '/admin/notes', { op: 'add', text: 'Watch the trade hall', color: 'blue' }, admin);
+  assert.equal(r.status, 200);
+  const notes = (await call('GET', '/admin/notes', null, admin)).data.notes;
+  await call('POST', '/admin/notes', { op: 'pin', id: notes[0].id }, admin);
+  r = await call('GET', '/admin/attention', null, admin);
+  assert.ok(r.data.notes.some((n) => n.text === 'Watch the trade hall'));
+  // players can't see any of it
+  assert.equal((await call('GET', '/admin/notes', null, p.cookie)).status, 403);
+  c.ws.close();
+});
+
+test('Hide and Seek Extreme is a game', async () => {
+  const g = (await call('GET', '/games?q=Hide')).data.games.find((x) => x.name === 'Hide and Seek Extreme');
+  assert.ok(g);
 });
