@@ -1989,5 +1989,11 @@ test('bots join games, play, and the cheater among them gets caught', async () =
   assert.ok(fb && fb.state && Number.isFinite(fb.state.x));
   r = await call('POST', '/admin/bots', { op: 'clear' }, admin);
   assert.equal(r.data.bots.length, 0);
+  // one click: every bot account is gone
+  r = await call('POST', '/admin/bots', { op: 'deleteAll' }, admin);
+  assert.equal(r.status, 200);
+  assert.ok(r.data.deleted >= 2);
+  assert.equal(r.data.accounts, 0);
+  assert.equal((await call('GET', '/users/' + fair.uid)).status, 404);
   c.ws.close();
 });

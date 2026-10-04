@@ -3,6 +3,7 @@
 // any item; economy, warnings, notes, history), reports, activity, Gift Center.
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
+import { tr } from '../../i18n.js';
 import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner, nameBadges, itemCard, presenceText } from '../ui.js';
 import { BADGE_SVG, BADGE_TITLE } from '../../badges.js';
 
@@ -152,7 +153,7 @@ setInterval(pollLive, 15000);
 // ---------------------------------------------------------------- players
 const search = el('input', { class: 'input', placeholder: 'Search players' });
 const filter = el('select', { class: 'input', style: { width: 'auto', flex: 'none', minWidth: 0 } },
-  [['all', 'Everyone'], ['online', 'Online'], ['banned', 'Banned'], ['warned', 'With warnings'], ['staff', 'Staff'], ['badges', 'With badges'], ['new', 'New today'], ['rich', 'Richest first']].map(([v, t]) => el('option', { value: v, text: t })));
+  [['all', 'Everyone'], ['people', 'Without bots'], ['bots', '🤖 Bots'], ['online', 'Online'], ['banned', 'Banned'], ['warned', 'With warnings'], ['staff', 'Staff'], ['badges', 'With badges'], ['new', 'New today'], ['rich', 'Richest first']].map(([v, t]) => el('option', { value: v, text: t })));
 const list = el('div');
 search.addEventListener('input', () => drawList());
 filter.addEventListener('change', () => drawList());
@@ -163,6 +164,8 @@ function drawPlayers() {
 }
 const FILTERS = {
   all: () => true,
+  people: (u) => !u.bot,
+  bots: (u) => !!u.bot,
   online: (u) => u.presence && u.presence.status !== 'offline',
   banned: (u) => u.banned,
   staff: (u) => u.isAdmin || (u.perms || []).length,
@@ -2123,7 +2126,12 @@ async function drawBots() {
       el('span', { class: 'muted small', text: Math.floor(b.online / 60) + ' min' }),
       el('button', { class: 'btn btn-small', text: 'Kick', onclick: () => post({ op: 'kick', uid: b.uid }) }))))
       : el('div', { class: 'muted small', text: S.enabled ? 'No bots online yet. They come in one by one.' : 'Bots are off.' }),
-    r.bots.length ? el('button', { class: 'btn btn-red', style: { marginTop: '8px' }, text: 'Everyone leave', onclick: () => post({ op: 'clear' }, 'All bots left') }) : null));
+    el('div', { class: 'row wrap', style: { gap: '8px', marginTop: '8px' } },
+      r.bots.length ? el('button', { class: 'btn btn-red', text: 'Everyone leave', onclick: () => post({ op: 'clear' }, 'All bots left') }) : null,
+      r.accounts ? el('button', { class: 'btn btn-red', text: `🗑 Delete all bot accounts (${r.accounts})`, onclick: async () => {
+        if (!confirm(tr(`Delete all ${r.accounts} bot accounts? Their friends, items and requests go too. While bots are on, new bots will make new accounts.`))) return;
+        try { const x = await api.post('/admin/bots', { op: 'deleteAll' }); toast(`Deleted ${x.deleted} bot accounts`, 'success'); if (data && data.users) data.users = data.users.filter((u) => !u.bot); drawBots(); } catch (e) { toast(e.message, 'error'); }
+      } }) : null)));
   botsTimer = setInterval(() => { if (current === 'bots' && !document.hidden && !body.contains(document.activeElement)) drawBots(); else if (current !== 'bots') clearInterval(botsTimer); }, 8000);
 }
 

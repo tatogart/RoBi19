@@ -2530,7 +2530,7 @@ export function createApi(db, manager, opts = {}) {
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
   installSocial(api, { db, requireUser, requireAdmin, requireStaff, bad, log, giveSerial, publicUser, publicItem, isBanned, setBan, hooks, banDetails });
   installOverwatch(api, { db, manager, requireUser, requireAdmin, bad, hooks, log });
-  installBots(api, { db, manager, requireAdmin, bad });
+  installBots(api, { db, manager, requireAdmin, bad, deleteAccount });
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });

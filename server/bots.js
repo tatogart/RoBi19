@@ -82,7 +82,7 @@ function makeLook(girl, byName) {
   return { bodyColors: { head: skin, leftArm: skin, rightArm: skin, torso: tc, leftLeg: lc, rightLeg: lc }, wearing: wearing.map(id).filter(Boolean) };
 }
 
-export function installBots(api, { db, manager, requireAdmin, bad }) {
+export function installBots(api, { db, manager, requireAdmin, bad, deleteAccount }) {
   const D = db.data;
   // on by default (but not in the test suite: tests turn bots on themselves)
   const testing = typeof process !== 'undefined' && process.env && process.env.NODE_TEST_CONTEXT;
@@ -321,6 +321,15 @@ export function installBots(api, { db, manager, requireAdmin, bad }) {
       bot.leave();
     } else if (b.op === 'clear') {
       for (const x of [...live.values()]) x.leave();
+    } else if (b.op === 'deleteAll') {
+      // every bot leaves and its account is gone (friends, inventory, requests...)
+      for (const x of [...live.values()]) x.leave();
+      const bots = Object.values(D.users).filter((u) => u.bot);
+      for (const u of bots) { if (deleteAccount) deleteAccount(u); else delete D.users[u.id]; }
+      // their Overwatch cases go too
+      if (D.overwatch && Array.isArray(D.overwatch.real)) D.overwatch.real = D.overwatch.real.filter((r) => D.users[r.uid]);
+      db.save();
+      return res.json({ ok: true, deleted: bots.length, ...view() });
     } else return bad(res, 'Unknown action.');
     res.json({ ok: true, ...view() });
   });

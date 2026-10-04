@@ -198,10 +198,37 @@ class BotWorld {
           open.push(node);
         }
       }
+      // running jumps over gaps (obbies, platforms): from an edge to a floor
+      // 4-10 studs away, as far as a jump carries
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          if (!dx && !dz) continue;
+          const n1 = stand(cur.ix + dx, cur.iz + dz, cur.fy);
+          if (n1 !== null && n1 - cur.fy > -4) continue; // just walk there
+          for (let k = 2; k <= 5; k++) {
+            const nx = cur.ix + dx * k, nz = cur.iz + dz * k;
+            const len = k * C * (dx && dz ? 1.414 : 1);
+            const fy = stand(nx, nz, cur.fy + 3.5);
+            if (fy === null) continue;
+            const dy = fy - cur.fy;
+            if (dy > 3.5 || dy < -10 || len > (dy > 1 ? 6.5 : dy > -2 ? 8 : 10)) break;
+            const key = nx + ',' + nz;
+            if (closed.has(key)) break;
+            const g = cur.g + k * 1.5 + 4;
+            const old = best.get(key);
+            if (old && old.g <= g) break;
+            const node = { ix: nx, iz: nz, fy, g, f: 0, prev: cur, jump: true, gap: true };
+            node.f = g + h(node);
+            best.set(key, node);
+            open.push(node);
+            break;
+          }
+        }
+      }
     }
     if (!end) return null;
     const pts = [];
-    for (let x = end; x; x = x.prev) pts.push({ x: x.ix * C, z: x.iz * C, y: x.fy, jump: x.jump });
+    for (let x = end; x; x = x.prev) pts.push({ x: x.ix * C, z: x.iz * C, y: x.fy, jump: x.jump, gap: !!x.gap });
     pts.reverse();
     pts.push({ x: gx, z: gz, y: gfeet, jump: false });
     // smooth: skip points the bot can walk to in a straight line
@@ -398,12 +425,19 @@ export class Bot {
     for (const [k, v] of w) { if ((r -= v) <= 0) { kind = k; break; } }
     switch (kind) {
       case 'walk': this.setTask('walk', rnd(8, 25), { to: this._spot() }); break;
-      case 'idle': this.setTask('idle', rnd(2, 9)); break;
+      case 'idle': this.setTask('idle', rnd(1.5, 6)); break;
       case 'afk':
         if (chance(0.4)) this.say('afk');
         this.setTask('afk', rnd(25, 120));
         break;
-      case 'follow': this.setTask('follow', rnd(10, 30), { who: pick(others) }); break;
+      case 'follow': {
+        // people follow people (more than bots), and someone who's moving
+        const real = others.filter((o) => !o.bot);
+        const pool = real.length && chance(0.7) ? real : others;
+        const moving = pool.filter((o) => Math.hypot(o.state.v?.[0] || 0, o.state.v?.[2] || 0) > 2);
+        this.setTask('follow', rnd(10, 30), { who: pick(moving.length ? moving : pool), still: 0 });
+        break;
+      }
       case 'hide': {
         const to = this._hideSpot();
         this.setTask('hide', rnd(15, 30), { to, wait: rnd(12, 40) });
@@ -542,6 +576,10 @@ export class Bot {
         const d = Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z);
         if (d > 6) goal = posOf(o);
         if (d > 200) this.task.until = t; // too far, forget it
+        // they just stand there: get bored
+        const v = o.state.v || [0, 0, 0];
+        task.still = Math.hypot(v[0] || 0, v[2] || 0) < 1 && d <= 8 ? (task.still || 0) + dt : 0;
+        if (task.still > rnd(3, 6)) this.task.until = t;
       }
     } else if (task.kind === 'tool') {
       this._useTool(task);
@@ -554,8 +592,11 @@ export class Bot {
     let mx = 0, mz = 0;
     if (goal) {
       const w = this._steer(goal, t);
+      if (w) this.failN = 0;
       if (!w) {
-        // can't get there: forget it (and that spot for a while)
+        // can't get there: forget it (and that spot for a while); after a
+        // few misses just head somewhere close in a straight line
+        if (!goal.moving && (this.failN = (this.failN || 0) + 1) >= 3) { this.failN = 0; const to = this._spot(25); if (to) { this.setTask('walk', rnd(4, 9), { to: { ...to, direct: true } }); return; } }
         if (!goal.moving) { goal.bad = t; this.task.until = t; }
         if (task.kind === 'collect' && task.part) task.part._botSkip = true;
       } else if (w.arrived) {
@@ -571,7 +612,13 @@ export class Bot {
           const c = Math.cos(wob), sn = Math.sin(wob);
           [mx, mz] = [mx * c - mz * sn, mx * sn + mz * c];
         }
-        if (s.grounded && w.jump && d < 4) jump = true;
+        if (s.grounded && w.jump) {
+          if (w.gap) {
+            // a running jump: take off at the edge
+            const f = this.world.floor(s.x + mx * 1.1, s.y, s.z + mz * 1.1, 8);
+            if (f.d > 4.5 || d < 2.5) jump = true;
+          } else if (d < 4) jump = true;
+        }
         if (s.grounded) {
           // blocked: jump, then find the way again
           const sp = Math.hypot(s.vx, s.vz);
@@ -621,6 +668,7 @@ export class Bot {
     const near = goal.near || 1.6;
     const d = Math.hypot(goal.x - s.x, goal.z - s.z);
     if (d < near && Math.abs(goal.y - s.y) < 5) return { arrived: true };
+    if (goal.direct) return { x: goal.x, z: goal.z, jump: goal.y > s.y + 1.5 };
     let nav = this.nav;
     const moved = nav && Math.hypot(nav.gx - goal.x, nav.gz - goal.z);
     const stale = !nav || nav.goal !== goal && moved > (goal.moving ? 5 : 1) || (goal.moving && t - nav.at > 1.5) || t - nav.at > 12;
