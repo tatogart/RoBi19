@@ -1231,6 +1231,7 @@ export class GameServer {
           if (t.ClassName === 'Tool' && t !== tool) { t._fire('Unequipped'); t.Parent = backpack; }
         }
         if (tool && tool.ClassName === 'Tool' && tool.Parent === backpack) { tool.Parent = ch; tool._fire('Equipped'); }
+        this.flush(); // everyone sees the tool in hand right away, not on the next tick
         break;
       }
       case 'activate': {

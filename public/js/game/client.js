@@ -512,18 +512,48 @@ export class GameClient {
     for (const t of [eq, ...list]) if (t && !this._slots.includes(t.id)) this._slots.push(t.id);
     return this._slots.map((id) => this.game.getById(id)).filter(Boolean);
   }
-  equippedTool() {
+  // The tool really in the character (what the server says).
+  serverTool() {
     const ch = this.myCharacter();
     return ch ? ch.GetChildren().find((t) => t.ClassName === 'Tool') || null : null;
+  }
+  // What the player holds: right after pressing a slot it's the new tool at
+  // once, without waiting for the server (it's confirmed a moment later).
+  equippedTool() {
+    const p = this._pendingEquip;
+    if (p) {
+      const real = this.serverTool();
+      if ((real ? real.id : null) === p.id || performance.now() - p.at > 1500) this._pendingEquip = null;
+      else return p.id ? this.game.getById(p.id) || real : null;
+    }
+    return this.serverTool();
   }
   equipSlot(i) {
     const tools = this.backpackTools();
     const t = tools[i];
     if (!t) return;
     const eq = this.equippedTool();
-    this.send({ t: 'equip', id: eq && eq.id === t.id ? null : t.id });
+    const id = eq && eq.id === t.id ? null : t.id;
+    this._pendingEquip = { id, at: performance.now() };
+    this.send({ t: 'equip', id });
     sound.click();
-    setTimeout(() => this.hud.setTools(this.backpackTools(), this.equippedTool()), 250);
+    this.refreshTools(true);
+  }
+  // The hotbar and the tools in the characters' hands: redrawn as soon as
+  // anything changes (checked every frame, it's cheap).
+  refreshTools(force = false) {
+    const eq = this.equippedTool();
+    const key = (eq ? eq.id : '-') + '|' + (this.myPlayer()?.FindFirstChild('Backpack')?.GetChildren().length || 0);
+    if (force || key !== this._toolsKey) {
+      this._toolsKey = key;
+      this.hud.setTools(this.backpackTools(), eq);
+    }
+    for (const v of this.views.values()) {
+      const model = v.modelId && this.game.getById(v.modelId);
+      const tool = v.isLocal ? eq : model ? model.GetChildren().find((t) => t.ClassName === 'Tool') || null : null;
+      const id = tool ? tool.id : null;
+      if (v._toolId !== id) { v._toolId = id; v.setTool(tool); }
+    }
   }
   // Where the player aims: the first thing under the mouse (players included), or far away.
   aimPoint(clientX, clientY) {
@@ -701,16 +731,12 @@ export class GameClient {
       this.root.classList.toggle('tool-cursor', !!tool);
       this.hud.crosshair.classList.toggle('touch-aim', !!(this.isTouch && tool && !this.cam.shiftLock && !this.cam.firstPerson));
       this.sync.update(dt, this.camera);
+      this.refreshTools();
       this.boardTimer -= dt;
       if (this.boardTimer <= 0) {
         this.boardTimer = 0.5;
         this.hud.updateBoard(this.game, this.userId);
         this.refreshHints();
-        this.hud.setTools(this.backpackTools(), this.equippedTool());
-        for (const v of this.views.values()) {
-          const model = v.modelId && this.game.getById(v.modelId);
-          v.setTool(model ? model.GetChildren().find((t) => t.ClassName === 'Tool') || null : null);
-        }
         for (const v of this.views.values()) {
           if (v.isLocal || !v.modelId) continue;
           const model = this.game.getById(v.modelId);

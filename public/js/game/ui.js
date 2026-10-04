@@ -144,7 +144,7 @@ export class HUD {
     const key = tools.map((t) => t.id + t._p.Name).join(',') + '|' + (equipped ? equipped.id : '');
     if (key === this._toolsKey) return;
     this._toolsKey = key;
-    const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨' };
+    const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨', saber: '⚔️', torch: '🔥' };
     this.useBtn.classList.toggle('hidden', !equipped);
     if (equipped) this.useBtn.textContent = ICONS[equipped._p.ToolModel] || '🧰';
     this.hotbar.replaceChildren(...tools.slice(0, 9).map((t, i) => {
