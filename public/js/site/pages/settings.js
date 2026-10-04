@@ -16,7 +16,7 @@ const choice = (label, current, options, onPick) => el('div', { class: 'settings
 const appearance = el('div', { class: 'panel' }, el('h3', { text: 'Appearance' }));
 const drawAppearance = (theme) => {
   appearance.replaceChildren(el('h3', { text: 'Appearance' }),
-    choice('Theme', theme, [['light', 'Light'], ['dark', 'Dark']], (t) => { setTheme(t); drawAppearance(t); }),
+    choice('Theme', theme, [['light', 'Light'], ['dark', 'Dark'], ['halloween', '🎃 Halloween']], (t) => { setTheme(t); drawAppearance(t); }),
     choice('Language', LANG, [['en', 'English'], ['ru', 'Русский']], (l) => { if (l !== LANG) setLang(l); }));
 };
 drawAppearance(THEME);

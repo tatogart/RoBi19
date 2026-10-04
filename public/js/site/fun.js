@@ -1,6 +1,6 @@
 // Little fun things: confetti, the Daily Spin wheel and the secret code.
 import { api } from './api.js';
-import { el, modal, toast, fmtNum } from './ui.js';
+import { el, modal, toast, fmtNum, launchGame } from './ui.js';
 import { tr } from '../i18n.js';
 
 // Confetti over the whole page (a canvas that removes itself).
@@ -136,6 +136,22 @@ function bigBanner(text, sub) {
   setTimeout(() => b.remove(), 5600);
 }
 
+// While an admin "abuses" a game: a bar on every page with a Join button.
+let abuseBar = null;
+function showAbuse(a) {
+  const hidden = (() => { try { return sessionStorage.getItem('robis.abuse.hidden'); } catch { return null; } })();
+  if (!a || hidden === String(a.id)) { if (abuseBar) { abuseBar.remove(); abuseBar = null; } return; }
+  if (abuseBar && abuseBar.dataset.id === String(a.id)) return;
+  if (abuseBar) abuseBar.remove();
+  abuseBar = el('div', { class: 'abuse-bar' },
+    el('span', { class: 'abuse-fire', text: '🔥' }),
+    el('span', { class: 'abuse-text' }, el('b', { text: tr('ADMIN ABUSE') }), ' ', el('span', { class: 'no-i18n', text: `${a.game} · ${a.by}` })),
+    el('button', { class: 'btn btn-small abuse-join', text: tr('Join now!'), onclick: () => launchGame(a.gameId) }),
+    el('button', { class: 'abuse-x', text: '×', title: 'Hide', onclick: () => { try { sessionStorage.setItem('robis.abuse.hidden', String(a.id)); } catch { /* ignore */ } abuseBar.remove(); abuseBar = null; } }));
+  abuseBar.dataset.id = String(a.id);
+  document.body.append(abuseBar);
+}
+
 export function startLive(onRobits) {
   const key = 'robis.live.last';
   let last = 0;
@@ -149,6 +165,9 @@ export function startLive(onRobits) {
         confetti({ count: 70, emoji: '💰' });
         bigBanner(`${tr('Robits rain!')} +R$ ${fmtNum(e.amount)}`, e.text || `${tr('From')} ${e.by}`);
         api.get('/auth/me').then((m) => m.user && onRobits && onRobits(m.user.robits)).catch(() => {});
+      } else if (e.type === 'abuse') {
+        confetti({ count: 120, colors: ['#ff3b3b', '#ffc400', '#ffffff'] });
+        bigBanner(`🔥 ${tr('ADMIN ABUSE')}: ${e.game}!`, e.text || `${e.by} ${tr('is in the game right now - join!')}`);
       } else if (e.type === 'party') {
         confetti({ count: 200 });
         if (e.emoji) setTimeout(() => confetti({ count: 40, emoji: e.emoji }), 600);
@@ -157,6 +176,7 @@ export function startLive(onRobits) {
     }
     last = Math.max(last, r.last);
     try { localStorage.setItem(key, String(last)); } catch { /* ignore */ }
+    showAbuse(r.abuse);
     const nav = document.querySelector('.spin-nav');
     if (nav) nav.classList.toggle('boost', !!r.boost);
   };

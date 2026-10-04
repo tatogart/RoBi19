@@ -677,6 +677,461 @@ end)
   } },
 );
 
+// ---------------------------------------------------------------- the big toolbox update
+function fx(parent, cls, props = {}) {
+  const e = createInstance(cls);
+  for (const [k, v] of Object.entries(props)) e[k] = v;
+  e.Parent = parent;
+  return e;
+}
+const glow = (p, color, range = 14, brightness = 1.5) => fx(p, 'PointLight', { Color: Color3.fromHex(color), Range: range, Brightness: brightness });
+const sign = (p, text) => fx(p, 'BillboardText', { Text: text });
+const cyl = (m, name, d, h, pos, color, material = 'SmoothPlastic', o = {}) => part(m, { name, size: [h, d, d], pos, rot: [0, 0, 90], color, material, shape: 'Cylinder', ...o });
+
+TOOLBOX.push(
+  // ---- obby
+  { name: 'Double Spinner', cat: 'Obby', build() {
+    const m = model('DoubleSpinner');
+    cyl(m, 'Hub', 2, 3, [0, 1.5, 0], '#1b1b1b', 'Metal');
+    const bar = part(m, { name: 'KillBar', size: [24, 1, 1], pos: [0, 2.5, 0], color: '#ff2a00', material: 'Neon' });
+    const bar2 = part(m, { name: 'KillBar', size: [1, 1, 24], pos: [0, 2.5, 0], color: '#ff2a00', material: 'Neon' });
+    script(m, 'Spin', `
+-- Two red bars spin around; touching them kills.
+local m = script.Parent
+local bars = {}
+for _, b in ipairs(m:GetChildren()) do
+	if b.Name == "KillBar" then
+		table.insert(bars, { part = b, cf = b.CFrame })
+		b.Touched:Connect(function(hit)
+			local h = hit.Parent:FindFirstChild("Humanoid")
+			if h then h.Health = 0 end
+		end)
+	end
+end
+local a = 0
+while true do
+	a = a + 0.05
+	for _, b in ipairs(bars) do b.part.CFrame = b.cf * CFrame.Angles(0, a, 0) end
+	wait(0.05)
+end
+`);
+    return m;
+  } },
+  { name: 'Ladder', cat: 'Obby', build: () => part(null, { cls: 'TrussPart', name: 'Ladder', size: [2, 16, 2], pos: [0, 8, 0], color: '#7c5c46', material: 'Wood' }) },
+  { name: 'Stage Counter', cat: 'Obby', build() {
+    const sc = createInstance('Script');
+    sc.Name = 'StageCounter';
+    sc.Source = `-- Put it in ServerScriptService. Name your checkpoints 1, 2, 3... (SpawnLocations
+-- in a folder "Checkpoints"): the leaderboard shows the stage each player reached.
+local Players = game:GetService("Players")
+Players.PlayerAdded:Connect(function(player)
+	local ls = Instance.new("Folder")
+	ls.Name = "leaderstats"
+	ls.Parent = player
+	local stage = Instance.new("IntValue")
+	stage.Name = "Stage"
+	stage.Value = 1
+	stage.Parent = ls
+end)
+local folder = workspace:FindFirstChild("Checkpoints")
+if folder then
+	for _, cp in ipairs(folder:GetChildren()) do
+		local n = tonumber(cp.Name)
+		if n then
+			cp.Touched:Connect(function(hit)
+				local player = Players:GetPlayerFromCharacter(hit.Parent)
+				if player and player.leaderstats.Stage.Value < n then
+					player.leaderstats.Stage.Value = n
+					player.RespawnLocation = cp
+				end
+			end)
+		end
+	end
+end
+`;
+    return sc;
+  } },
+  { name: 'Lava Floor', cat: 'Obby', build() {
+    const p = part(null, { name: 'Lava', size: [40, 1, 40], color: '#ff5a00', material: 'Neon' });
+    script(p, 'Lava', `
+script.Parent.Touched:Connect(function(hit)
+	local h = hit.Parent:FindFirstChild("Humanoid")
+	if h then h.Health = 0 end
+end)
+`);
+    glow(p, '#ff5a00', 30, 1);
+    return p;
+  } },
+  // ---- gameplay
+  { name: 'Countdown Timer', cat: 'Gameplay', build() {
+    const p = part(null, { name: 'Timer', size: [8, 4, 1], color: '#1b1b1b', material: 'SmoothPlastic' });
+    sign(p, '60');
+    script(p, 'Countdown', `
+-- Counts down from 60 again and again; change START to what you like.
+local START = 60
+local text = script.Parent.BillboardText
+while true do
+	for i = START, 0, -1 do
+		text.Text = tostring(i)
+		wait(1)
+	end
+	text.Text = "TIME!"
+	wait(3)
+end
+`);
+    return p;
+  } },
+  { name: 'Speed Shop Button', cat: 'Gameplay', build() {
+    const p = part(null, { name: 'BuySpeed', size: [4, 1, 4], color: '#02b757', material: 'Neon' });
+    sign(p, 'Speed: 10 Coins');
+    script(p, 'Shop', `
+-- Step on it to buy more speed for 10 Coins (needs a "Coins" leaderstat).
+local Players = game:GetService("Players")
+local busy = {}
+script.Parent.Touched:Connect(function(hit)
+	local player = Players:GetPlayerFromCharacter(hit.Parent)
+	if not player or busy[player] then return end
+	busy[player] = true
+	local coins = player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Coins")
+	local h = hit.Parent:FindFirstChild("Humanoid")
+	if coins and h and coins.Value >= 10 then
+		coins.Value = coins.Value - 10
+		h.WalkSpeed = h.WalkSpeed + 4
+		player:Notify("Bought speed! Now: " .. h.WalkSpeed)
+	elseif coins then
+		player:Notify("You need 10 Coins.")
+	end
+	wait(1)
+	busy[player] = nil
+end)
+`);
+    return p;
+  } },
+  { name: 'KO Counter', cat: 'Scripts', build() {
+    const sc = createInstance('Script');
+    sc.Name = 'KOCounter';
+    sc.Source = `-- Put it in ServerScriptService: "KOs" and "Deaths" on the leaderboard.
+-- A KO counts for the last player who hurt someone (weapons set the "creator" tag).
+local Players = game:GetService("Players")
+Players.PlayerAdded:Connect(function(player)
+	local ls = Instance.new("Folder")
+	ls.Name = "leaderstats"
+	ls.Parent = player
+	local kos = Instance.new("IntValue")
+	kos.Name = "KOs"
+	kos.Parent = ls
+	local wos = Instance.new("IntValue")
+	wos.Name = "Deaths"
+	wos.Parent = ls
+	player.CharacterAdded:Connect(function(char)
+		local h = char:WaitForChild("Humanoid")
+		h.Died:Connect(function()
+			wos.Value = wos.Value + 1
+			local tag = h:FindFirstChild("creator")
+			local killer = tag and tag.Value
+			if killer and killer ~= player and killer:FindFirstChild("leaderstats") then
+				killer.leaderstats.KOs.Value = killer.leaderstats.KOs.Value + 1
+			end
+		end)
+	end)
+end)
+`;
+    return sc;
+  } },
+  { name: 'Welcome Message', cat: 'Scripts', build() {
+    const sc = createInstance('Script');
+    sc.Name = 'WelcomeMessage';
+    sc.Source = `-- Greets every player with a big message on their screen.
+game:GetService("Players").PlayerAdded:Connect(function(player)
+	wait(2)
+	player:ShowMessage("Welcome, " .. player.Name .. "!", 4, Color3.fromRGB(255, 210, 60))
+end)
+`;
+    return sc;
+  } },
+  // ---- weapons
+  { name: 'Laser Sword', cat: 'Weapons', build: () => tool('Laser Sword', 'saber', '#00e5ff', `
+-- A glowing saber: 40 damage to anyone close in front of you.
+local tool = script.Parent
+local Players = game:GetService("Players")
+local cooldown = false
+tool.Activated:Connect(function()
+	if cooldown then return end
+	local char = tool.Parent
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	cooldown = true
+	delay(0.6, function() cooldown = false end)
+	for _, p in ipairs(Players:GetPlayers()) do
+		local c = p.Character
+		local r2 = c and c:FindFirstChild("HumanoidRootPart")
+		local h = c and c:FindFirstChild("Humanoid")
+		if c ~= char and r2 and h and (r2.Position - root.Position).Magnitude < 8 then h:TakeDamage(40) end
+	end
+end)
+`, { tip: 'Click to swing' }) },
+  { name: 'Freeze Ray', cat: 'Weapons', build: () => tool('Freeze Ray', 'gun', '#7df9ff', `
+-- Click a player: they freeze for 3 seconds.
+local tool = script.Parent
+local Players = game:GetService("Players")
+tool.Activated:Connect(function(target)
+	local char = tool.Parent
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root or not target then return end
+	local hit = workspace:Raycast(root.Position, (target - root.Position).Unit * 200, char)
+	local h = hit and hit.Instance.Parent:FindFirstChild("Humanoid")
+	if h and h.WalkSpeed > 0 then
+		local speed, jump = h.WalkSpeed, h.JumpPower
+		h.WalkSpeed = 0
+		h.JumpPower = 0
+		wait(3)
+		h.WalkSpeed = speed
+		h.JumpPower = jump
+	end
+end)
+`, { tip: 'Freezes a player' }) },
+  { name: 'Torch', cat: 'Weapons', build: () => tool('Torch', 'torch', '#ff8a3d', '', { tip: 'A burning torch' }) },
+  { name: 'Healing Staff', cat: 'Weapons', build: () => tool('Healing Staff', 'brush', '#5bd6a0', `
+-- Click to heal yourself and everyone close by (+30).
+local tool = script.Parent
+local Players = game:GetService("Players")
+local cooldown = false
+tool.Activated:Connect(function()
+	if cooldown then return end
+	local char = tool.Parent
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	cooldown = true
+	for _, p in ipairs(Players:GetPlayers()) do
+		local c = p.Character
+		local r2 = c and c:FindFirstChild("HumanoidRootPart")
+		local h = c and c:FindFirstChild("Humanoid")
+		if r2 and h and (r2.Position - root.Position).Magnitude < 15 then h.Health = math.min(h.MaxHealth, h.Health + 30) end
+	end
+	wait(5)
+	cooldown = false
+end)
+`, { tip: 'Heals you and your friends' }) },
+  // ---- vehicles
+  { name: 'Police Car', cat: 'Vehicles', build() {
+    const m = kart('Police Car', '#f8f8f8', 90, 1.2);
+    const bar = part(m, { name: 'LightBar', size: [3, 0.5, 1], pos: [0, 2.8, -0.5], color: '#ff2a2a', material: 'Neon', canCollide: false });
+    script(bar, 'Siren', `
+local bar = script.Parent
+while true do
+	bar.Color = Color3.fromRGB(255, 40, 40)
+	wait(0.4)
+	bar.Color = Color3.fromRGB(40, 90, 255)
+	wait(0.4)
+end
+`);
+    return m;
+  } },
+  { name: 'Bus', cat: 'Vehicles', build() {
+    const m = model('Bus');
+    part(m, { name: 'Body', size: [6, 5, 18], pos: [0, 3.5, 0], color: '#f5cd30', material: 'SmoothPlastic' });
+    part(m, { name: 'Windows', size: [6.1, 1.6, 15], pos: [0, 4.6, 0.5], color: '#6ea8d8', material: 'Glass', transparency: 0.3, canCollide: false });
+    const seat = part(m, { cls: 'VehicleSeat', name: 'Seat', size: [2, 1, 2], pos: [0, 6.5, -6], color: '#1b1b1b' });
+    seat.MaxSpeed = 50;
+    for (let i = 0; i < 3; i++) part(m, { cls: 'Seat', name: 'Passenger', size: [4, 0.6, 2], pos: [0, 6.3, -1 + i * 3.5], color: '#c4281c' });
+    for (const [x, z] of [[-3, -6], [3, -6], [-3, 6], [3, 6]]) part(m, { name: 'Wheel', size: [1, 2.6, 2.6], pos: [x, 1.3, z], color: '#1b1b1b', shape: 'Cylinder' });
+    return m;
+  } },
+  { name: 'Tractor', cat: 'Vehicles', build() {
+    const m = kart('Tractor', '#4b974b', 35, 1.3);
+    part(m, { name: 'Exhaust', size: [0.5, 3, 0.5], pos: [1.5, 3.6, -2.5], color: '#1b1b1b', material: 'Metal' });
+    return m;
+  } },
+  // ---- buildings
+  { name: 'Watchtower', cat: 'Buildings', build() {
+    const m = model('Watchtower');
+    for (const [x, z] of [[-4, -4], [4, -4], [-4, 4], [4, 4]]) part(m, { name: 'Leg', size: [1, 20, 1], pos: [x, 10, z], color: '#7c5c46', material: 'Wood' });
+    part(m, { name: 'Deck', size: [10, 1, 10], pos: [0, 20.5, 0], color: '#a0703c', material: 'WoodPlanks' });
+    part(m, { cls: 'TrussPart', name: 'Ladder', size: [2, 20, 2], pos: [0, 10, 5], color: '#7c5c46', material: 'Wood' });
+    for (const [x, z, sx, sz] of [[0, -5, 10, 0.5], [-5, 0, 0.5, 10], [5, 0, 0.5, 10]]) part(m, { name: 'Rail', size: [sx, 2, sz], pos: [x, 22, z], color: '#7c5c46', material: 'Wood' });
+    part(m, { cls: 'WedgePart', name: 'Roof', size: [11, 3, 5.5], pos: [0, 27, -2.75], color: '#56422f' });
+    part(m, { cls: 'WedgePart', name: 'Roof', size: [11, 3, 5.5], pos: [0, 27, 2.75], rot: [0, 180, 0], color: '#56422f' });
+    for (const [x, z] of [[-4.5, -4.5], [4.5, -4.5], [-4.5, 4.5], [4.5, 4.5]]) part(m, { name: 'RoofPost', size: [0.5, 4, 0.5], pos: [x, 23.5, z], color: '#7c5c46', material: 'Wood' });
+    return m;
+  } },
+  { name: 'Concert Stage', cat: 'Buildings', build() {
+    const m = model('Stage');
+    part(m, { name: 'Stage', size: [30, 3, 16], pos: [0, 1.5, 0], color: '#1b1b1b', material: 'WoodPlanks' });
+    part(m, { name: 'Back', size: [30, 14, 1], pos: [0, 10, -7.5], color: '#2b2b40', material: 'Fabric' });
+    const cols = ['#ff3b3b', '#3bff6b', '#3bb0ff', '#ffc400', '#ff3bd2'];
+    const lights = model('Lights');
+    lights.Parent = m;
+    cols.forEach((c, i) => { const l = part(lights, { name: 'Light', size: [1.6, 1.6, 1.6], pos: [-12 + i * 6, 15, -6], color: c, material: 'Neon', shape: 'Ball' }); glow(l, c, 20, 1.5); });
+    script(lights, 'Party', `
+-- The stage lights change colour to the beat.
+local cols = { Color3.fromRGB(255, 59, 59), Color3.fromRGB(59, 255, 107), Color3.fromRGB(59, 176, 255), Color3.fromRGB(255, 196, 0), Color3.fromRGB(255, 59, 210) }
+local i = 0
+while true do
+	i = i + 1
+	for k, l in ipairs(script.Parent:GetChildren()) do
+		if l:IsA("BasePart") then l.Color = cols[(i + k) % #cols + 1] end
+	end
+	wait(0.5)
+end
+`);
+    return m;
+  } },
+  { name: 'Swimming Pool', cat: 'Buildings', build() {
+    const m = model('Pool');
+    part(m, { name: 'Edge', size: [28, 1, 20], pos: [0, 0.5, 0], color: '#f8f8f8', material: 'Concrete' });
+    part(m, { name: 'Water', size: [24, 0.6, 16], pos: [0, 1.1, 0], color: '#3fb6e8', material: 'Glass', transparency: 0.3, canCollide: false });
+    part(m, { name: 'Board', size: [2, 0.4, 8], pos: [0, 4, -11], color: '#4fc3ff', material: 'SmoothPlastic' });
+    part(m, { name: 'BoardPost', size: [1, 4, 1], pos: [0, 2, -14], color: '#f8f8f8', material: 'Metal' });
+    return m;
+  } },
+  { name: 'Barn', cat: 'Buildings', build() {
+    const m = model('Barn');
+    part(m, { name: 'Walls', size: [20, 12, 16], pos: [0, 6, 0], color: '#a83232', material: 'WoodPlanks' });
+    part(m, { cls: 'WedgePart', name: 'Roof', size: [21, 6, 8.5], pos: [0, 15, -4.25], color: '#4a4a4a' });
+    part(m, { cls: 'WedgePart', name: 'Roof', size: [21, 6, 8.5], pos: [0, 15, 4.25], rot: [0, 180, 0], color: '#4a4a4a' });
+    part(m, { name: 'Door', size: [8, 9, 0.4], pos: [0, 4.5, 8.1], color: '#f8f8f8', material: 'WoodPlanks' });
+    for (const x of [-3, 3]) part(m, { name: 'Hay', size: [3, 2, 2], pos: [x + 8, 1, 10], color: '#e8c15a', material: 'Fabric' });
+    return m;
+  } },
+  // ---- decor
+  { name: 'Street Lamp (night)', cat: 'Decor', build() {
+    const m = model('StreetLamp');
+    part(m, { name: 'Post', size: [0.6, 12, 0.6], pos: [0, 6, 0], color: '#2b2b2b', material: 'Metal' });
+    const b = part(m, { name: 'Bulb', size: [1.6, 1.6, 1.6], pos: [0, 12.5, 0], color: '#fff3c4', material: 'Neon', shape: 'Ball', canCollide: false });
+    glow(b, '#ffe7a0', 24, 0);
+    script(b, 'NightLight', `
+-- Turns on at night, off in the day.
+local Lighting = game:GetService("Lighting")
+local light = script.Parent:FindFirstChildOfClass("PointLight")
+while true do
+	local t = Lighting.ClockTime
+	light.Brightness = (t < 6.5 or t > 18) and 2 or 0
+	wait(1)
+end
+`);
+    return m;
+  } },
+  { name: 'Palm Tree', cat: 'Decor', build() {
+    const m = model('PalmTree');
+    for (let i = 0; i < 5; i++) part(m, { name: 'Trunk', size: [1.4, 3, 1.4], pos: [i * 0.3, 1.5 + i * 2.8, 0], rot: [0, 0, -4], color: '#8a6a43', material: 'Wood' });
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * 360; part(m, { name: 'Leaf', size: [8, 0.3, 2], pos: [1.5 + Math.cos(a * Math.PI / 180) * 3.5, 15, Math.sin(a * Math.PI / 180) * 3.5], rot: [0, -a, -20], color: '#2f8f4f', material: 'Grass', canCollide: false }); }
+    return m;
+  } },
+  { name: 'Picnic Table', cat: 'Decor', build() {
+    const m = model('PicnicTable');
+    part(m, { name: 'Top', size: [8, 0.5, 3.5], pos: [0, 3, 0], color: '#a0703c', material: 'WoodPlanks' });
+    for (const z of [-2.8, 2.8]) part(m, { cls: 'Seat', name: 'Bench', size: [8, 0.5, 1.4], pos: [0, 1.8, z], color: '#a0703c', material: 'WoodPlanks' });
+    for (const x of [-3, 3]) part(m, { name: 'Leg', size: [0.5, 3, 6], pos: [x, 1.5, 0], color: '#7c5c46', material: 'Wood' });
+    return m;
+  } },
+  { name: 'Flower Bed', cat: 'Decor', build() {
+    const m = model('FlowerBed');
+    part(m, { name: 'Soil', size: [8, 1, 4], pos: [0, 0.5, 0], color: '#56422f', material: 'Grass' });
+    const cols = ['#ff4d8d', '#ffd166', '#b45cff', '#ff7a1a', '#ffffff'];
+    for (let i = 0; i < 10; i++) {
+      const x = -3.2 + (i % 5) * 1.6, z = i < 5 ? -0.9 : 0.9;
+      part(m, { name: 'Stem', size: [0.2, 1.4, 0.2], pos: [x, 1.7, z], color: '#2f8f4f', canCollide: false });
+      part(m, { name: 'Flower', size: [0.8, 0.8, 0.8], pos: [x, 2.6, z], color: cols[i % cols.length], shape: 'Ball', canCollide: false });
+    }
+    return m;
+  } },
+  { name: 'Snowman', cat: 'Decor', build() {
+    const m = model('Snowman');
+    part(m, { name: 'Bottom', size: [4, 4, 4], pos: [0, 2, 0], color: '#ffffff', shape: 'Ball' });
+    part(m, { name: 'Middle', size: [3, 3, 3], pos: [0, 5, 0], color: '#ffffff', shape: 'Ball' });
+    part(m, { name: 'Head', size: [2.2, 2.2, 2.2], pos: [0, 7.4, 0], color: '#ffffff', shape: 'Ball' });
+    part(m, { name: 'Nose', size: [0.3, 0.3, 1.2], pos: [0, 7.4, -1.4], color: '#ff8a3d', canCollide: false });
+    part(m, { name: 'Hat', size: [1.6, 1.4, 1.6], pos: [0, 9, 0], color: '#1b1b1b', shape: 'Cylinder', rot: [0, 0, 90] });
+    return m;
+  } },
+  { name: 'Christmas Tree', cat: 'Decor', build() {
+    const m = model('ChristmasTree');
+    part(m, { name: 'Trunk', size: [1.5, 3, 1.5], pos: [0, 1.5, 0], color: '#56422f', material: 'Wood' });
+    for (let k = 0; k < 4; k++) part(m, { name: 'Leaves', size: [3, 10 - k * 2.2, 10 - k * 2.2], pos: [0, 4 + k * 2.6, 0], rot: [0, 0, 90], color: '#1f7a3a', material: 'Grass', shape: 'Cylinder' });
+    const star = part(m, { name: 'Star', size: [1.6, 1.6, 1.6], pos: [0, 14.5, 0], rot: [45, 0, 45], color: '#ffd166', material: 'Neon', canCollide: false });
+    glow(star, '#ffd166', 20, 1.5);
+    const cols = ['#ff4d6d', '#4fc3ff', '#ffd166', '#38d27a'];
+    for (let i = 0; i < 14; i++) { const a = i * 1.3, r = 4.4 - (i / 14) * 3; part(m, { name: 'Ornament', size: [0.7, 0.7, 0.7], pos: [Math.sin(a) * r, 4 + i * 0.7, Math.cos(a) * r], color: cols[i % 4], material: 'Neon', shape: 'Ball', canCollide: false }); }
+    return m;
+  } },
+  // ---- Halloween
+  { name: "Jack-o'-Lantern", cat: 'Halloween', build() {
+    const m = model('JackOLantern');
+    const p = part(m, { name: 'Pumpkin', size: [4, 3.4, 4], pos: [0, 1.7, 0], color: '#ff7a1a', material: 'SmoothPlastic', shape: 'Ball' });
+    part(m, { name: 'Stem', size: [0.5, 1, 0.5], pos: [0, 3.7, 0], color: '#3f6b2f', material: 'Wood' });
+    for (const x of [-0.8, 0.8]) part(m, { name: 'Eye', size: [0.7, 0.7, 0.2], pos: [x, 2.2, -1.95], rot: [0, 0, 45], color: '#ffd23b', material: 'Neon', canCollide: false });
+    part(m, { name: 'Mouth', size: [1.8, 0.4, 0.2], pos: [0, 1.2, -1.95], color: '#ffd23b', material: 'Neon', canCollide: false });
+    glow(p, '#ff9a2a', 14, 1.5);
+    return m;
+  } },
+  { name: 'Gravestone', cat: 'Halloween', build() {
+    const m = model('Gravestone');
+    part(m, { name: 'Stone', size: [3, 4, 0.8], pos: [0, 2, 0], rot: [0, 0, 4], color: '#8a8590', material: 'Slate' });
+    cyl(m, 'Top', 3, 0.8, [0, 4, 0], '#8a8590', 'Slate', { rot: [0, 90, 0] });
+    part(m, { name: 'Dirt', size: [3, 0.3, 6], pos: [0, 0.15, -3.5], color: '#4a3626', material: 'Grass' });
+    const b = part(m, { name: 'Text', size: [2, 1, 0.1], pos: [0, 2.4, -0.45], transparency: 1, canCollide: false });
+    sign(b, 'R.I.P.');
+    return m;
+  } },
+  { name: 'Spooky Tree', cat: 'Halloween', build() {
+    const m = model('SpookyTree');
+    part(m, { name: 'Trunk', size: [1.6, 14, 1.6], pos: [0, 7, 0], rot: [0, 0, 4], color: '#2b2118', material: 'Wood' });
+    for (const [x, y, rz, ry] of [[2.5, 10, 35, 0], [-2.5, 8, -40, 30], [1.5, 12.5, 60, 120], [-1.5, 11.5, -55, 200]]) part(m, { name: 'Branch', size: [6, 0.7, 0.7], pos: [x, y, 0], rot: [0, ry, rz], color: '#2b2118', material: 'Wood', canCollide: false });
+    return m;
+  } },
+  { name: 'Floating Ghost', cat: 'Halloween', build() {
+    const m = model('Ghost');
+    const body = part(m, { name: 'Body', size: [3, 4, 3], pos: [0, 5, 0], color: '#f4f8ff', material: 'SmoothPlastic', shape: 'Ball', transparency: 0.25, canCollide: false });
+    for (const x of [-0.6, 0.6]) part(m, { name: 'Eye', size: [0.5, 0.8, 0.2], pos: [x, 5.6, -1.4], color: '#1b1b1b', canCollide: false });
+    script(m, 'Float', `
+-- The ghost bobs up and down and turns around. Boo!
+local m = script.Parent
+local parts = {}
+for _, p in ipairs(m:GetChildren()) do if p:IsA("BasePart") then parts[p] = p.CFrame end end
+local t = 0
+while true do
+	t = t + 0.05
+	for p, cf in pairs(parts) do p.CFrame = CFrame.new(0, math.sin(t * 2) * 1.2, 0) * cf end
+	wait(0.05)
+end
+`);
+    glow(body, '#cfe8ff', 10, 0.8);
+    return m;
+  } },
+  { name: 'Witch Cauldron', cat: 'Halloween', build() {
+    const m = model('Cauldron');
+    part(m, { name: 'Pot', size: [4.4, 3.6, 4.4], pos: [0, 2, 0], color: '#1b1b1b', material: 'Metal', shape: 'Ball' });
+    const brew = cyl(m, 'Brew', 3.6, 0.3, [0, 3.4, 0], '#5bff4d', 'Neon', { canCollide: false });
+    fx(brew, 'Sparkles', { SparkleColor: Color3.fromHex('#9bff8a') });
+    glow(brew, '#5bff4d', 16, 1.5);
+    for (const [x, z] of [[-1.6, -1.6], [1.6, -1.6], [0, 1.8]]) part(m, { name: 'Leg', size: [0.4, 1, 0.4], pos: [x, 0.5, z], color: '#1b1b1b', material: 'Metal' });
+    return m;
+  } },
+  { name: 'Haunted Door', cat: 'Halloween', build() {
+    const p = part(null, { name: 'HauntedDoor', size: [5, 8, 0.6], color: '#3b2a1e', material: 'WoodPlanks' });
+    sign(p, 'Knock... if you dare');
+    script(p, 'Haunted', `
+-- Touch it: the door opens by itself... then slams shut. A message scares the player.
+local door = script.Parent
+local busy = false
+door.Touched:Connect(function(hit)
+	local player = game:GetService("Players"):GetPlayerFromCharacter(hit.Parent)
+	if not player or busy then return end
+	busy = true
+	door.Transparency = 0.8
+	door.CanCollide = false
+	player:ShowMessage("BOO!", 1.5, Color3.fromRGB(255, 80, 30))
+	wait(2)
+	door.Transparency = 0
+	door.CanCollide = true
+	wait(1)
+	busy = false
+end)
+`);
+    return p;
+  } },
+);
+
 // Categories for the Toolbox filter (older entries get theirs here).
 const OLD_CATS = {
   'Kill Brick': 'Obby', Checkpoint: 'Obby', Spinner: 'Obby', 'Moving Platform': 'Obby', 'Disappearing Brick': 'Obby', 'Speed Pad': 'Obby', 'Jump Pad': 'Obby',
@@ -684,7 +1139,7 @@ const OLD_CATS = {
   'Brick House': 'Buildings', 'Leaderboard Script': 'Scripts', 'Day/Night Script': 'Scripts',
 };
 for (const t of TOOLBOX) if (!t.cat) t.cat = OLD_CATS[t.name] || 'Gameplay';
-export const TOOLBOX_CATEGORIES = ['All', 'Obby', 'Gameplay', 'Weapons', 'Vehicles', 'Buildings', 'Decor', 'Scripts'];
+export const TOOLBOX_CATEGORIES = ['All', 'Obby', 'Gameplay', 'Weapons', 'Vehicles', 'Buildings', 'Decor', 'Halloween', 'Scripts'];
 
 let thumbCache = new Map();
 export async function toolboxThumb(entry) {

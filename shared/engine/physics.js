@@ -226,6 +226,7 @@ export const CHAR = {
 // input: {mx, mz (world move direction, unit or zero), jump}
 // world: {query(minX,minZ,maxX,maxZ) -> boxes, gravity}
 export function stepCharacter(state, input, dt, world, humanoid) {
+  const sc = Math.max(0.25, Math.min(10, +humanoid.BodyScale || 1));
   const speed = humanoid.WalkSpeed, jumpPower = humanoid.JumpPower;
   const gravity = world.gravity;
   // Horizontal velocity follows input instantly (Roblox-style), with slight smoothing in air.
@@ -257,7 +258,7 @@ export function stepCharacter(state, input, dt, world, humanoid) {
     state.x += state.vx * sdt;
     state.y += state.vy * sdt;
     state.z += state.vz * sdt;
-    const r = resolve(state, world);
+    const r = resolve(state, world, sc);
     if (r.grounded) { grounded = true; groundPart = r.groundPart; }
     if (r.truss) onTruss = true;
   }
@@ -265,8 +266,8 @@ export function stepCharacter(state, input, dt, world, humanoid) {
   // Snap down onto the ground when walking down slopes/steps.
   if (!grounded && state.grounded && state.vy <= 0 && !state.jumped) {
     const saveY = state.y;
-    state.y -= 1.1;
-    const r = resolve(state, world);
+    state.y -= 1.1 * sc;
+    const r = resolve(state, world, sc);
     if (r.grounded) { grounded = true; groundPart = r.groundPart; state.vy = 0; } else state.y = saveY;
   }
   state.grounded = grounded;
@@ -275,14 +276,17 @@ export function stepCharacter(state, input, dt, world, humanoid) {
   return state;
 }
 
-function resolve(state, world) {
-  const R = CHAR.radius;
-  const boxes = world.query(state.x - 3, state.z - 3, state.x + 3, state.z + 3);
+// sc: the character's BodyScale (a giant has bigger spheres, higher hips).
+function resolve(state, world, sc = 1) {
+  const R = CHAR.radius * sc;
+  const hip = CHAR.hipHeight * sc;
+  const q = 3 * sc;
+  const boxes = world.query(state.x - q, state.z - q, state.x + q, state.z + q);
   let grounded = false, groundPart = null, truss = false;
   for (let iter = 0; iter < 4; iter++) {
     let any = false;
     for (let si = 0; si < CHAR.spheres.length; si++) {
-      const off = CHAR.spheres[si];
+      const off = CHAR.spheres[si] * sc;
       for (const b of boxes) {
         const hit = sphereVsBox(b, state.x, state.y + off, state.z, R);
         if (!hit) continue;
@@ -299,8 +303,8 @@ function resolve(state, world) {
         if (si === 0 && ny <= 0.55 && ny > -0.2 && state.vy <= 1) {
           // Step up small ledges.
           const top = stepTop(b, state);
-          if (top !== null && top - (state.y - CHAR.hipHeight) <= CHAR.stepHeight && top - (state.y - CHAR.hipHeight) > 0) {
-            state.y = top + CHAR.hipHeight + 0.01;
+          if (top !== null && top - (state.y - hip) <= CHAR.stepHeight * sc && top - (state.y - hip) > 0) {
+            state.y = top + hip + 0.01;
             grounded = true;
             groundPart = b.part;
             continue;

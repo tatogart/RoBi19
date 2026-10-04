@@ -851,3 +851,74 @@ body.secret-spin .rbx-content { animation: secret-spin 1.2s var(--ease); }
 .live-banner.out { opacity: 0; transform: translate(-50%, -20px); transition: all .5s; }
 @keyframes banner-in { from { opacity: 0; transform: translate(-50%, -30px) scale(.9); } }
 @media (max-width: 700px) { .spin-row { grid-template-columns: 30px 1fr 64px; } .spin-row > :nth-child(n+4) { grid-column: span 1; } .spin-row.head { display: none; } .adm-spin-left { width: 100%; } }
+
+/* ------------------------------------------------------------ Halloween theme (Settings -> Theme) */
+html[data-skin="halloween"] {
+  --blue: #ff7a1a;
+  --blue-dark: #c95500;
+  --blue-hover: #ff9a4a;
+  --gray-bg: #160f1f;
+  --panel: #241a31;
+  --border: #3b2c4d;
+  --text-light: #c9b8dc;
+}
+html[data-skin="halloween"] body {
+  background:
+    radial-gradient(circle at 85% 8%, rgba(255, 246, 214, .10) 0 60px, transparent 61px),
+    radial-gradient(ellipse at 50% 120%, rgba(255, 122, 26, .12), transparent 60%),
+    var(--gray-bg);
+  background-attachment: fixed;
+}
+html[data-skin="halloween"] .rbx-header { background: linear-gradient(90deg, #1a0f24, #3a1c52 45%, #ff7a1a); box-shadow: 0 2px 12px rgba(255, 122, 26, .25); }
+html[data-skin="halloween"] .rbx-header .logo::after { content: '🎃'; font-size: 18px; margin-left: 6px; display: inline-block; animation: hw-bob 2.4s ease-in-out infinite; }
+html[data-skin="halloween"] .rbx-leftnav { background: #1c1427; border-color: var(--border); }
+html[data-skin="halloween"] .rbx-leftnav a.active { background: rgba(255, 122, 26, .16); color: #ff9a4a; }
+html[data-skin="halloween"] .rbx-leftnav a:hover { background: rgba(255, 122, 26, .08); }
+html[data-skin="halloween"] .panel, html[data-skin="halloween"] .game-card, html[data-skin="halloween"] .item-card, html[data-skin="halloween"] .modal, html[data-skin="halloween"] .dropdown { background: var(--panel); border-color: var(--border); }
+html[data-skin="halloween"] .game-card:hover, html[data-skin="halloween"] .item-card:hover { box-shadow: 0 8px 24px rgba(255, 122, 26, .25); }
+html[data-skin="halloween"] .btn { background: #33244a; border-color: #4e3a6a; }
+html[data-skin="halloween"] .btn:hover { background: #3f2d5a; }
+html[data-skin="halloween"] .btn-primary { background: #ff7a1a; border-color: #ff7a1a; color: #1a0f24; font-weight: 700; }
+html[data-skin="halloween"] .btn-primary:hover { background: #ff9a4a; }
+html[data-skin="halloween"] .btn-green { background: #7b3fbf; border-color: #7b3fbf; color: #fff; }
+html[data-skin="halloween"] .btn-green:hover { background: #8f52d6; }
+html[data-skin="halloween"] a { color: #ff9a4a; }
+html[data-skin="halloween"] .input, html[data-skin="halloween"] select, html[data-skin="halloween"] textarea { background: #1a1224; border-color: #4e3a6a; }
+html[data-skin="halloween"] .section-header h2::after { content: ' 🦇'; font-size: .7em; }
+html[data-skin="halloween"] .tabbar { background: #1c1427; }
+html[data-skin="halloween"] .adm-side { background: linear-gradient(180deg, #1a0f24, #2a1838); }
+html[data-skin="halloween"] .adm, html[data-skin="halloween"] .adm-top { background: var(--panel); }
+html[data-skin="halloween"] .footer::before { content: '🕸️  🎃  🦇  👻  🕸️'; display: block; text-align: center; margin-bottom: 8px; letter-spacing: 6px; }
+@keyframes hw-bob { 50% { transform: translateY(-3px) rotate(-8deg); } }
+/* a few bats fly across the top of the page */
+html[data-skin="halloween"] body::after {
+  content: '🦇'; position: fixed; top: 60px; left: -40px; font-size: 22px; z-index: 55; pointer-events: none;
+  animation: hw-bat 18s linear infinite; opacity: .8;
+}
+@keyframes hw-bat { 0% { transform: translate(0, 0); } 25% { transform: translate(30vw, 30px); } 50% { transform: translate(60vw, -10px); } 75% { transform: translate(85vw, 40px); } 100% { transform: translate(110vw, 0); } }
+@media (prefers-reduced-motion: reduce) { html[data-skin="halloween"] body::after, html[data-skin="halloween"] .rbx-header .logo::after { animation: none; } }
+
+/* ------------------------------------------------------------ Admin Abuse */
+.adm-hero.abuse { background: linear-gradient(120deg, #c4281c, #ff3b3b 45%, #ff9a2a); }
+.adm-hero.abuse.live { animation: abuse-pulse 2s ease-in-out infinite alternate; }
+@keyframes abuse-pulse { to { box-shadow: 0 0 24px rgba(255, 59, 59, .55); } }
+.abuse-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; max-height: 300px; overflow-y: auto; }
+.abuse-game { border: 2px solid var(--border); background: var(--panel); color: inherit; font: inherit; border-radius: 10px; padding: 10px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.abuse-game.on { border-color: #ff3b3b; background: rgba(255, 59, 59, .08); }
+.abuse-start { background: linear-gradient(120deg, #c4281c, #ff3b3b); color: #fff; border: 0; font-size: 18px; font-weight: 800; padding: 14px; letter-spacing: 1px; }
+.abuse-start:hover { filter: brightness(1.1); }
+.abuse-fx { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 14px 0; }
+.abuse-tile { position: relative; border: 2px solid var(--border); background: var(--panel); color: inherit; font: inherit; border-radius: 12px; padding: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; transition: transform .15s, border-color .15s; }
+.abuse-tile:hover { transform: translateY(-2px); border-color: #ff3b3b; }
+.abuse-tile.on { border-color: #02b757; background: rgba(2, 183, 87, .1); }
+.abuse-icon { font-size: 28px; }
+.abuse-state { position: absolute; top: 8px; right: 10px; font-size: 11px; font-weight: 800; color: var(--text-light); }
+.abuse-tile.on .abuse-state { color: #02b757; }
+.abuse-bar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 4000; display: flex; align-items: center; gap: 10px; background: linear-gradient(120deg, #c4281c, #ff3b3b 60%, #ff9a2a); color: #fff; border-radius: 14px; padding: 8px 10px 8px 14px; box-shadow: 0 8px 26px rgba(196, 40, 28, .45); max-width: calc(100vw - 24px); animation: banner-in .4s var(--ease); }
+.has-tabbar .abuse-bar { bottom: 70px; }
+.abuse-fire { font-size: 22px; animation: hw-bob 1s ease-in-out infinite; }
+.abuse-text { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.abuse-join { background: #fff !important; color: #c4281c !important; border: 0 !important; font-weight: 800; }
+.abuse-x { border: 0; background: none; color: #fff; font-size: 20px; cursor: pointer; opacity: .8; }
+html[data-skin="halloween"] .social-banner { background: linear-gradient(90deg, #3a1c52, #7b3fbf); color: #fff; }
+html[data-skin="halloween"] .social-banner b, html[data-skin="halloween"] .social-banner span { color: #fff; }

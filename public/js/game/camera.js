@@ -32,7 +32,7 @@ export class FollowCamera {
   get forward() { return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)); }
   get right() { return new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw)); }
 
-  update(dt, head) {
+  update(dt, head, scale = 1) {
     this.zoom += (this.targetZoom - this.zoom) * Math.min(1, dt * 12);
     this.focus.lerp(head, Math.min(1, dt * 25));
     const dir = new THREE.Vector3(
@@ -44,7 +44,7 @@ export class FollowCamera {
     if (this.shiftLock && this.zoom > 1) focus.add(this.right.multiplyScalar(1.75));
     this.firstPerson = this.zoom < 1;
     // Phones held upright see much less sideways, so pull the camera back.
-    let dist = this.firstPerson ? 0 : this.zoom * (this.camera.aspect < 1 ? 1.7 : 1);
+    let dist = this.firstPerson ? 0 : this.zoom * (this.camera.aspect < 1 ? 1.7 : 1) * scale;
     if (dist > 0 && this.world) {
       const hit = this.world.raycast(focus, dir, dist + 0.5);
       if (hit < dist + 0.5) dist = Math.max(0.5, hit - 0.5);

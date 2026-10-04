@@ -617,6 +617,7 @@ export class GameClient {
     v.speed = hspeed;
     v.health = humP.Health;
     v.maxHealth = humP.MaxHealth;
+    v.scale = humP.BodyScale || 1;
     this.hud.setHealth(humP.Health, humP.MaxHealth);
 
     const now = performance.now();
@@ -677,9 +678,9 @@ export class GameClient {
       for (const v of this.views.values()) v.update(dt);
       const me = this.views.get(this.userId);
       if (me) {
-        const head = new THREE.Vector3(me.pos.x, me.pos.y + 1.5, me.pos.z);
+        const head = new THREE.Vector3(me.pos.x, me.pos.y + 1.5 * me.scale, me.pos.z);
         if (me.dead && me.debris) head.copy(me.debris.find((d) => d.half === 0.5)?.obj.position || head);
-        this.cam.update(dt, head);
+        this.cam.update(dt, head, me.scale);
         me.group.visible = !me.dead && !this.cam.firstPerson;
         this.env.setFocus(me.pos);
       }
@@ -714,7 +715,7 @@ export class GameClient {
           if (v.isLocal || !v.modelId) continue;
           const model = this.game.getById(v.modelId);
           const hum = model && model.FindFirstChildOfClass('Humanoid');
-          if (hum) { v.health = hum._p.Health; v.maxHealth = hum._p.MaxHealth; }
+          if (hum) { v.health = hum._p.Health; v.maxHealth = hum._p.MaxHealth; v.scale = hum._p.BodyScale || 1; }
         }
       } else if (this.hintsDirty) { this.hintsDirty = false; this.refreshHints(); }
       const w = this.root.clientWidth, h = this.root.clientHeight;

@@ -1,5 +1,6 @@
 // Studio templates and the showcase games that ship with Robis.
 import { newGame, part, model, folder, script, inst, baseplate, spawn, tree, finish } from './builder.js';
+import { crossroadsExtras } from './crossroads.js';
 import { Color3, Vector3 } from '../../shared/engine/types.js';
 
 // ---------------------------------------------------------------- templates
@@ -151,6 +152,7 @@ export function gameCrossroads() {
   const spout = part(fountain, { name: 'Spout', size: [2, 6, 2], pos: [30, 5, -30], color: '#f8f8f8', material: 'Marble' });
   inst(spout, 'Sparkles', { SparkleColor: Color3.fromRGB(120, 200, 255) });
 
+  crossroadsExtras(g);
   script(g.ServerScriptService, 'DayNight', DAY_NIGHT);
   script(g.ServerScriptService, 'Welcome', `
 local Players = game:GetService("Players")
@@ -158,7 +160,7 @@ local hint = Instance.new("Hint")
 hint.Parent = workspace
 
 Players.PlayerAdded:Connect(function(player)
-	hint.Text = "Welcome to Crossroads, " .. player.Name .. "!"
+	hint.Text = "Welcome to Crossroads, " .. player.Name .. "! New: cars, a lake, a sky obby, a cafe and a secret cave!"
 	wait(4)
 	if hint.Text:find(player.Name, 1, true) then
 		hint.Text = ""

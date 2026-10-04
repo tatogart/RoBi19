@@ -8,7 +8,7 @@ import {
 } from '../../shared/engine/instances.js';
 import { loadPlace, serialize, encodeValue } from '../../shared/engine/serialize.js';
 import { partBox, boxAABB, boxesOverlap, SpatialGrid, aabbOverlap } from '../../shared/engine/physics.js';
-import { buildCharacter, poseCharacter, rootCFrame, LIMBS } from '../../shared/engine/character.js';
+import { buildCharacter, poseCharacter, rootCFrame, scaleCharacter, LIMBS } from '../../shared/engine/character.js';
 import { LuaRuntime } from './lua.js';
 import { installServices } from './services.js';
 import { filterChat } from './chatfilter.js';
@@ -724,11 +724,22 @@ export class GameServer {
     const isMod = isAdmin || !!(hooks0 && hooks0.can && hooks0.can(session.user, 'moderator'));
     const isOwner = isAdmin || session.user.id === this.creatorId;
     const FUN = ['kill', 'respawn', 'heal', 'god', 'ungod', 'fly', 'unfly', 'speed', 'jump', 'tp', 'bring', 'to', 'freeze', 'thaw', 'explode',
-      'fire', 'sparkles', 'ff', 'unff', 'invisible', 'visible', 'clean', 'announce', 'hint', 'time'];
+      'fire', 'sparkles', 'ff', 'unff', 'invisible', 'visible', 'clean', 'announce', 'hint', 'time', 'size', 'giant', 'tiny', 'normal', 'fireworks', 'coinrain', 'meteors'];
     const MODERATE = ['mute', 'unmute', 'kick'];
     const MOD = ['ban', 'hardban', 'unban'];
     const INFO = ['players', 'cmds'];
-    if (![...FUN, ...MODERATE, ...MOD, ...INFO].includes(c)) return false;
+    const GLOBAL = ['global'];
+    if (![...FUN, ...MODERATE, ...MOD, ...INFO, ...GLOBAL].includes(c)) return false;
+    if (GLOBAL.includes(c)) {
+      if (!isAdmin) return false;
+      // a big message in every server of this game
+      const text = parts.join(' ').slice(0, 120);
+      if (!text) { say('Usage: :global text'); return true; }
+      const list = this.manager ? this.manager.allServers().filter((x) => x.gameId === this.gameId) : [this];
+      for (const srv of list) srv.abuseOnce('message', { text, by: session.user.username });
+      return true;
+    }
+    if (['fireworks', 'coinrain', 'meteors'].includes(c) && isOwner) { this.abuseOnce(c, {}); say(`:${c}`); return true; }
     // Admins: everything. Moderators: kick/mute/ban. Game owners: fun commands and kick/mute in their game.
     // a moderator's fine settings (Admin Panel -> Permissions)
     const modOpt = (key) => isAdmin || !!(hooks0 && hooks0.opt ? hooks0.opt(session.user, 'moderator', key) : true);
@@ -740,7 +751,7 @@ export class GameServer {
       return false;
     }
     if (c === 'cmds') {
-      say(':kill :respawn :heal :god :ungod :fly :unfly :speed n :jump n :freeze :thaw :explode :fire :sparkles :ff :unff :invisible :visible :clean :tp a b :bring :to :mute :unmute :kick · :announce text · :hint text · :time 0-24 · :players'
+      say(':giant :tiny :normal :size n :fireworks :coinrain :meteors' + (isAdmin ? ' :global text' : '') + ' · :kill :respawn :heal :god :ungod :fly :unfly :speed n :jump n :freeze :thaw :explode :fire :sparkles :ff :unff :invisible :visible :clean :tp a b :bring :to :mute :unmute :kick · :announce text · :hint text · :time 0-24 · :players'
         + (isMod ? ' · :ban name [1h|1d|7d|30d] reason · :hardban (also device) · :unban name' : '')
         + '  —  targets: name, me, all, others');
       return true;
@@ -804,6 +815,15 @@ export class GameServer {
         case 'ungod': if (h) h._god = false; break;
         case 'fly': if (h) { h.Flying = true; this.send(s, { t: 'sys', text: 'You can fly! Space / Jump: up, Q / ▼: down.' }); } break;
         case 'unfly': if (h) h.Flying = false; break;
+        case 'size': case 'giant': case 'tiny': case 'normal': {
+          if (!s.character) break;
+          const sc = c === 'giant' ? 4 : c === 'tiny' ? 0.5 : c === 'normal' ? 1 : num(parts[1], 0.25, 10, 1);
+          const had = s.character._scale || 1;
+          scaleCharacter(s.character, sc);
+          const [x, y, z] = s.state.p;
+          if (sc > had) this.teleport(s.character, rootCFrame(x, y + 3 * (sc - had) + 0.5, z, s.state.ry || 0));
+          break;
+        }
         case 'speed': if (h) h.WalkSpeed = num(parts[1], 0, 200, 50); break;
         case 'jump': if (h) h.JumpPower = num(parts[1], 0, 300, 120); break;
         case 'freeze': if (h) { h.WalkSpeed = 0; h.JumpPower = 0; } break;
@@ -903,6 +923,132 @@ export class GameServer {
     this.applyPassPerks(session, hum);
     this.enqueue(['char', player.UserId, model.id, cf.toArray()]);
     player._fire('CharacterAdded', model);
+    this.applyAbuse(session, hum);
+  }
+
+  // ------------------------------------------------------------ Admin Abuse
+  // Admin Panel -> Admin Abuse: an admin "abuses" one game for everyone - a
+  // giant admin with a crown, global messages, speed / jump / fly for all,
+  // low gravity, a disco, coin rain, fireworks, meteors...
+  abuseState() {
+    const a = this.manager && this.manager.abuse ? this.manager.abuse() : null;
+    return a && a.gameId === this.gameId && !this.privateId && !this.isTest ? a : null;
+  }
+  // The lasting effects, for one player (on every spawn while the abuse lasts).
+  applyAbuse(session, hum) {
+    const a = this.abuseState();
+    if (!a || !hum || !session.character) return;
+    const fx = a.effects || {};
+    const isAdmin = session.user.id === a.by;
+    const want = isAdmin && fx.giant ? 4 : fx.bigAll ? 2 : fx.tiny ? 0.5 : 1;
+    const had = session.character._scale || 1;
+    if (want !== had) {
+      scaleCharacter(session.character, want);
+      // grow up out of the floor
+      const [x, y, z] = session.state.p;
+      if (want > had) this.teleport(session.character, rootCFrame(x, y + 3 * (want - had) + 0.5, z, session.state.ry || 0));
+    }
+    if (fx.speed) hum.WalkSpeed = Math.max(hum.WalkSpeed, 40);
+    if (fx.jump) hum.JumpPower = Math.max(hum.JumpPower, 130);
+    if (fx.fly) hum.Flying = true;
+    if (isAdmin) {
+      const head = session.character.FindFirstChild('Head');
+      if (head && !head.FindFirstChild('AbuseTag')) {
+        const t = createInstance('BillboardText');
+        t.Name = 'AbuseTag';
+        t.Text = '👑 ADMIN ' + session.user.username;
+        t.TextColor3 = Color3.fromHex('#ff3b3b');
+        t.StudsOffset = new Vector3(0, 3, 0);
+        t.Parent = head;
+        const sp = createInstance('Sparkles');
+        sp.Name = 'AbuseSparkles';
+        sp.Parent = session.character.FindFirstChild('Torso') || head;
+      }
+    }
+  }
+  // Effects changed: everyone back to normal, then the effects again.
+  refreshAbuse() {
+    const a = this.abuseState();
+    const fx = (a && a.effects) || {};
+    const ws = this.game.Workspace;
+    if (this._baseGravity === undefined) this._baseGravity = ws.Gravity;
+    ws.Gravity = fx.lowgrav ? 40 : this._baseGravity;
+    const L = this.game.GetService('Lighting');
+    if (!this._baseLight) this._baseLight = { ClockTime: L.ClockTime, Ambient: L.Ambient, OutdoorAmbient: L.OutdoorAmbient };
+    clearInterval(this._disco);
+    this._disco = null;
+    if (fx.disco) {
+      let i = 0;
+      const cols = ['#ff3b3b', '#ffb000', '#3bff6b', '#3bb0ff', '#b03bff', '#ff3bd2'];
+      L.ClockTime = 0;
+      this._disco = setInterval(() => {
+        const c = Color3.fromHex(cols[i++ % cols.length]);
+        L.Ambient = c;
+        L.OutdoorAmbient = c;
+      }, 600);
+    } else {
+      L.ClockTime = fx.night ? 0 : this._baseLight.ClockTime;
+      L.Ambient = this._baseLight.Ambient;
+      L.OutdoorAmbient = this._baseLight.OutdoorAmbient;
+    }
+    for (const s of this.sessions.values()) {
+      const hum = s.character && s.character.FindFirstChildOfClass('Humanoid');
+      if (!hum || hum.Health <= 0) continue;
+      hum.WalkSpeed = 16; hum.JumpPower = 50; hum.Flying = false;
+      if (s.character._scale && s.character._scale !== 1) scaleCharacter(s.character, 1);
+      if (!a || s.user.id !== a.by) {
+        for (const d of s.character.GetDescendants()) if (d.Name === 'AbuseTag' || d.Name === 'AbuseSparkles') d.Destroy();
+      }
+      this.applyPassPerks(s, hum);
+      this.applyAbuse(s, hum);
+    }
+  }
+  // One-off effects: a global message, coin rain, fireworks, meteors, bring.
+  abuseOnce(effect, opts = {}) {
+    const a = this.abuseState() || opts.state;
+    const ws = this.game.Workspace;
+    const admin = a && this.sessions.get(a.by);
+    const center = admin && admin.character ? new Vector3(...admin.state.p) : (() => {
+      const any = [...this.sessions.values()].find((x) => x.character);
+      return any ? new Vector3(...any.state.p) : new Vector3(0, 10, 0);
+    })();
+    const debris = (p, t) => setTimeout(() => { if (!p._destroyed) p.Destroy(); }, t * 1000);
+    const ball = (pos, color, size, vel, opt = {}) => {
+      const p = createInstance('Part');
+      p.Name = 'AbuseFX';
+      p.Shape = opt.block ? 'Block' : 'Ball';
+      p.Size = new Vector3(size, size, size);
+      p.Material = 'Neon';
+      p.Color = Color3.fromHex(color);
+      p.CanCollide = false;
+      p.Anchored = false;
+      p.CFrame = CFrame.fromPosition(pos);
+      p.Velocity = vel;
+      if (opt.sparkles) { const sp = createInstance('Sparkles'); sp.Parent = p; }
+      p.Parent = ws;
+      debris(p, opt.life || 6);
+      return p;
+    };
+    if (effect === 'message') {
+      const text = String(opts.text || '').slice(0, 120);
+      for (const x of this.sessions.values()) {
+        this.send(x, { t: 'bigmsg', text, secs: 6, color: /^#[0-9a-f]{6}$/i.test(opts.color || '') ? opts.color : '#ffd23b' });
+        this.send(x, { t: 'sys', text: `[GLOBAL] ${opts.by || 'Admin'}: ${text}` });
+      }
+    } else if (effect === 'coinrain') {
+      for (let i = 0; i < 60; i++) ball(center.add(new Vector3((Math.random() - 0.5) * 80, 40 + Math.random() * 30, (Math.random() - 0.5) * 80)), '#ffc400', 1.2, new Vector3(0, -5, 0), { block: true, life: 7 });
+    } else if (effect === 'fireworks') {
+      const cols = ['#ff3b3b', '#3bff6b', '#3bb0ff', '#ffc400', '#ff3bd2', '#ffffff'];
+      for (let i = 0; i < 24; i++) ball(center.add(new Vector3((Math.random() - 0.5) * 60, 2, (Math.random() - 0.5) * 60)), cols[i % cols.length], 1.6, new Vector3((Math.random() - 0.5) * 20, 90 + Math.random() * 40, (Math.random() - 0.5) * 20), { sparkles: true, life: 4 });
+    } else if (effect === 'meteors') {
+      for (let i = 0; i < 16; i++) ball(center.add(new Vector3((Math.random() - 0.5) * 120 - 60, 120 + Math.random() * 40, (Math.random() - 0.5) * 120)), i % 2 ? '#ff6a00' : '#ffb000', 4 + Math.random() * 4, new Vector3(60, -80, 0), { sparkles: true, life: 5 });
+    } else if (effect === 'bring' && admin && admin.character) {
+      for (const x of this.sessions.values()) {
+        if (x === admin || !x.character) continue;
+        const a2 = Math.random() * Math.PI * 2;
+        this.teleport(x.character, rootCFrame(center.X + Math.cos(a2) * 18, center.Y + 2, center.Z + Math.sin(a2) * 18, 0));
+      }
+    }
   }
 
   // Built-in game pass perks (no scripting needed), on every spawn.
@@ -1401,6 +1547,7 @@ export class GameServer {
     clearInterval(this.timer);
     clearInterval(this.huntTimer);
     clearInterval(this.huntScan);
+    clearInterval(this._disco);
     for (const s of [...this.sessions.values()]) {
       this.send(s, { t: 'shutdown', msg });
       try { s.ws.close(); } catch { /* ignore */ }

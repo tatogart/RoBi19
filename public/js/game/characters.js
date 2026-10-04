@@ -40,6 +40,7 @@ export class CharacterView {
     this.forceField = null;
     this.health = 100;
     this.maxHealth = 100;
+    this.scale = 1; // Humanoid.BodyScale (a giant admin)
     // HTML overlay: name + health bar + bubbles
     this.tag = document.createElement('div');
     this.tag.className = 'name-tag';
@@ -119,6 +120,7 @@ export class CharacterView {
     }
     this.group.position.copy(this.pos);
     this.group.rotation.set(0, this.ry, 0);
+    if (this.group.scale.x !== this.scale) this.group.scale.setScalar(this.scale);
     // 'drive:#rrggbb' = sitting in a go-kart of that colour.
     const driving = typeof this.anim === 'string' && this.anim.startsWith('drive');
     this.av.setKart(driving ? this.anim.slice(6) || '#c4281c' : '');
@@ -136,7 +138,7 @@ export class CharacterView {
     const side = 2.4, back = 2.2;
     const tx = this.pos.x + Math.cos(this.ry) * side + Math.sin(this.ry) * back;
     const tz = this.pos.z - Math.sin(this.ry) * side + Math.cos(this.ry) * back;
-    const groundY = this.pos.y - 3;
+    const groundY = this.pos.y - 3 * this.scale;
     if (!pet.visible || Math.hypot(pet.position.x - tx, pet.position.z - tz) > 40) {
       pet.position.set(tx, groundY, tz);
       pet.visible = true;
@@ -159,10 +161,10 @@ export class CharacterView {
   // Project the tag above the head.
   updateTag(camera, w, h, hideName) {
     const p = this.pos.clone();
-    p.y += 3.2;
+    p.y += 3.2 * this.scale;
     const v = p.clone().project(camera);
     const dist = camera.position.distanceTo(p);
-    const visible = this.group.visible && v.z < 1 && dist < 110;
+    const visible = this.group.visible && v.z < 1 && dist < 110 * Math.max(1, this.scale);
     this.tag.style.display = visible ? 'block' : 'none';
     if (!visible) return;
     this.tag.style.transform = `translate(${(v.x * 0.5 + 0.5) * w}px, ${(-v.y * 0.5 + 0.5) * h}px) translate(-50%, -100%)`;

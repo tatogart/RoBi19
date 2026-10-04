@@ -22,7 +22,7 @@ export const SPIN = [
 ];
 export const DECORS = ['none', 'snow', 'halloween', 'hearts', 'confetti', 'leaves', 'stars'];
 
-export function installFun(api, { db, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence }) {
+export function installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence }) {
   const D = db.data;
   if (!D.funItems) D.funItems = {};
   if (!D.pokes) D.pokes = [];
@@ -221,7 +221,9 @@ export function installFun(api, { db, requireUser, requireAdmin, bad, log, giveS
     const now = Date.now();
     const events = F.events.filter((e) => e.id > since && now - e.created < 5 * 60e3 && (!e.users || (req.user && e.users.includes(req.user.id))))
       .map(({ users, ...e }) => e);
-    res.json({ last: F.events.at(-1)?.id || 0, decor: decor(), boost: boost() ? { mult: C.boost.mult, until: C.boost.until } : null, events });
+    const ab = abuse();
+    res.json({ last: F.events.at(-1)?.id || 0, decor: decor(), boost: boost() ? { mult: C.boost.mult, until: C.boost.until } : null, events,
+      abuse: ab ? { id: ab.started, gameId: ab.gameId, game: D.games[ab.gameId].name, by: ab.byName, ends: ab.ends } : null });
   });
   const pushEvent = (e) => {
     F.events.push({ id: (F.events.at(-1)?.id || 0) + 1, created: Date.now(), ...e });
@@ -256,6 +258,82 @@ export function installFun(api, { db, requireUser, requireAdmin, bad, log, giveS
   api.get('/admin/fun', requireAdmin, (req, res) => {
     res.json({ decor: F.decor, decors: DECORS, online: players().filter(isOnline).length, players: players().length,
       events: F.events.slice().reverse().map(({ users, ...e }) => ({ ...e, players: users ? users.length : null })) });
+  });
+
+  // ---------------------------------------------------------------- Admin Abuse
+  // An admin "abuses" one game: everyone on the site sees a banner with a Join
+  // button; in the game the admin is a giant with a crown and can send global
+  // messages and turn on effects for everyone (see GameServer.applyAbuse).
+  const ABUSE_FX = ['giant', 'bigAll', 'tiny', 'speed', 'jump', 'fly', 'lowgrav', 'disco', 'night'];
+  const ABUSE_ONCE = ['coinrain', 'fireworks', 'meteors', 'bring'];
+  function abuse() {
+    return F.abuse && (!F.abuse.ends || F.abuse.ends > Date.now()) && D.games[F.abuse.gameId] ? F.abuse : null;
+  }
+  if (manager) manager.abuse = abuse;
+  const servers = (gameId) => (manager ? manager.allServers().filter((x) => x.gameId === gameId && !x.privateId && !x.isTest) : []);
+  const endAbuse = () => {
+    const a = F.abuse;
+    F.abuse = null;
+    if (a) for (const srv of servers(a.gameId)) { srv.refreshAbuse(); srv.abuseOnce('message', { text: 'Admin Abuse is over! Thanks for coming!', by: a.byName, state: a }); }
+    db.save();
+  };
+  // ended by its timer
+  const timer = setInterval(() => { if (F.abuse && !abuse()) endAbuse(); }, 15e3);
+  timer.unref?.();
+  const abuseView = () => {
+    const a = abuse();
+    const list = a ? servers(a.gameId) : [];
+    return {
+      abuse: a ? { ...a, game: D.games[a.gameId].name, servers: list.length, players: list.reduce((n, x) => n + x.sessions.size, 0), adminIn: list.some((x) => x.sessions.has(a.by)) } : null,
+      games: Object.values(D.games).filter((g) => g.isPublic).sort((x, y) => (y.seedKey === 'crossroads') - (x.seedKey === 'crossroads') || y.visits - x.visits).slice(0, 60)
+        .map((g) => ({ id: g.id, name: g.name, playing: servers(g.id).reduce((n, x) => n + x.sessions.size, 0) })),
+      effects: ABUSE_FX, once: ABUSE_ONCE,
+    };
+  };
+  api.get('/admin/abuse', requireAdmin, (req, res) => res.json(abuseView()));
+  api.post('/admin/abuse', requireAdmin, (req, res) => {
+    const b = req.body || {};
+    const a = abuse();
+    if (b.op === 'start') {
+      const g = D.games[int(b.gameId, 0, 1e12, 0)];
+      if (!g) return bad(res, 'Pick a game.');
+      if (a) endAbuse();
+      const minutes = Math.max(0, Math.min(600, +b.minutes || 0));
+      F.abuse = { gameId: g.id, by: req.user.id, byName: req.user.username, started: Date.now(), ends: minutes ? Date.now() + minutes * 60e3 : 0, effects: { giant: true } };
+      pushEvent({ type: 'abuse', gameId: g.id, game: g.name, by: req.user.username, text: clean(b.text, 120) });
+      for (const srv of servers(g.id)) { srv.refreshAbuse(); srv.abuseOnce('message', { text: `ADMIN ABUSE! ${req.user.username} is here!`, by: req.user.username, color: '#ff3b3b' }); }
+      db.save();
+      return res.json({ ok: true, ...abuseView() });
+    }
+    if (!a) return bad(res, 'No Admin Abuse is running. Start one first.');
+    if (b.op === 'end') { endAbuse(); return res.json({ ok: true, ...abuseView() }); }
+    if (b.op === 'effect') {
+      if (!ABUSE_FX.includes(b.effect)) return bad(res, 'Unknown effect.');
+      a.effects[b.effect] = !!b.on;
+      if (b.effect === 'bigAll' && b.on) a.effects.tiny = false;
+      if (b.effect === 'tiny' && b.on) a.effects.bigAll = false;
+      for (const srv of servers(a.gameId)) srv.refreshAbuse();
+    } else if (b.op === 'once') {
+      if (!ABUSE_ONCE.includes(b.effect)) return bad(res, 'Unknown effect.');
+      for (const srv of servers(a.gameId)) srv.abuseOnce(b.effect, {});
+    } else if (b.op === 'message') {
+      const text = clean(b.text, 120);
+      if (!text) return bad(res, 'Write the message.');
+      const list = b.everywhere ? (manager ? manager.allServers().filter((x) => !x.isTest) : []) : servers(a.gameId);
+      for (const srv of list) srv.abuseOnce('message', { text, by: req.user.username, color: b.color });
+      if (b.site) pushEvent({ type: 'party', text, by: req.user.username });
+    } else if (b.op === 'robits') {
+      const amount = int(b.amount, 1, 10000, 0);
+      if (!amount) return bad(res, 'How many Robits?');
+      const ids = new Set(servers(a.gameId).flatMap((x) => [...x.sessions.keys()]));
+      for (const id of ids) { const u = D.users[id]; if (u) { u.robits += amount; log(u.id, amount, `Admin Abuse gift from ${req.user.username}`); } }
+      pushEvent({ type: 'rain', amount, text: `Admin Abuse in ${D.games[a.gameId].name}`, by: req.user.username, users: [...ids] });
+      for (const srv of servers(a.gameId)) { srv.abuseOnce('coinrain', {}); srv.abuseOnce('message', { text: `+R$ ${amount} for everyone here!`, by: req.user.username, color: '#ffc400' }); }
+      db.save();
+      return res.json({ ok: true, players: ids.size, ...abuseView() });
+    } else return bad(res, 'Unknown action.');
+    db.save();
+    res.json({ ok: true, ...abuseView() });
   });
 
   // ---------------------------------------------------------------- polls

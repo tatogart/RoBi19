@@ -43,8 +43,22 @@ export function buildCharacter(name, bodyColors, cf) {
 
 // Moves all limbs to follow a root CFrame without firing change events.
 export function poseCharacter(model, cf) {
+  const sc = model._scale || 1;
   for (const l of LIMBS) {
     const p = model.FindFirstChild(l.name);
-    if (p) p._p.CFrame = cf.mul(new CFrame(...l.off));
+    if (p) p._p.CFrame = cf.mul(new CFrame(l.off[0] * sc, l.off[1] * sc, l.off[2] * sc));
   }
+}
+
+// Makes a character bigger or smaller (Humanoid.BodyScale + the limbs).
+export function scaleCharacter(model, sc) {
+  sc = Math.max(0.25, Math.min(10, +sc || 1));
+  model._scale = sc;
+  const hum = model.FindFirstChildOfClass('Humanoid');
+  if (hum) hum.BodyScale = sc;
+  for (const l of LIMBS) {
+    const p = model.FindFirstChild(l.name);
+    if (p) p.Size = new Vector3(l.size[0] * sc, l.size[1] * sc, l.size[2] * sc);
+  }
+  return sc;
 }

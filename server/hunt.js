@@ -15,6 +15,7 @@
 import { buildHuntHub } from './seed/hunt.js';
 import { buildRelicsHub } from './seed/hunt2.js';
 import { buildThemedHub, HUB_THEMES } from './seed/hunt3.js';
+import { HUNT_PRESETS } from './huntpresets.js';
 import { officialAccount } from './seed/seed.js';
 import { questFor, RUNES_TEXT } from './huntquests.js';
 
@@ -132,6 +133,20 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   const H = D.hunt;
   if (!D.huntCustom) D.huntCustom = {};
   const eventDef = (key) => EVENTS[key] || (D.huntCustom[key] ? customEvent(D.huntCustom[key]) : null);
+  // Prepared events for the new hub maps: made once in every world, ready to
+  // launch (or to look at: "Visit the lobby").
+  if (!D.huntPrepared) D.huntPrepared = [];
+  for (const key of Object.keys(HUB_THEMES)) {
+    if (D.huntPrepared.includes(key) || !HUNT_PRESETS[key]) continue;
+    const pr = HUNT_PRESETS[key];
+    try {
+      D.huntCustom['prep_' + key] = {
+        name: 'The Hunt: ' + pr.title, description: pr.story, kind: 'quests', hub: key, robits: 25, teamGoal: 30,
+        prizes: pr.prizes.map((r, i) => ({ ...cleanPrize(r), id: i + 1 })), teamPrize: cleanPrize(pr.team, false), hubPrize: cleanPrize(pr.hub, false), quests: {}, prepared: true,
+      };
+      D.huntPrepared.push(key);
+    } catch { /* a bad preset: skip it */ }
+  }
   const official = () => officialAccount(D);
   const allOfficial = () => {
     const off = official();
@@ -446,11 +461,11 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     return {
       current: H.current, state: H.state, name: ev().name, kind: ev().kind, public: !!H.public,
       startedAt: H.startedAt || 0, endsAt: H.endsAt || 0, endedAt: H.endedAt || 0, next: H.next || null,
-      events: [...Object.keys(EVENTS), ...Object.keys(D.huntCustom)].map((key) => { const e = eventDef(key); return { key, name: e.name, kind: e.kind, description: e.description, custom: !!e.custom, prizes: Object.keys(e.rewards).length + Object.keys(e.bonus).length }; }),
+      events: [...Object.keys(EVENTS), ...Object.keys(D.huntCustom)].map((key) => { const e = eventDef(key); return { key, name: e.name, kind: e.kind, description: e.description, custom: !!e.custom, ready: !!D.huntCustom[key]?.prepared, hub: e.hubStyle || '', prizes: Object.keys(e.rewards).length + Object.keys(e.bonus).length }; }),
       custom: D.huntCustom,
       testers: H.testers.map((id) => ({ id, username: D.users[id]?.username || '?' })),
       owner: official()?.username || '',
-      prizeModels: PRIZE_MODELS, questTypes: QUEST_TYPES,
+      prizeModels: PRIZE_MODELS, questTypes: QUEST_TYPES, presets: HUNT_PRESETS,
       overrides: overrides(),
       past: H.past.map((p) => ({ key: p.key, name: p.name, ended: p.ended || 0, players: Object.values(p.progress || {}).filter((l) => l.length).length })),
       autoPlayers: H.autoPlayers, games: H.games || [], hubId: H.hubId,
@@ -573,6 +588,38 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     // players already in that game get the new quest when they join again
     res.json({ ok: true, ...adminState() });
   });
+  // Visit an event's lobby before it starts: the hub is built into a private
+  // preview game (only admins can join it; nothing counts there).
+  api.post('/admin/hunt/lobby', requireAdmin, (req, res) => {
+    const key = String(req.body?.key || '');
+    const e = eventDef(key);
+    if (!e) return bad(res, 'Event not found.', 404);
+    const off = official();
+    if (!off) return bad(res, 'No main account.');
+    let g = D.games[D.huntLobbyId];
+    if (!g) {
+      const id = db.nextId('game');
+      g = D.games[id] = {
+        id, name: 'Lobby preview', description: 'A preview of a The Hunt lobby (admins only).', creatorId: off.id, genre: 'Adventure',
+        created: Date.now(), updated: Date.now(), visits: 0, maxPlayers: 20, isPublic: false, featured: false, copyable: false,
+        upVotes: 0, downVotes: 0, favorites: 0, huntHub: true, lobbyPreview: true,
+      };
+      D.huntLobbyId = id;
+    }
+    const games = allOfficial().map((id) => D.games[id]).filter((x) => x && !excluded(x)).map((x) => ({ id: x.id, name: x.name, byPlayer: false, creator: '' }));
+    const total = games.length || 1;
+    const prizes = [
+      ...Object.values(e.rewards).map((r) => ({ name: r.name, need: Math.max(1, Math.min(total, r.count || Math.ceil(total * (r.share || 1)))) })),
+      ...Object.values(e.bonus).map((r) => ({ name: r.name, how: r.how, bonus: true })),
+    ];
+    g.name = `Lobby preview: ${e.name}`.slice(0, 80);
+    db.writePlace(g.id, e.build(games, prizes, e));
+    g.updated = Date.now();
+    for (const srv of manager.allServers().filter((x) => x.gameId === g.id)) srv.close('The lobby preview was rebuilt');
+    db.save();
+    res.json({ ok: true, gameId: g.id });
+  });
+
   // Custom events: { key?, event: {...} } saves, { key, delete: true } deletes.
   api.post('/admin/hunt/custom', requireAdmin, (req, res) => {
     const b = req.body || {};

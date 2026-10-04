@@ -1691,3 +1691,71 @@ test('Admin Panel 3.0: the Daily Spin settings, live events, polls and outfits',
   o = (await call('POST', '/avatar/outfits', { delete: o[0].id }, k)).data.outfits;
   assert.equal(o.length, 0);
 });
+
+test('Admin Abuse: a giant admin, effects for everyone and global messages', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const adminId = (await call('GET', '/auth/me', null, admin)).data.user.id;
+  const kid = await call('POST', '/auth/signup', { username: 'AbuseFan', password: 'secret123' });
+  const cross = (await call('GET', '/games?q=Crossroads')).data.games.find((g) => g.name === 'Crossroads');
+  assert.ok(cross);
+  assert.equal((await call('GET', '/admin/abuse', null, kid.cookie)).status, 403);
+  assert.equal((await call('POST', '/admin/abuse', { op: 'message', text: 'hi' }, admin)).status, 400); // not running
+  let r = (await call('POST', '/admin/abuse', { op: 'start', gameId: cross.id, minutes: 30 }, admin)).data;
+  assert.equal(r.abuse.gameId, cross.id);
+  assert.equal(r.abuse.effects.giant, true);
+  // the site shows it to everyone
+  const live = (await call('GET', '/fun/live?since=0', null, kid.cookie)).data;
+  assert.equal(live.abuse.game, 'Crossroads');
+  assert.ok(live.events.some((e) => e.type === 'abuse'));
+  // in the game: the admin is a giant, the player gets super speed
+  const a = await join(admin, { placeId: cross.id });
+  await a.wait((m) => m.t === 'welcome');
+  const k = await join(kid.cookie, { placeId: cross.id });
+  await k.wait((m) => m.t === 'welcome');
+  await new Promise((res) => setTimeout(res, 300));
+  const server = srv.manager.findUser(adminId).server;
+  const hum = (uid) => server.sessions.get(uid).character.FindFirstChildOfClass('Humanoid');
+  assert.equal(hum(adminId).BodyScale, 4);
+  assert.equal(hum(kid.data.user.id).BodyScale, 1);
+  await call('POST', '/admin/abuse', { op: 'effect', effect: 'speed', on: true }, admin);
+  await call('POST', '/admin/abuse', { op: 'effect', effect: 'bigAll', on: true }, admin);
+  assert.equal(hum(kid.data.user.id).WalkSpeed, 40);
+  assert.equal(hum(kid.data.user.id).BodyScale, 2);
+  // a global message reaches the player
+  await call('POST', '/admin/abuse', { op: 'message', text: 'Hello Crossroads!' }, admin);
+  assert.equal((await k.wait((m) => m.t === 'bigmsg' && m.text === 'Hello Crossroads!')).text, 'Hello Crossroads!');
+  // Robits for everyone in the game
+  const before = (await call('GET', '/auth/me', null, kid.cookie)).data.user.robits;
+  r = (await call('POST', '/admin/abuse', { op: 'robits', amount: 20 }, admin)).data;
+  assert.equal(r.players, 2);
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.robits, before + 20);
+  await call('POST', '/admin/abuse', { op: 'once', effect: 'fireworks' }, admin);
+  // the end: everyone back to normal
+  await call('POST', '/admin/abuse', { op: 'end' }, admin);
+  assert.equal(hum(kid.data.user.id).WalkSpeed, 16);
+  assert.equal(hum(kid.data.user.id).BodyScale, 1);
+  assert.equal(hum(adminId).BodyScale, 1);
+  assert.equal((await call('GET', '/fun/live', null, kid.cookie)).data.abuse, null);
+  const errors = [...a.inbox, ...k.inbox].filter((m) => (m.t === 'output' && m.level === 'error') || m.t === 'error');
+  assert.deepEqual(errors, []);
+  a.ws.close(); k.ws.close();
+});
+
+test('ready-made events for the new maps, and their lobbies can be visited first', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const h = (await call('GET', '/admin/hunt', null, admin)).data;
+  for (const hub of ['winter', 'spooky', 'candy', 'ocean']) assert.ok(h.events.some((e) => e.key === 'prep_' + hub && e.ready && e.hub === hub), hub);
+  assert.ok(h.presets.winter.prizes.length >= 5);
+  const r = (await call('POST', '/admin/hunt/lobby', { key: 'prep_spooky' }, admin)).data;
+  assert.ok(r.gameId);
+  // admins only
+  const kid = (await call('POST', '/auth/signup', { username: 'LobbyKid', password: 'secret123' })).cookie;
+  assert.equal((await call('POST', '/admin/hunt/lobby', { key: 'prep_spooky' }, kid)).status, 403);
+  const s = await join(admin, { placeId: r.gameId });
+  await s.wait((m) => m.t === 'welcome');
+  await new Promise((res) => setTimeout(res, 400));
+  assert.deepEqual(s.inbox.filter((m) => (m.t === 'output' && m.level === 'error') || m.t === 'error'), []);
+  s.ws.close();
+  // the preview isn't listed anywhere
+  assert.ok(!(await call('GET', '/games?sort=popular&limit=100')).data.games.some((g) => g.id === r.gameId));
+});

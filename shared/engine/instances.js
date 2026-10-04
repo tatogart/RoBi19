@@ -732,6 +732,8 @@ export const Humanoid = defineClass('Humanoid', Instance, {
     Jump: { type: 'bool', default: false, cat: 'Control' },
     // Robis extra: the player flies (Space up, Q down; on phones the Jump and ▼ buttons).
     Flying: { type: 'bool', default: false, cat: 'Control' },
+    // Robis extra: the size of the character (2 = twice as big; admins' "giant").
+    BodyScale: { type: 'number', default: 1, cat: 'Game' },
   },
   events: ['Died', 'HealthChanged', 'Touched', 'Running', 'Jumping', 'FreeFalling', 'StateChanged'],
 });

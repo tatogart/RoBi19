@@ -10,16 +10,22 @@ export const LANG = (() => {
   } catch { /* private mode */ }
   return /^ru\b/i.test(navigator.language || '') ? 'ru' : 'en';
 })();
-export const THEME = (() => { try { return localStorage.getItem('robis.theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; } })();
+// light, dark, or halloween (= dark with orange and purple, pumpkins and bats)
+export const THEME = (() => { try { const t = localStorage.getItem('robis.theme'); return t === 'dark' || t === 'halloween' ? t : 'light'; } catch { return 'light'; } })();
 
 export function setLang(lang) { try { localStorage.setItem('robis.lang', lang); } catch { /* ignore */ } location.reload(); }
 export function setTheme(theme) {
   try { localStorage.setItem('robis.theme', theme); } catch { /* ignore */ }
-  document.documentElement.dataset.theme = theme;
+  applyTheme(theme);
+}
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme === 'halloween' ? 'dark' : theme;
+  if (theme === 'halloween') document.documentElement.dataset.skin = 'halloween';
+  else delete document.documentElement.dataset.skin;
 }
 
 document.documentElement.lang = LANG;
-document.documentElement.dataset.theme = THEME;
+applyTheme(THEME);
 
 // ---------------------------------------------------------------- dictionary
 const RU = {
@@ -851,6 +857,71 @@ const RU = {
   'No outfits yet. Dress up and press "Save current look" - then switch looks in one click.': 'Нарядов пока нет. Оденься и нажми «Сохранить текущий образ» — потом меняй образы в один клик.',
   'You can save up to 12 outfits. Delete one first.': 'Можно сохранить до 12 нарядов. Сначала удали один.',
   'No shirt or pants on a skin-coloured body? You get plain default clothes, like in Roblox.': 'Нет рубашки или штанов на теле цвета кожи? Наденется простая одежда по умолчанию, как в Roblox.',
+  'Admin Abuse': 'Админ абуз',
+  '🔥 Admin Abuse': '🔥 Админ абуз',
+  'ADMIN ABUSE': 'АДМИН АБУЗ',
+  'Join now!': 'Зайти!',
+  'is in the game right now - join!': 'сейчас в игре — заходи!',
+  'Show up in a game as a giant admin. Everyone on the site gets a banner with a Join button.': 'Появись в игре огромным админом. Все на сайте увидят баннер с кнопкой «Зайти».',
+  '1. The game': '1. Игра',
+  'Crossroads is the classic place for it': 'Классика — Crossroads',
+  '2. How long': '2. Сколько длится',
+  '3. Go!': '3. Поехали!',
+  'Until I end it': 'Пока не закончу',
+  '15 min': '15 мин',
+  '30 min': '30 мин',
+  'Banner text (optional), e.g. "Free Robits! Come quick!"': 'Текст баннера (необязательно), напр. «Халявные Robits! Быстрее!»',
+  '🔥 START ADMIN ABUSE': '🔥 НАЧАТЬ АДМИН АБУЗ',
+  'Admin Abuse started! Join the game.': 'Админ абуз начался! Заходи в игру.',
+  'Open the game': 'Открыть игру',
+  'Join the game': 'Зайти в игру',
+  'End': 'Закончить',
+  'End the Admin Abuse?': 'Закончить админ абуз?',
+  'Admin Abuse ended': 'Админ абуз закончен',
+  '📢 Global message': '📢 Глобальное сообщение',
+  "A big message on everyone's screen": 'Большое сообщение на экране у всех',
+  'Global message, e.g. "Everyone to the tower!"': 'Глобальное сообщение, напр. «Все к башне!»',
+  ' In every game on Robis': ' Во всех играх Robis',
+  ' Also on the website': ' И на сайте',
+  'Sent!': 'Отправлено!',
+  'Me: GIANT': 'Я: ГИГАНТ',
+  'You are 4 times bigger, with a crown': 'Ты в 4 раза больше, с короной',
+  'Everyone big': 'Все большие',
+  'All players twice as big': 'Все игроки в 2 раза больше',
+  'Everyone tiny': 'Все крошечные',
+  'All players half size': 'Все игроки в 2 раза меньше',
+  'Super speed': 'Супер скорость',
+  'Everyone runs fast': 'Все бегают быстро',
+  'Mega jump': 'Мега прыжок',
+  'Everyone jumps high': 'Все прыгают высоко',
+  'Everyone flies': 'Все летают',
+  'Space - up, Q - down': 'Пробел — вверх, Q — вниз',
+  'Low gravity': 'Низкая гравитация',
+  'Floaty jumps for everyone': 'Невесомые прыжки для всех',
+  'Disco': 'Дискотека',
+  'Night and party lights': 'Ночь и цветные огни',
+  'Night': 'Ночь',
+  'Make it night': 'Сделать ночь',
+  '💥 Right now': '💥 Прямо сейчас',
+  'One-time effects': 'Разовые эффекты',
+  'Coin rain': 'Дождь из монет',
+  'Fireworks': 'Фейерверк',
+  'Meteors': 'Метеориты',
+  'Bring everyone to me': 'Притянуть всех ко мне',
+  '💰 Robits for everyone in the game': '💰 Robits всем в игре',
+  'Give': 'Выдать',
+  'Given': 'Выдано',
+  'Unknown effect.': 'Неизвестный эффект.',
+  'No Admin Abuse is running. Start one first.': 'Админ абуз не идёт. Сначала начни его.',
+  'Pick a game.': 'Выбери игру.',
+  'Write the message.': 'Напиши сообщение.',
+  'In the game you can also type :giant, :tiny, :normal, :size 3, :fireworks, :coinrain, :meteors and :global text in the chat.': 'В игре в чат можно писать :giant, :tiny, :normal, :size 3, :fireworks, :coinrain, :meteors и :global текст.',
+  'empty': 'пусто',
+  '👁 Visit the lobby': '👁 Посмотреть лобби',
+  '✨ Ready-made': '✨ Готовый',
+  'Walk around the lobby before the event starts (only admins can get in)': 'Погуляй по лобби до начала ивента (зайти могут только админы)',
+  '🎃 Halloween': '🎃 Хэллоуин',
+  'Halloween': 'Хэллоуин',
   'Promo Codes': 'Промокоды', 'Enter code': 'Введи код', 'Redeem': 'Активировать', 'Code redeemed!': 'Код активирован!', 'New in your inventory:': 'Новое в инвентаре:',
   'You already own everything this code gives.': 'У тебя уже есть всё, что даёт этот код.',
   'Got a code from the admins, an event or a video? Type it here to get Robits, Builders Club and free items.': 'Есть код от админов, с ивента или из видео? Введи его здесь и получи Robits, Builders Club и бесплатные предметы.',
@@ -1168,6 +1239,8 @@ const RU_PATTERNS = [
   [/^Make something happen for everyone right now\. (\d+) players online\.$/, (m, n) => `Устрой что-нибудь для всех прямо сейчас. Онлайн: ${n}.`],
   [/^Find all 6 (presents|pumpkins|candies|pearls) in the hub$/, (m, a) => `Найди все 6 ${{ presents: 'подарков', pumpkins: 'тыкв', candies: 'конфет', pearls: 'жемчужин' }[a]} в хабе`],
   [/^(.+) on the site!$/, (m, a) => `${a} на сайте!`],
+  [/^(\d+) players in (\d+) server\(s\)(.*)$/, (m, a, b, c) => `${a} игроков на ${b} серверах${c.replace(/ · (\d+) min left/, ' · осталось $1 мин').replace(' · you are not in the game yet!', ' · ты ещё не в игре!')}`],
+  [/^(\d+) playing$/, (m, a) => `${a} играют`],
   [/^Your plan until (.+)$/, (m, a) => `Твой тариф до ${a}`],
   [/^until (.+)$/, (m, a) => `до ${a}`],
   [/^You already have (.+) or better\.$/, (m, a) => `У тебя уже есть ${a} или лучше.`],

@@ -38,6 +38,7 @@ const ICONS = {
   sparkle: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2zM19 3v4M17 5h4',
   chart: 'M4 20V10m6 10V4m6 16v-7m4 7H2',
   terminal: 'M3 5h18v14H3zm4 4l3 3-3 3m5 0h5',
+  crown: 'M3 18h18M4 16L3 7l5 4 4-6 4 6 5-4-1 9z',
 };
 const ic = (name, cls = 'adm-ic') => el('span', { class: cls, html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[name] || ICONS.box}"/></svg>` });
 
@@ -97,6 +98,7 @@ const TABS = {
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
   polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
   servers: { label: 'Servers', group: 'Live', icon: 'server', draw: drawServers },
+  abuse: { label: 'Admin Abuse', group: 'Live', icon: 'crown', draw: drawAbuse, admin: true },
   live: { label: 'Live Events', group: 'Live', icon: 'sparkle', draw: drawLiveEvents, admin: true },
   broadcast: { label: 'Broadcast', group: 'Live', icon: 'megaphone', draw: drawBroadcast, admin: true },
   settings: { label: 'Settings', group: 'System', icon: 'gear', draw: drawSettings, admin: true },
@@ -708,13 +710,16 @@ async function drawHunt() {
     el('div', { class: 'small', text: `${KIND_LABEL[e.kind]} · ${e.prizes} prizes` }),
     el('p', { class: 'small muted', text: e.description }),
     e.custom ? el('div', { class: 'row wrap', style: { gap: '6px' } },
-      el('span', { class: 'pill', text: 'Your event' }),
+      el('span', { class: 'pill', text: e.ready ? '✨ Ready-made' : 'Your event' }),
       el('button', { class: 'btn btn-small', text: 'Edit', onclick: () => customEventEditor(h, e.key) }),
       e.key === h.current && live ? null : el('button', { class: 'btn btn-small btn-red', text: 'Delete', onclick: async () => {
         if (!confirm(`Delete ${e.name}?`)) return;
         try { await api.post('/admin/hunt/custom', { key: e.key, delete: true }); toast('Deleted', 'success'); drawHunt(); } catch (err) { toast(err.message, 'error'); }
       } })) : null,
     e.key === h.current && live ? el('span', { class: 'hunt-state live', text: 'RUNNING' }) : el('div', { class: 'row wrap', style: { gap: '6px' } },
+      el('button', { class: 'btn btn-small', text: '👁 Visit the lobby', title: 'Walk around the lobby before the event starts (only admins can get in)', onclick: async () => {
+        try { const r = await api.post('/admin/hunt/lobby', { key: e.key }); const { launchGame } = await import('../ui.js'); launchGame(r.gameId); } catch (err) { toast(err.message, 'error'); }
+      } }),
       el('button', { class: 'btn btn-small', text: 'Launch (private preview)', onclick: () => { if (confirm(`Launch ${e.name} as a private preview now?${live ? ` ${h.name} ends.` : ''}`)) control({ action: 'launch', key: e.key, public: false }, `${e.name} started (private)`); } }),
       el('button', { class: 'btn btn-small btn-green', text: 'Launch for everyone', onclick: () => { if (confirm(`Launch ${e.name} for everyone now?${live ? ` ${h.name} ends.` : ''}`)) control({ action: 'launch', key: e.key, public: true }, `${e.name} is live!`); } })))));
 
@@ -882,28 +887,16 @@ function customEventEditor(h, key) {
 
 // ---------------------------------------------------------------- quick event
 // The easy way: a map, a name, a length - prizes and the story come with the map.
-const p5 = (names, model, colors, type = 'Hat') => names.map((name, i) => ({ name, type: Array.isArray(type) ? type[i] : type, model: Array.isArray(model) ? model[i] : model, color: colors[i % colors.length], accent: '#ffffff', ...(i === 0 ? { count: 1 } : { share: [25, 50, 75, 100][i - 1] }) }));
-const EVENT_MAPS = {
-  winter: { icon: '❄️', title: 'Frost Festival', bg: 'linear-gradient(135deg,#5fa8e8,#173a6b)', story: 'Snow has fallen on Robis! Step through the festive portals, finish a quest in every game and find the 6 presents hidden around the Frost Festival.',
-    prizes: p5(['Snowflake Beanie', 'Frosty Shades', 'Penguin Pal', 'Ice Saber', 'Crown of Winter'], ['beanie', 'shades', 'penguin', 'saber', 'crown'], ['#9fd8ff', '#4fc3ff', '#1b1b1b', '#bfefff', '#e8f6ff'], ['Hat', 'Hat', 'Pet', 'Gear', 'Hat']),
-    team: { name: 'Festival Party Hat', type: 'Hat', model: 'party', color: '#ff4d6d' }, hub: { name: 'Gift Halo', type: 'Hat', model: 'halo', color: '#ffd166' } },
-  spooky: { icon: '🎃', title: 'Haunted Night', bg: 'linear-gradient(135deg,#5a2d82,#120a1c)', story: 'The moon is full and the games are haunted... Survive a quest in every game and find the 6 pumpkins hidden in the graveyard.',
-    prizes: p5(['Witch Hat', 'Ghost Buddy', 'Pumpkin Torch', 'Spooky Wings', 'Crown of the Night'], ['witch', 'ghost', 'torch', 'wings', 'crown'], ['#7a3dbf', '#f4f8ff', '#ff7a1a', '#2b2b2b', '#ff7a1a'], ['Hat', 'Pet', 'Gear', 'Hat', 'Hat']),
-    team: { name: 'Bat Wings', type: 'Hat', model: 'wings', color: '#3b3640' }, hub: { name: 'Pumpkin Halo', type: 'Hat', model: 'halo', color: '#ff7a1a' } },
-  candy: { icon: '🍭', title: 'Candy Kingdom', bg: 'linear-gradient(135deg,#ff8cc6,#8a2d6b)', story: 'Everything is made of sugar! Finish a sweet quest in every game and find the 6 candies hidden in the Candy Kingdom.',
-    prizes: p5(['Gumdrop Cap', 'Candy Bunny', 'Lollipop Hammer', 'Party Cone', 'Sugar Crown'], ['cap', 'bunny', 'hammer', 'party', 'crown'], ['#ff5fa2', '#ffffff', '#ff3b8d', '#5fd3ff', '#ffb3d9'], ['Hat', 'Pet', 'Gear', 'Hat', 'Hat']),
-    team: { name: 'Sprinkle Headphones', type: 'Hat', model: 'headphones', color: '#b6ff5f' }, hub: { name: 'Candy Halo', type: 'Hat', model: 'halo', color: '#ff5fa2' } },
-  ocean: { icon: '🌊', title: 'Sunken City', bg: 'linear-gradient(135deg,#2fb8c9,#0b2f5a)', story: 'An ancient city rose from the sea! Swim through the portals, finish a quest in every game and find the 6 pearls of the Sunken City.',
-    prizes: p5(['Captain Hat', 'Diver Helmet', 'Trident Saber', 'Sea Dragon', 'Crown of the Deep'], ['pirate', 'astronaut', 'saber', 'dragon', 'crown'], ['#1f3a5f', '#1fd1c9', '#ffe066', '#1fd1c9', '#5f8bff'], ['Hat', 'Hat', 'Gear', 'Pet', 'Hat']),
-    team: { name: 'Pearl Shades', type: 'Hat', model: 'shades', color: '#f6f2ff' }, hub: { name: 'Pearl Halo', type: 'Hat', model: 'halo', color: '#f6f2ff' } },
-  relics: { icon: '🗿', title: 'Lost Temple', bg: 'linear-gradient(135deg,#6b8a3a,#1f3318)', story: 'A lost temple was found in the jungle. Finish a quest in every game to win its relics, and solve the rune puzzle in the temple.',
-    prizes: p5(['Explorer Hat', 'Jungle Torch', 'Stone Golem', 'Temple Wings', 'Golden Idol Crown'], ['explorer', 'torch', 'golem', 'wings', 'crown'], ['#c8a165', '#ff8a3d', '#8a8590', '#5bd6a0', '#ffc400'], ['Hat', 'Gear', 'Pet', 'Hat', 'Hat']),
-    team: { name: 'Temple Viking Helm', type: 'Hat', model: 'viking', color: '#c8a165' }, hub: { name: 'Rune Halo', type: 'Hat', model: 'halo', color: '#5bd6a0' } },
-  dimension: { icon: '🪐', title: 'Star Voyage', bg: 'linear-gradient(135deg,#3a1a6b,#0b0a2a)', story: 'A wormhole opened over Robis! Jump into the space station, finish a quest in every game and collect the 6 star fragments.',
-    prizes: p5(['Astronaut Helmet', 'UFO Pal', 'Space Saber', 'Planet Hat', 'Crown of the Cosmos'], ['astronaut', 'ufo', 'saber', 'planet', 'crown'], ['#e8e8f0', '#7dffb0', '#00e5ff', '#b45cff', '#ffd27a'], ['Hat', 'Pet', 'Gear', 'Hat', 'Hat']),
-    team: { name: 'Alien Buddy', type: 'Pet', model: 'alien', color: '#7dffb0' }, hub: { name: 'Stardust Halo', type: 'Hat', model: 'halo', color: '#7df9ff' } },
+const EVENT_STYLE = {
+  winter: { icon: '❄️', bg: 'linear-gradient(135deg,#5fa8e8,#173a6b)' },
+  spooky: { icon: '🎃', bg: 'linear-gradient(135deg,#5a2d82,#120a1c)' },
+  candy: { icon: '🍭', bg: 'linear-gradient(135deg,#ff8cc6,#8a2d6b)' },
+  ocean: { icon: '🌊', bg: 'linear-gradient(135deg,#2fb8c9,#0b2f5a)' },
+  relics: { icon: '🗿', bg: 'linear-gradient(135deg,#6b8a3a,#1f3318)' },
+  dimension: { icon: '🪐', bg: 'linear-gradient(135deg,#3a1a6b,#0b0a2a)' },
 };
 function quickEvent(h) {
+  const EVENT_MAPS = Object.fromEntries(Object.entries(h.presets || {}).map(([k, v]) => [k, { ...EVENT_STYLE[k], ...v }]));
   let map = 'winter';
   const name = el('input', { class: 'input', maxlength: 60, value: EVENT_MAPS[map].title });
   const grid = el('div', { class: 'qe-maps' });
@@ -1275,6 +1268,7 @@ async function drawDashboard() {
         perm('moderator') ? qa('Reports', 'flag', () => { location.hash = 'reports'; }, 'orange') : null,
         me.isAdmin ? qa('Broadcast', 'megaphone', () => { location.hash = 'broadcast'; }) : null,
         me.isAdmin ? qa('The Hunt', 'hunt', () => { location.hash = 'hunt'; }, 'purple') : null,
+        me.isAdmin ? qa('Admin Abuse', 'crown', () => { location.hash = 'abuse'; }, 'orange') : null,
         me.isAdmin ? qa('Robits rain', 'sparkle', () => { location.hash = 'live'; }) : null,
         me.isAdmin ? qa('Daily Spin', 'wheel', () => { location.hash = 'spin'; }) : null,
         me.isAdmin ? qa('Console', 'terminal', () => { location.hash = 'console'; }) : null)),
@@ -1848,7 +1842,7 @@ const CMDS = [
   ['find <name>', 'open a player'],
   ['clear', 'clear the console'],
 ];
-let consoleLines = [];
+var consoleLines = [];
 function drawConsole() {
   const out = el('div', { class: 'adm-console-out' });
   const print = (text, cls = '') => { consoleLines.push([text, cls]); consoleLines = consoleLines.slice(-200); out.append(el('div', { class: 'cline ' + cls, text })); out.scrollTop = out.scrollHeight; };
@@ -1894,4 +1888,75 @@ function drawConsole() {
   body.replaceChildren(el('div', { class: 'adm-console', onclick: () => input.focus() }, out, el('div', { class: 'adm-console-row' }, el('span', { text: '>' }), input)),
     el('div', { class: 'adm-cmds' }, CMDS.map(([c, d]) => el('button', { class: 'adm-cmd', title: d, onclick: () => { input.value = c.split(' ')[0] + ' '; input.focus(); } }, el('code', { text: c }), el('span', { class: 'muted small', text: d })))));
   setTimeout(() => input.focus(), 50);
+}
+
+// ---------------------------------------------------------------- Admin Abuse
+// Like the big games do: pick a game (Crossroads!), everyone on the site sees a
+// banner with Join, and in the game you are a giant admin with a crown. Global
+// messages, effects for everyone, coin rain, fireworks, meteors, Robits.
+const ABUSE_FX = {
+  giant: ['🗿', 'Me: GIANT', 'You are 4 times bigger, with a crown'],
+  bigAll: ['🦍', 'Everyone big', 'All players twice as big'],
+  tiny: ['🐜', 'Everyone tiny', 'All players half size'],
+  speed: ['⚡', 'Super speed', 'Everyone runs fast'],
+  jump: ['🦘', 'Mega jump', 'Everyone jumps high'],
+  fly: ['🕊️', 'Everyone flies', 'Space - up, Q - down'],
+  lowgrav: ['🌙', 'Low gravity', 'Floaty jumps for everyone'],
+  disco: ['🪩', 'Disco', 'Night and party lights'],
+  night: ['🌃', 'Night', 'Make it night'],
+};
+const ABUSE_ONCE = { coinrain: ['🪙', 'Coin rain'], fireworks: ['🎆', 'Fireworks'], meteors: ['☄️', 'Meteors'], bring: ['🧲', 'Bring everyone to me'] };
+var abuseTimer = 0; // var: the page can open on this section before the module has finished loading
+async function drawAbuse() {
+  clearInterval(abuseTimer);
+  let r;
+  try { r = await api.get('/admin/abuse'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b, msg) => {
+    try { const x = await api.post('/admin/abuse', b); if (msg) toast(msg + (x.players ? ` (${x.players})` : ''), 'success'); drawAbuse(); } catch (e) { toast(e.message, 'error'); }
+  };
+  const { launchGame } = await import('../ui.js');
+  const a = r.abuse;
+  if (!a) {
+    let gameId = r.games[0]?.id;
+    const grid = el('div', { class: 'abuse-games' });
+    const drawGames = () => grid.replaceChildren(...r.games.map((g) => el('button', { class: 'abuse-game' + (g.id === gameId ? ' on' : ''), onclick: () => { gameId = g.id; drawGames(); } },
+      el('b', { class: 'no-i18n', text: g.name }), el('span', { class: 'small muted', text: g.playing ? `${g.playing} playing` : 'empty' }))));
+    drawGames();
+    const minutes = segBtns([[0, 'Until I end it'], [15, '15 min'], [30, '30 min'], [60, '1 hour']], 30);
+    const text = el('input', { class: 'input', maxlength: 120, placeholder: 'Banner text (optional), e.g. "Free Robits! Come quick!"' });
+    body.replaceChildren(
+      el('div', { class: 'adm-hero abuse' }, el('div', {}, el('h2', { text: '🔥 Admin Abuse' }), el('p', { text: 'Show up in a game as a giant admin. Everyone on the site gets a banner with a Join button.' }))),
+      card('1. The game', 'Crossroads is the classic place for it', grid),
+      card('2. How long', null, minutes),
+      card('3. Go!', null, text,
+        el('button', { class: 'btn abuse-start', text: '🔥 START ADMIN ABUSE', onclick: () => post({ op: 'start', gameId, minutes: +minutes.value, text: text.value }, 'Admin Abuse started! Join the game.') })));
+    return;
+  }
+  const left = a.ends ? Math.max(0, Math.round((a.ends - Date.now()) / 60e3)) : null;
+  const msg = el('input', { class: 'input', maxlength: 120, placeholder: 'Global message, e.g. "Everyone to the tower!"' });
+  const color = segBtns([['#ffd23b', '🟡'], ['#ff3b3b', '🔴'], ['#3bff6b', '🟢'], ['#3bb0ff', '🔵'], ['#ffffff', '⚪']], '#ffd23b');
+  const everywhere = el('input', { type: 'checkbox' });
+  const site = el('input', { type: 'checkbox' });
+  const send = () => { if (!msg.value.trim()) return toast('Write the message.', 'error'); post({ op: 'message', text: msg.value, color: color.value, everywhere: everywhere.checked, site: site.checked }, 'Sent!'); };
+  msg.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+  const amount = segBtns([[10, 'R$ 10'], [25, 'R$ 25'], [50, 'R$ 50'], [100, 'R$ 100']], 25);
+  body.replaceChildren(
+    el('div', { class: 'adm-hero abuse live' },
+      el('div', {}, el('h2', {}, '🔥 ', el('span', { text: 'ADMIN ABUSE' }), ' · ', el('span', { class: 'no-i18n', text: a.game })),
+        el('p', { text: `${a.players} players in ${a.servers} server(s)${left !== null ? ` · ${left} min left` : ''}${a.adminIn ? '' : ' · you are not in the game yet!'}` })),
+      el('div', { class: 'row', style: { gap: '8px', position: 'relative', zIndex: 1 } },
+        el('button', { class: 'btn btn-green btn-large', text: a.adminIn ? 'Open the game' : 'Join the game', onclick: () => launchGame(a.gameId) }),
+        el('button', { class: 'btn btn-large', text: 'End', onclick: () => { if (confirm('End the Admin Abuse?')) post({ op: 'end' }, 'Admin Abuse ended'); } }))),
+    card('📢 Global message', 'A big message on everyone\'s screen', msg, color,
+      el('div', { class: 'row wrap', style: { gap: '14px' } },
+        el('label', { class: 'small' }, everywhere, ' In every game on Robis'),
+        el('label', { class: 'small' }, site, ' Also on the website')),
+      el('button', { class: 'btn btn-primary', text: 'Send', onclick: send })),
+    el('div', { class: 'abuse-fx' }, Object.entries(ABUSE_FX).map(([k, [icon, name, sub]]) => el('button', { class: 'abuse-tile' + (a.effects[k] ? ' on' : ''), onclick: () => post({ op: 'effect', effect: k, on: !a.effects[k] }) },
+      el('span', { class: 'abuse-icon', text: icon }), el('b', { text: name }), el('span', { class: 'small', text: sub }), el('span', { class: 'abuse-state', text: a.effects[k] ? 'ON' : 'OFF' })))),
+    el('div', { class: 'adm-cards' },
+      card('💥 Right now', 'One-time effects', el('div', { class: 'row wrap', style: { gap: '8px' } }, Object.entries(ABUSE_ONCE).map(([k, [icon, name]]) => el('button', { class: 'btn', onclick: () => post({ op: 'once', effect: k }, name + '!') }, icon + ' ', el('span', { text: name }))))),
+      card('💰 Robits for everyone in the game', null, amount, el('button', { class: 'btn btn-green', text: 'Give', onclick: () => post({ op: 'robits', amount: +amount.value }, 'Given') }))),
+    el('p', { class: 'small muted', text: 'In the game you can also type :giant, :tiny, :normal, :size 3, :fireworks, :coinrain, :meteors and :global text in the chat.' }));
+  abuseTimer = setInterval(() => { if (current === 'abuse' && !document.hidden && document.activeElement !== msg) drawAbuse(); else if (current !== 'abuse') clearInterval(abuseTimer); }, 10000);
 }
