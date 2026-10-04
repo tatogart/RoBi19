@@ -728,6 +728,8 @@ export const Humanoid = defineClass('Humanoid', Instance, {
     WalkSpeed: { type: 'number', default: 16, cat: 'Game' },
     JumpPower: { type: 'number', default: 50, cat: 'Game' },
     DisplayName: { type: 'string', default: '', cat: 'Data' },
+    // how far away others still see the name over the head (0: never, like MM2)
+    NameDisplayDistance: { type: 'number', default: 100, cat: 'Data' },
     Sit: { type: 'bool', default: false, cat: 'Control' },
     Jump: { type: 'bool', default: false, cat: 'Control' },
     // Robis extra: the player flies (Space up, Q down; on phones the Jump and ▼ buttons).

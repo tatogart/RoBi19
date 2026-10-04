@@ -741,7 +741,7 @@ export class GameClient {
           if (v.isLocal || !v.modelId) continue;
           const model = this.game.getById(v.modelId);
           const hum = model && model.FindFirstChildOfClass('Humanoid');
-          if (hum) { v.health = hum._p.Health; v.maxHealth = hum._p.MaxHealth; v.scale = hum._p.BodyScale || 1; }
+          if (hum) { v.health = hum._p.Health; v.maxHealth = hum._p.MaxHealth; v.scale = hum._p.BodyScale || 1; v.nameDist = hum._p.NameDisplayDistance ?? 100; }
         }
       } else if (this.hintsDirty) { this.hintsDirty = false; this.refreshHints(); }
       const w = this.root.clientWidth, h = this.root.clientHeight;

@@ -109,7 +109,71 @@ export function installBots(api, { db, manager, requireAdmin, bad }) {
     return Math.max(0, Math.round(B.max * wave));
   };
 
+  // ---------------------------------------------------------------- friends
+  // Bots answer friend requests (most say yes, after a while, like people)
+  // and send some to the people they played with for a few minutes.
+  const decided = new Map(); // 'from:to' -> { at, yes }
+  const asked = new Set(); // 'bot:user' pairs already thought about
+  const lastAsked = new Map(); // real user -> when a bot last asked them
+  const addFriends = (a, b) => {
+    D.friends[a] = [...new Set([...(D.friends[a] || []), b])];
+    D.friends[b] = [...new Set([...(D.friends[b] || []), a])];
+  };
+  const friendsTick = () => {
+    if (!Array.isArray(D.friendRequests)) return;
+    const now = Date.now();
+    let changed = false;
+    for (const r of [...D.friendRequests]) {
+      const to = D.users[r.to];
+      if (!to || !to.bot) continue;
+      const k = r.from + ':' + r.to;
+      let d = decided.get(k);
+      if (!d) {
+        // playing right now: answers in a minute or two; else when they "come back"
+        const delay = live.has(r.to) ? rnd(15e3, 120e3) : rnd(4 * 60e3, 2 * 3600e3);
+        d = { at: Math.max(now, (r.created || now) + delay), yes: Math.random() < 0.85 };
+        decided.set(k, d);
+      }
+      if (now < d.at) continue;
+      decided.delete(k);
+      D.friendRequests = D.friendRequests.filter((x) => x !== r);
+      if (d.yes) {
+        addFriends(r.from, r.to);
+        const b = live.get(r.to);
+        if (b && b.server.sessions.has(r.from) && Math.random() < 0.6) b.say('', pick(b.lang === 'ru' ? ['принял)', 'добавил тебя', 'теперь друзья :)'] : ['accepted :)', 'added u', 'we are friends now :)']));
+      }
+      changed = true;
+    }
+    for (const b of live.values()) {
+      if (b.gone || b.friendAsked) continue;
+      for (const o of b.server.sessions.values()) {
+        if (o === b.session || !o.user || o.user.system) continue;
+        if (now - Math.max(b.session.joinedAt, o.joinedAt) < 150e3) continue; // played together a bit first
+        const k = b.user.id + ':' + o.user.id;
+        if (asked.has(k)) continue;
+        if (asked.size > 20000) asked.clear();
+        asked.add(k);
+        const bot = !!o.user.bot;
+        if (Math.random() > (bot ? 0.12 : 0.1 + b.p.social * 0.2)) continue;
+        if ((D.friends[b.user.id] || []).includes(o.user.id)) continue;
+        if (D.friendRequests.some((r) => (r.from === b.user.id && r.to === o.user.id) || (r.from === o.user.id && r.to === b.user.id))) continue;
+        if (bot) addFriends(b.user.id, o.user.id); // two bots just become friends
+        else {
+          if (now - (lastAsked.get(o.user.id) || 0) < 30 * 60e3) continue; // not every bot at once
+          lastAsked.set(o.user.id, now);
+          D.friendRequests.push({ from: b.user.id, to: o.user.id, created: now });
+          b.later(rnd(1, 4), () => b.say('friend'));
+        }
+        b.friendAsked = true;
+        changed = true;
+        break;
+      }
+    }
+    if (changed) db.save();
+  };
+
   const tick = () => {
+    try { friendsTick(); } catch { /* next time */ }
     try {
       for (const [uid, b] of live) if (b.gone || b.server.closed) live.delete(uid);
       if (!B.enabled) return; // (bots an admin adds by hand still come and go)
@@ -141,7 +205,7 @@ export function installBots(api, { db, manager, requireAdmin, bad }) {
   if (timer.unref) timer.unref();
   manager.bots = {
     stop: () => clearInterval(timer),
-    spawn, tick, live,
+    spawn, tick, live, friendsTick,
   };
 
   // ---------------------------------------------------------------- admin

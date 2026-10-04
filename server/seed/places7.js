@@ -221,9 +221,15 @@ local function msg(text, secs)
 	Debris:AddItem(m, secs or 4)
 end
 
+-- coin shop: skins owned (for good) and worn, boosts for the next round
+local owned, skin, perks = {}, {}, {}
 local function saveStats(p)
 	local ls = p:FindFirstChild("leaderstats")
-	if ls then pcall(function() store:SetAsync("u" .. p.UserId, { coins = ls.Coins.Value, wins = ls.Wins.Value }) end) end
+	if not ls then return end
+	local list = {}
+	for id in pairs(owned[p] or {}) do table.insert(list, id) end
+	local sk = skin[p] or {}
+	pcall(function() store:SetAsync("u" .. p.UserId, { coins = ls.Coins.Value, wins = ls.Wins.Value, owned = table.concat(list, ","), knife = sk.Knife or "", gun = sk.Gun or "" }) end)
 end
 
 local function aliveCount()
@@ -241,6 +247,110 @@ local function checkEnd()
 	if innocents == 0 then winner = "Murderer"; running = false end
 end
 
+-- ---------------------------------------------------------------- the coin shop
+-- In the lobby: knife and gun skins (yours for good: click again to put on or
+-- take off) and boosts for the next round.
+local SKINS = {
+	{ id = "GoldenKnife", name = "Golden Knife", tool = "Knife", price = 60, color = "#ffc400" },
+	{ id = "IceKnife", name = "Ice Knife", tool = "Knife", price = 35, color = "#9fe3ff" },
+	{ id = "BloodKnife", name = "Blood Knife", tool = "Knife", price = 45, color = "#b00020" },
+	{ id = "GoldenGun", name = "Golden Gun", tool = "Gun", price = 60, color = "#ffc400" },
+	{ id = "RubyGun", name = "Ruby Gun", tool = "Gun", price = 30, color = "#e0115f" },
+	{ id = "GalaxyGun", name = "Galaxy Gun", tool = "Gun", price = 45, color = "#6b33ff" },
+}
+local PERKS = {
+	{ id = "murder", name = "Murderer chance x3", price = 20, tip = "Much more likely to be the murderer next round." },
+	{ id = "sheriff", name = "Sheriff chance x3", price = 15, tip = "Much more likely to be the sheriff next round." },
+	{ id = "sprint", name = "Sprint", price = 10, tip = "Run faster next round." },
+	{ id = "magnet", name = "Double Coins", price = 12, tip = "Every coin counts twice next round." },
+}
+
+local function pay(p, price, what)
+	local c = p.leaderstats.Coins
+	if c.Value < price then
+		p:ShowMessage("Not enough coins: " .. what .. " costs " .. price, 3, Color3.fromRGB(255, 90, 90))
+		return false
+	end
+	c.Value = c.Value - price
+	return true
+end
+
+local function buySkin(p, it)
+	owned[p] = owned[p] or {}
+	skin[p] = skin[p] or {}
+	if owned[p][it.id] then
+		if skin[p][it.tool] == it.id then
+			skin[p][it.tool] = nil
+			p:ShowMessage("Took off: " .. it.name, 2)
+		else
+			skin[p][it.tool] = it.id
+			p:ShowMessage("Equipped: " .. it.name, 2, Color3.fromHex(it.color))
+		end
+		saveStats(p)
+		return
+	end
+	if not pay(p, it.price, it.name) then return end
+	owned[p][it.id] = true
+	skin[p][it.tool] = it.id
+	p:ShowMessage("Bought and equipped: " .. it.name .. "!", 3, Color3.fromHex(it.color))
+	saveStats(p)
+end
+
+local function buyPerk(p, it)
+	perks[p] = perks[p] or {}
+	if perks[p][it.id] then p:ShowMessage("You already have " .. it.name .. " for the next round", 3); return end
+	if not pay(p, it.price, it.name) then return end
+	perks[p][it.id] = true
+	p:ShowMessage(it.name .. ": ready for the next round!", 3, Color3.fromRGB(255, 205, 50))
+	p:Notify(it.tip)
+	saveStats(p)
+end
+
+do
+	local shop = Instance.new("Folder")
+	shop.Name = "CoinShop"
+	shop.Parent = workspace:FindFirstChild("Lobby") or workspace
+	local function button(i, label, color, onClick)
+		local b = Instance.new("Part")
+		b.Name = "ShopButton"
+		b.Anchored = true
+		b.Size = Vector3.new(0.6, 3.2, 3.4)
+		b.Position = Vector3.new(-27.2, 7.5, -18 + (i - 1) * 4)
+		b.Color = color
+		b.Material = Enum.Material.Neon
+		b.Parent = shop
+		local t = Instance.new("BillboardText")
+		t.Text = label
+		t.TextSize = 13
+		t.Parent = b
+		local cd = Instance.new("ClickDetector")
+		cd.MaxActivationDistance = 40
+		cd.Parent = b
+		cd.MouseClick:Connect(onClick)
+	end
+	local i = 0
+	for _, it in ipairs(SKINS) do
+		i = i + 1
+		button(i, it.name .. " - " .. it.price .. " coins", Color3.fromHex(it.color), function(p) buySkin(p, it) end)
+	end
+	for _, it in ipairs(PERKS) do
+		i = i + 1
+		button(i, it.name .. " - " .. it.price .. " coins", Color3.fromRGB(255, 205, 50), function(p) buyPerk(p, it) end)
+	end
+	local sign = Instance.new("Part")
+	sign.Name = "ShopSign"
+	sign.Anchored = true
+	sign.CanCollide = false
+	sign.Transparency = 1
+	sign.Size = Vector3.new(1, 1, 1)
+	sign.Position = Vector3.new(-25.5, 11.8, 0)
+	sign.Parent = shop
+	local st = Instance.new("BillboardText")
+	st.Text = "COIN SHOP - click to buy or put on"
+	st.TextSize = 18
+	st.Parent = sign
+end
+
 local function takeTools(p)
 	local bp = p:FindFirstChild("Backpack")
 	if bp then bp:ClearAllChildren() end
@@ -251,8 +361,14 @@ end
 
 local function giveTool(p, name)
 	local bp = p:FindFirstChild("Backpack")
-	if bp then game.ServerStorage[name]:Clone().Parent = bp end
+	if not bp then return end
+	local t = game.ServerStorage[name]:Clone()
+	-- the skin from the coin shop
+	local id = skin[p] and skin[p][name]
+	for _, it in ipairs(SKINS) do if it.id == id then t.Color = Color3.fromHex(it.color) end end
+	t.Parent = bp
 end
+
 
 -- the dropped gun: an innocent who walks over it becomes the hero
 local function dropGun(pos)
@@ -302,9 +418,18 @@ Players.PlayerAdded:Connect(function(p)
 	wins.Name = "Wins"
 	wins.Parent = ls
 	local ok, saved = pcall(function() return store:GetAsync("u" .. p.UserId) end)
-	if ok and type(saved) == "table" then coins.Value = saved.coins or 0; wins.Value = saved.wins or 0 end
+	owned[p], skin[p] = {}, {}
+	if ok and type(saved) == "table" then
+		coins.Value = saved.coins or 0
+		wins.Value = saved.wins or 0
+		for id in string.gmatch(saved.owned or "", "[^,]+") do owned[p][id] = true end
+		if saved.knife and saved.knife ~= "" then skin[p].Knife = saved.knife end
+		if saved.gun and saved.gun ~= "" then skin[p].Gun = saved.gun end
+	end
 	p.CharacterAdded:Connect(function(char)
 		local h = char:WaitForChild("Humanoid")
+		-- no names over heads: you have to work out who the murderer is
+		h.NameDisplayDistance = 0
 		h.Died:Connect(function()
 			if not running or not alive[p] then return end
 			alive[p] = nil
@@ -318,12 +443,13 @@ end)
 Players.PlayerRemoving:Connect(function(p)
 	saveStats(p)
 	alive[p] = nil
+	owned[p], skin[p], perks[p] = nil, nil, nil
 	checkEnd()
 end)
 
-local function spawnCoins()
+local function spawnCoin()
 	local floor = map.Floor
-	for i = 1, 14 do
+	do
 		local c = Instance.new("Part")
 		c.Name = "Coin"
 		c.Shape = Enum.PartType.Cylinder
@@ -340,9 +466,27 @@ local function spawnCoins()
 			local p = Players:GetPlayerFromCharacter(hit.Parent)
 			if not p or not alive[p] or not c.Parent then return end
 			c:Destroy()
-			p.leaderstats.Coins.Value = p.leaderstats.Coins.Value + 1
+			local n = (perks[p] and perks[p].magnet) and 2 or 1
+			p.leaderstats.Coins.Value = p.leaderstats.Coins.Value + n
 		end)
 	end
+end
+
+local function spawnCoins()
+	for i = 1, 14 do spawnCoin() end
+end
+
+-- the more someone wants a role, the likelier they get it
+local function pickFor(list, perk)
+	local w = function(p) return (perks[p] and perks[p][perk]) and 3 or 1 end
+	local total = 0
+	for _, p in ipairs(list) do total = total + w(p) end
+	local r = math.random() * total
+	for i, p in ipairs(list) do
+		r = r - w(p)
+		if r <= 0 then return i end
+	end
+	return #list
 end
 
 local function shuffle(t)
@@ -362,6 +506,11 @@ while true do
 		end
 		players = shuffle(Players:GetPlayers())
 		if #players >= 2 then
+			-- the murderer first, then the sheriff, then everyone else
+			local m = table.remove(players, pickFor(players, "murder"))
+			local sh = table.remove(players, pickFor(players, "sheriff"))
+			table.insert(players, 1, sh)
+			table.insert(players, 1, m)
 			local maps = workspace.Maps:GetChildren()
 			map = maps[math.random(1, #maps)]
 			roles, alive, winner = {}, {}, nil
@@ -374,6 +523,8 @@ while true do
 					alive[p] = true
 					local s = spots[((i - 1) % #spots) + 1]
 					root.CFrame = CFrame.new(s.Position + Vector3.new(0, 3, 0))
+					local h = p.Character:FindFirstChild("Humanoid")
+					if h and perks[p] and perks[p].sprint then h.WalkSpeed = 19 end
 				end
 				if roles[p] == "Murderer" then
 					p:ShowMessage("You are the MURDERER", 4, Color3.fromRGB(255, 60, 60))
@@ -394,6 +545,8 @@ while true do
 			spawnCoins()
 			local t = ROUND
 			while running and t > 0 do
+				-- new coins keep showing up
+				if t % 6 == 0 and #coinFolder:GetChildren() < 22 then spawnCoin() end
 				local n, innocents = aliveCount()
 				hint.Text = map.Name .. "   |   " .. innocents .. " innocent" .. (innocents == 1 and "" or "s") .. " left   |   " .. math.floor(t / 60) .. ":" .. string.format("%02d", t % 60)
 				checkEnd()
@@ -412,6 +565,8 @@ while true do
 					if p.Parent and p ~= murderer then p.leaderstats.Wins.Value = p.leaderstats.Wins.Value + 1 end
 				end
 			end
+			-- the boosts were for this round
+			for p in pairs(roles) do perks[p] = nil end
 			hint.Text = "Round over"
 			wait(5)
 			coinFolder:ClearAllChildren()

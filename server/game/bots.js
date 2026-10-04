@@ -5,7 +5,7 @@
 // physics as the game client and send the same 'move' messages, so the game
 // (scripts, touches, the anti-cheat) treats them like any other player.
 import { BasePart } from '../../shared/engine/instances.js';
-import { partBox, boxAABB, SpatialGrid, rayVsBox, stepCharacter } from '../../shared/engine/physics.js';
+import { partBox, boxAABB, SpatialGrid, rayVsBox, sphereVsBox, stepCharacter } from '../../shared/engine/physics.js';
 
 const SEND_HZ = 15;
 const DANGER = /lava|kill|death|acid|toxic|void|spike|laser|zap/i;
@@ -78,7 +78,7 @@ class BotWorld {
     this.spotsAt = t;
     const spots = [];
     for (const p of this._parts()) {
-      if (!p._p.Anchored || DANGER.test(p.Name) || p._p.Transparency > 0.9) continue;
+      if (!p._p.Anchored || DANGER.test(p.Name) || /ceiling|roof/i.test(p.Name) || p._p.Transparency > 0.9) continue;
       const b = partBox(p);
       if (b.ay[1] < 0.95 || b.shape !== 'Block') continue;
       const w = b.hx * 2, d = b.hz * 2;
@@ -96,6 +96,138 @@ class BotWorld {
     this.spots = spots;
     return spots;
   }
+
+  // ------------------------------------------------------------ pickups
+  // Coins (and MM2's dropped gun) lying around: what people run for.
+  pickups() {
+    const t = this.server.time;
+    if (this.pickAt !== undefined && t - this.pickAt < 0.5) return this.picks;
+    this.pickAt = t;
+    const out = [];
+    const walk = (i) => {
+      for (const c of i._children) {
+        if (c._isCharacter) continue;
+        if (c instanceof BasePart && /coin|gundrop/i.test(c.Name) && c._p.Transparency < 0.9) {
+          const sz = c._p.Size;
+          if (sz.X < 8 && sz.Y < 8 && sz.Z < 8) out.push(c);
+        }
+        if (c._children.length) walk(c);
+      }
+    };
+    walk(this.ws);
+    this.picks = out;
+    return out;
+  }
+
+  // shop buttons (parts named ShopButton with a ClickDetector)
+  buttons() {
+    const t = this.server.time;
+    if (this.btnAt !== undefined && t - this.btnAt < 20) return this.btns;
+    this.btnAt = t;
+    this.btns = this.ws.GetDescendants().filter((d) => d instanceof BasePart && /shopbutton/i.test(d.Name) && d.FindFirstChildOfClass('ClickDetector'));
+    return this.btns;
+  }
+
+  // ------------------------------------------------------------ finding the way
+  // Can a character stand at (x, z) coming from feet height `ref`? Returns the
+  // floor height or null (a wall, the void, lava, no room for the body).
+  standAt(x, z, ref) {
+    const top = ref + 5.6;
+    const r = this.ray(x, top, z, 0, -1, 0, 22);
+    if (r.d >= 22 || r.d < 0.05) return null;
+    if (r.part && DANGER.test(r.part.Name)) return null;
+    const fy = top - r.d;
+    for (const h of [1.3, 3.2, 4.4]) if (this.blocked(x, fy + h, z, 0.8)) return null;
+    return fy;
+  }
+
+  blocked(x, y, z, R) {
+    for (const b of this.query(x - R - 1, z - R - 1, x + R + 1, z + R + 1)) if (sphereVsBox(b, x, y, z, R)) return true;
+    return false;
+  }
+
+  // A* over 2-stud cells: walls, doors, steps (jumps up to 5 studs), drops.
+  // Returns waypoints [{x, z, y (feet), jump}] or null.
+  path(sx, sfeet, sz, gx, gfeet, gz, maxNodes = 2500) {
+    const C = 2;
+    const cell = (v) => Math.round(v / C);
+    const six = cell(sx), siz = cell(sz), gix = cell(gx), giz = cell(gz);
+    const memo = new Map();
+    const stand = (ix, iz, ref) => {
+      const k = ix + ',' + iz + ',' + Math.round(ref);
+      if (!memo.has(k)) memo.set(k, this.standAt(ix * C, iz * C, ref));
+      return memo.get(k);
+    };
+    const start = { ix: six, iz: siz, fy: sfeet, g: 0, f: 0, prev: null, jump: false };
+    const open = [start];
+    const best = new Map([[six + ',' + siz, start]]);
+    const closed = new Set();
+    const h = (n) => Math.hypot(n.ix - gix, n.iz - giz);
+    start.f = h(start);
+    let end = null, n = 0, closest = start;
+    while (open.length && n++ < maxNodes) {
+      // (a small open list: a linear pick is fine and simple)
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+      const cur = open[bi];
+      open[bi] = open[open.length - 1]; open.pop();
+      const key = cur.ix + ',' + cur.iz;
+      if (closed.has(key)) continue;
+      closed.add(key);
+      if (h(cur) < h(closest)) closest = cur;
+      if (Math.abs(cur.ix - gix) <= 1 && Math.abs(cur.iz - giz) <= 1 && Math.abs(cur.fy - gfeet) < 4) { end = cur; break; }
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          if (!dx && !dz) continue;
+          const nx = cur.ix + dx, nz = cur.iz + dz;
+          if (closed.has(nx + ',' + nz)) continue;
+          const fy = stand(nx, nz, cur.fy);
+          if (fy === null) continue;
+          const dy = fy - cur.fy;
+          if (dy > 5 || dy < -14) continue;
+          // no cutting corners past walls
+          if (dx && dz && (stand(cur.ix + dx, cur.iz, cur.fy) === null || stand(cur.ix, cur.iz + dz, cur.fy) === null)) continue;
+          const jump = dy > 1.2;
+          const g = cur.g + (dx && dz ? 1.414 : 1) + (jump ? 3 : 0) + (dy < -4 ? 2 : 0);
+          const k = nx + ',' + nz;
+          const old = best.get(k);
+          if (old && old.g <= g) continue;
+          const node = { ix: nx, iz: nz, fy, g, f: 0, prev: cur, jump };
+          node.f = g + h(node);
+          best.set(k, node);
+          open.push(node);
+        }
+      }
+    }
+    if (!end) return null;
+    const pts = [];
+    for (let x = end; x; x = x.prev) pts.push({ x: x.ix * C, z: x.iz * C, y: x.fy, jump: x.jump });
+    pts.reverse();
+    pts.push({ x: gx, z: gz, y: gfeet, jump: false });
+    // smooth: skip points the bot can walk to in a straight line
+    const out = [pts[0]];
+    let i = 0;
+    while (i < pts.length - 1) {
+      let j = Math.min(pts.length - 1, i + 12);
+      for (; j > i + 1; j--) if (!pts.slice(i + 1, j + 1).some((q) => q.jump) && this._straight(pts[i], pts[j])) break;
+      out.push(pts[j]);
+      i = j;
+    }
+    return out.slice(1);
+  }
+
+  _straight(a, b) {
+    const d = Math.hypot(b.x - a.x, b.z - a.z);
+    const n = Math.ceil(d);
+    let fy = a.y;
+    for (let k = 1; k < n; k++) {
+      const x = a.x + (b.x - a.x) * k / n, z = a.z + (b.z - a.z) * k / n;
+      const y = this.standAt(x, z, fy);
+      if (y === null || Math.abs(y - fy) > 1.2) return false;
+      fy = y;
+    }
+    return true;
+  }
 }
 
 function worldOf(server) { return server._botWorld || (server._botWorld = new BotWorld(server)); }
@@ -112,6 +244,8 @@ const SAY = {
     name: ['what?', 'yes?', 'hm?', 'me?', 'yeah?'],
     cheat: ['ez', 'too slow lol', 'cant catch me', 'im just fast', 'skill issue'],
     afk: ['brb', 'afk', 'afk 1 min'],
+    accuse: ['{n} is the murderer!!', 'ITS {n}', 'run!! {n} has a knife', '{n} is murder', 'sheriff its {n}!'],
+    friend: ['sent u a friend request', 'add me back', 'lets be friends', 'friend me :)'],
   },
   ru: {
     hi: ['привет', 'всем привет', 'хай', 'ку', 'приветик'],
@@ -123,6 +257,8 @@ const SAY = {
     name: ['что?', 'а?', 'да?', 'чего?', 'я?'],
     cheat: ['изи', 'медленные лол', 'не догоните', 'я просто быстрый', 'нубы'],
     afk: ['щас приду', 'афк', 'афк минуту'],
+    accuse: ['{n} убийца!!', 'ЭТО {n}', 'бегите!! у {n} нож', '{n} мардер', 'шериф это {n}!'],
+    friend: ['кинул тебе заявку в друзья', 'добавь меня', 'давай дружить', 'прими заявку)'],
   },
 };
 const HI = /^(hi+|hey+|hello|yo|sup|привет\S*|ку|хай|здаров\S*|всем привет)\b/i;
@@ -172,7 +308,12 @@ export class Bot {
     if (this.gone || !m) return;
     switch (m.t) {
       case 'teleport':
-        if (this.state && Array.isArray(m.cf)) Object.assign(this.state, { x: m.cf[0], y: m.cf[1], z: m.cf[2], vx: 0, vy: 0, vz: 0 });
+        if (this.state && Array.isArray(m.cf)) {
+          Object.assign(this.state, { x: m.cf[0], y: m.cf[1], z: m.cf[2], vx: 0, vy: 0, vz: 0 });
+          this.nav = null;
+          // moved somewhere new (a round started): most people look up from their phone
+          if (this.task.kind === 'afk' && chance(0.85)) this.setTask('idle', rnd(0.5, 3));
+        }
         break;
       case 'impulse':
         if (this.state && Array.isArray(m.v)) { const st = this.state; if (m.set) { st.vx = 0; st.vy = 0; st.vz = 0; } st.vx += +m.v[0] || 0; st.vy += +m.v[1] || 0; st.vz += +m.v[2] || 0; st.grounded = false; st.jumped = true; }
@@ -188,7 +329,10 @@ export class Bot {
     if (this.pendingReply || this.task.kind === 'afk') return;
     const named = text.includes(this.user.username.toLowerCase());
     if (named && chance(0.8)) this.pendingReply = { at: this.server.time + rnd(1.5, 4), what: 'name' };
-    else if (HI.test(text) && chance(0.25 + this.p.chatty * 0.4)) this.pendingReply = { at: this.server.time + rnd(1.5, 5), what: 'reply' };
+    else if (HI.test(text) && this.server.time - (this.lastHiReply || -1e9) > 30 && chance(0.25 + this.p.chatty * 0.4)) {
+      this.lastHiReply = this.server.time;
+      this.pendingReply = { at: this.server.time + rnd(1.5, 5), what: 'reply' };
+    }
     // someone says "follow me": the social ones do
     if (/follow me|за мной|идите за мной/.test(text) && chance(this.p.social * 0.7)) {
       const s = [...this.server.sessions.values()].find((x) => x.user.id === m.userId);
@@ -236,16 +380,18 @@ export class Bot {
       return;
     }
     const others = this.others();
+    // in a round (a role, coins out): no AFK or resets, more hiding
+    const round = !!this._role() || this.world.pickups().length > 0;
     const w = [
       ['walk', 5 * this.p.active],
       ['idle', 1.5],
-      ['afk', this.p.afky * 0.6],
+      ['afk', round ? 0 : this.p.afky * 0.6],
       ['follow', others.length ? 2 * this.p.social : 0],
-      ['hide', this.p.hider * 1.2],
+      ['hide', this.p.hider * (round ? 2.5 : 1.2)],
       ['jump', this.p.jumpy * 0.8],
       ['emote', 0.5],
-      ['tool', this._tools().length ? 1.2 : 0],
-      ['reset', 0.08],
+      ['tool', this._tools().filter((x) => x.Name !== 'Knife' && x.Name !== 'Gun').length ? 1.2 : 0],
+      ['reset', round ? 0 : 0.08],
     ];
     let r = Math.random() * w.reduce((a, x) => a + x[1], 0);
     let kind = 'walk';
@@ -269,7 +415,7 @@ export class Bot {
         this.server.handle(this.session, { t: 'chat', text: '/e ' + pick(EMOTES) });
         this.setTask('idle', rnd(3, 7));
         break;
-      case 'tool': this.setTask('tool', rnd(6, 15), { tool: pick(this._tools()) }); break;
+      case 'tool': this.setTask('tool', rnd(6, 15), { tool: pick(this._tools().filter((x) => x.Name !== 'Knife' && x.Name !== 'Gun')) }); break;
       case 'reset':
         this.server.handle(this.session, { t: 'reset' });
         this.setTask('idle', rnd(2, 4));
@@ -288,7 +434,7 @@ export class Bot {
     for (let i = 0; i < 8; i++) {
       const c = pick(spots);
       const d = Math.hypot(c.x - s.x, c.z - s.z);
-      if (d < 6) continue;
+      if (d < 6 || (c.bad && this.server.time - c.bad < 60)) continue;
       const up = c.y - s.y;
       // far, much higher or much lower spots are less likely
       const score = -(d > range ? d : 0) - Math.max(0, up - 4) * 3 - Math.max(0, -up - 20) + Math.random() * 30;
@@ -306,7 +452,7 @@ export class Bot {
     for (let i = 0; i < 20; i++) {
       const c = pick(spots);
       const d0 = Math.hypot(c.x - this.state.x, c.z - this.state.z);
-      if (d0 > 150) continue;
+      if (d0 > 150 || Math.abs(c.y - this.state.y) > 10 || (c.bad && this.server.time - c.bad < 60)) continue;
       let near = 200, seen = false;
       for (const o of others) {
         const [ox, oy, oz] = o.state.p;
@@ -355,6 +501,7 @@ export class Bot {
       const [x, y, z] = session.state.p;
       this.state = { x, y, z, vx: 0, vy: 0, vz: 0, grounded: false };
       this.burst = null;
+      this.nav = null;
       this.setTask('idle', rnd(0.5, 2.5));
     }
     // sat in a seat: get out after a while
@@ -369,6 +516,7 @@ export class Bot {
       this.nextChat = t + rnd(25, 120) / (0.3 + this.p.chatty);
       if (this.others().length && chance(0.6)) this.say('random');
     }
+    if (t >= (this.nextThink || 0)) { this.nextThink = t + rnd(0.2, 0.35); this._think(t); }
     if (this.cheat) this._cheat(t);
     this._move(dt, hum);
   }
@@ -378,58 +526,66 @@ export class Bot {
     const s = this.state;
     const task = this.task;
     const t = this.server.time;
-    let goal = null, jump = false, speedK = 1;
-    if (task.kind === 'walk' || task.kind === 'jump') goal = task.to;
+    let goal = null, jump = false, speedK = 1, moving = false;
+    const posOf = (o) => ({ x: o.state.p[0], y: o.state.p[1], z: o.state.p[2], moving: true });
+    if (task.kind === 'walk' || task.kind === 'jump' || task.kind === 'flee') goal = task.to;
     else if (task.kind === 'hide') {
       goal = task.to;
-      if (goal && Math.hypot(goal.x - s.x, goal.z - s.z) < 3) { this.setTask('idle', task.wait); }
+      if (goal && Math.hypot(goal.x - s.x, goal.z - s.z) < 3) { this.setTask('idle', task.wait); goal = null; }
+    } else if (task.kind === 'collect') {
+      const c = task.part;
+      if (!c || c._destroyed || !c._parent) { this.task.until = t; } else goal = { x: c._p.CFrame.x, y: c._p.CFrame.y + 1, z: c._p.CFrame.z, near: 0.6 };
     } else if (task.kind === 'follow') {
       const o = task.who;
-      if (!o || !o.character || !this.server.sessions.has(o.user.id)) this.task.until = t;
+      if (!this._alive(o)) this.task.until = t;
       else {
-        const [ox, oy, oz] = o.state.p;
-        const d = Math.hypot(ox - s.x, oz - s.z);
-        if (d > 6) goal = { x: ox, y: oy, z: oz };
+        const d = Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z);
+        if (d > 6) goal = posOf(o);
         if (d > 200) this.task.until = t; // too far, forget it
       }
     } else if (task.kind === 'tool') {
       this._useTool(task);
       const o = task.target;
-      if (o && o.character) { const [ox, oy, oz] = o.state.p; if (Math.hypot(ox - s.x, oz - s.z) > 5) goal = { x: ox, y: oy, z: oz }; }
+      if (this._alive(o) && Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z) > 5) goal = posOf(o);
+    } else if (task.kind === 'hunt' || task.kind === 'shoot') {
+      goal = this._fight(task, t);
     }
     if (task.kind === 'jump' && s.grounded && chance(dt * 4)) jump = true;
     let mx = 0, mz = 0;
     if (goal) {
-      const dx = goal.x - s.x, dz = goal.z - s.z;
-      const d = Math.hypot(dx, dz);
-      if (d < 2) { if (task.kind === 'walk') this.task.until = Math.min(this.task.until, t + rnd(0, 2)); }
-      else {
+      const w = this._steer(goal, t);
+      if (!w) {
+        // can't get there: forget it (and that spot for a while)
+        if (!goal.moving) { goal.bad = t; this.task.until = t; }
+        if (task.kind === 'collect' && task.part) task.part._botSkip = true;
+      } else if (w.arrived) {
+        if (task.kind === 'walk' || task.kind === 'collect') this.task.until = Math.min(this.task.until, t + (task.kind === 'collect' ? 0.2 : rnd(0, 2)));
+      } else {
+        const dx = w.x - s.x, dz = w.z - s.z;
+        const d = Math.hypot(dx, dz) || 1;
         mx = dx / d; mz = dz / d;
-        // wander a little instead of a laser-straight line
-        const wob = Math.sin(t * 0.7 + this.user.id) * 0.25;
-        const c = Math.cos(wob), sn = Math.sin(wob);
-        [mx, mz] = [mx * c - mz * sn, mx * sn + mz * c];
+        moving = true;
+        // a little sway instead of a laser-straight line (only on long legs)
+        if (d > 8) {
+          const wob = Math.sin(t * 0.7 + this.user.id) * 0.18;
+          const c = Math.cos(wob), sn = Math.sin(wob);
+          [mx, mz] = [mx * c - mz * sn, mx * sn + mz * c];
+        }
+        if (s.grounded && w.jump && d < 4) jump = true;
         if (s.grounded) {
-          // a deep drop ahead: jump if the goal is just across, else turn back
-          const ax = s.x + mx * 2.5, az = s.z + mz * 2.5;
-          const f = this.world.floor(ax, s.y, az, 40);
-          const deadly = f.d >= 40 || (f.part && DANGER.test(f.part.Name));
-          if (f.d > 6 && !(f.d < 20 && !deadly)) {
-            // (a small drop: just walk off it)
-            if (d < 16 && goal.y < s.y + 6) jump = true;
-            else { mx = 0; mz = 0; this.task.until = t; }
-          }
-          // blocked: jump over it
+          // blocked: jump, then find the way again
           const sp = Math.hypot(s.vx, s.vz);
           if (sp < hum.WalkSpeed * 0.3 && t - (task.started || 0) > 0.5) {
             this.stuckT += dt;
-            if (this.stuckT > 0.3) jump = true;
-            if (this.stuckT > 4) { this.stuckT = 0; this.task.until = t; if (chance(0.05)) this.server.handle(this.session, { t: 'reset' }); }
+            if (this.stuckT > 0.4) jump = true;
+            if (this.stuckT > 1.5 && this.nav) this.nav.at = -1e9; // repath
+            if (this.stuckT > 5) { this.stuckT = 0; this.task.until = t; if (chance(0.05)) this.server.handle(this.session, { t: 'reset' }); }
           } else this.stuckT = Math.max(0, this.stuckT - dt);
         }
-        if (chance(dt * 0.15 * this.p.jumpy)) jump = true;
+        if (task.kind !== 'hunt' && task.kind !== 'flee' && chance(dt * 0.12 * this.p.jumpy)) jump = true;
       }
     }
+    if (!moving) this.stuckT = 0;
     if (this.burst && this.burst.kind === 'speed') speedK = this.burst.k;
     const humP = { WalkSpeed: Math.max(0, hum.WalkSpeed) * speedK, JumpPower: hum.JumpPower, BodyScale: hum._p.BodyScale || 1 };
     const gravity = this.server.game.Workspace.Gravity;
@@ -449,6 +605,173 @@ export class Bot {
       this.sentStill = s.grounded && hs < 0.1;
       this.server.handle(this.session, { t: 'move', p: [s.x, s.y, s.z], ry: this.ry, a, v: [s.vx, s.vy, s.vz] });
     }
+  }
+
+  _alive(o) {
+    if (!o || !o.character || this.server.sessions.get(o.user.id) !== o) return false;
+    const h = o.character.FindFirstChildOfClass('Humanoid');
+    return !!h && h.Health > 0;
+  }
+
+  // Next point on the way to `goal` (found with BotWorld.path), or null when
+  // there is no way. {arrived: true} once there.
+  _steer(goal, t) {
+    const s = this.state;
+    const feet = s.y - 3;
+    const near = goal.near || 1.6;
+    const d = Math.hypot(goal.x - s.x, goal.z - s.z);
+    if (d < near && Math.abs(goal.y - s.y) < 5) return { arrived: true };
+    let nav = this.nav;
+    const moved = nav && Math.hypot(nav.gx - goal.x, nav.gz - goal.z);
+    const stale = !nav || nav.goal !== goal && moved > (goal.moving ? 5 : 1) || (goal.moving && t - nav.at > 1.5) || t - nav.at > 12;
+    if (stale && t >= (this.nextPath || 0)) {
+      this.nextPath = t + 0.5;
+      // close and clear: just walk
+      let pts = d < 10 && Math.abs(goal.y - s.y) < 2 && this.world._straight({ x: s.x, z: s.z, y: feet }, { x: goal.x, z: goal.z, y: goal.y - 3 })
+        ? [{ x: goal.x, z: goal.z, y: goal.y - 3, jump: false }]
+        : this.world.path(s.x, feet, s.z, goal.x, goal.y - 3, goal.z);
+      nav = this.nav = { goal, gx: goal.x, gz: goal.z, pts, i: 0, at: t };
+    }
+    if (!nav) return goal.moving ? { x: goal.x, z: goal.z } : null;
+    if (!nav.pts) return goal.moving ? { x: goal.x, z: goal.z } : null;
+    while (nav.i < nav.pts.length - 1 && Math.hypot(nav.pts[nav.i].x - s.x, nav.pts[nav.i].z - s.z) < 1.3) nav.i++;
+    const w = nav.pts[nav.i];
+    if (!w) return { arrived: true };
+    if (nav.i === nav.pts.length - 1 && Math.hypot(w.x - s.x, w.z - s.z) < near) return { arrived: true };
+    return w;
+  }
+
+  // ------------------------------------------------------------ Murder Mystery
+  // Roles come from the tools: the knife makes a murderer, the gun a sheriff.
+  _holds(sess, name) {
+    const ch = sess && sess.character;
+    const x = ch && ch.FindFirstChild(name);
+    return !!x && x.ClassName === 'Tool';
+  }
+
+  _has(name) {
+    if (this._holds(this.session, name)) return true;
+    const bp = this.session.player && this.session.player.FindFirstChild('Backpack');
+    return !!(bp && bp.FindFirstChild(name));
+  }
+
+  _role() { return this._has('Knife') ? 'murderer' : this._has('Gun') ? 'sheriff' : ''; }
+
+  _sees(o) {
+    const s = this.state;
+    const [ox, oy, oz] = o.state.p;
+    const d = Math.hypot(ox - s.x, oy - s.y, oz - s.z);
+    if (d < 1) return true;
+    const r = this.world.ray(s.x, s.y + 1.5, s.z, (ox - s.x) / d, (oy - s.y) / d, (oz - s.z) / d, d);
+    return r.d >= d - 1.5;
+  }
+
+  _equip(name) {
+    const ch = this.session.character;
+    if (this._holds(this.session, name)) return ch.FindFirstChild(name);
+    const bp = this.session.player && this.session.player.FindFirstChild('Backpack');
+    const tool = bp && bp.FindFirstChild(name);
+    if (tool) this.server.handle(this.session, { t: 'equip', id: tool.id });
+    return null;
+  }
+
+  // What's going on around: run from a murderer, shoot one, hunt, grab coins
+  // and the dropped gun. Called a few times a second.
+  _think(t) {
+    const s = this.state;
+    const role = this._role();
+    if (role !== this.lastRole) {
+      this.lastRole = role;
+      if (role === 'murderer') this.huntAfter = t + rnd(6, 22); // act normal for a bit first
+      if (role) this.setTask('idle', rnd(0.5, 2));
+      else if (this.session.character) this.server.handle(this.session, { t: 'equip', id: null });
+    }
+    if (this.task.kind === 'afk') return;
+    const busy = ['hunt', 'shoot', 'leaving'].includes(this.task.kind);
+    const others = this.others().filter((o) => this._alive(o));
+    if (role !== 'murderer') {
+      // someone with a knife out, close and in sight
+      const killer = others.find((o) => this._holds(o, 'Knife') && Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z) < (role ? 80 : 40) && this._sees(o));
+      if (killer) {
+        if (!this.accused) this.accused = new Set();
+        if (!this.accused.has(killer.user.id)) {
+          this.accused.add(killer.user.id);
+          if (chance(0.45)) this.later(rnd(0.6, 2), () => this.say('', pick((SAY[this.lang] || SAY.en).accuse).replace('{n}', killer.user.username)));
+        }
+        if (role === 'sheriff' && this.task.kind !== 'shoot') { this.setTask('shoot', rnd(6, 10), { who: killer, fireAt: t + rnd(0.5, 1.2) }); return; }
+        if (!role && this.task.kind !== 'flee') { this.setTask('flee', rnd(4, 7), { to: this._awayFrom(killer) }); return; }
+      }
+    }
+    if (role === 'murderer' && !busy && t >= (this.huntAfter || 0)) {
+      // the one alone first
+      const lonely = others.map((o) => [o, others.filter((x) => x !== o && Math.hypot(x.state.p[0] - o.state.p[0], x.state.p[2] - o.state.p[2]) < 18).length + Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z) / 40]).sort((a, b) => a[1] - b[1]);
+      if (lonely.length) { this.setTask('hunt', rnd(15, 35), { who: chance(0.75) ? lonely[0][0] : pick(lonely)[0] }); return; }
+    }
+    if (busy || this.task.kind === 'flee' || this.task.kind === 'collect') return;
+    const picks = this.world.pickups();
+    // between rounds: now and then spend coins in a shop (buttons people click)
+    if (!role && !picks.length && chance(0.006)) {
+      const btn = this.world.buttons().filter((b) => Math.hypot(b._p.CFrame.x - s.x, b._p.CFrame.z - s.z) < 35);
+      if (btn.length) this.server.handle(this.session, { t: 'click', id: pick(btn).id });
+    }
+    // the dropped gun: an innocent goes for it
+    if (!role) {
+      const gun = picks.find((p) => /gundrop/i.test(p.Name));
+      if (gun && Math.hypot(gun._p.CFrame.x - s.x, gun._p.CFrame.z - s.z) < 140 && chance(0.25 + this.p.social * 0.3)) { this.setTask('collect', 25, { part: gun }); return; }
+    }
+    // coins nearby: most people grab them
+    if (['idle', 'walk', 'jump'].includes(this.task.kind) && picks.length && chance(0.35)) {
+      const near = picks.filter((p) => !/gundrop/i.test(p.Name) && !p._botSkip).map((p) => [p, Math.hypot(p._p.CFrame.x - s.x, p._p.CFrame.z - s.z) + Math.abs(p._p.CFrame.y - s.y) * 3]).filter((x) => x[1] < 70).sort((a, b) => a[1] - b[1]);
+      if (near.length) this.setTask('collect', 12, { part: pick(near.slice(0, 3))[0] });
+    }
+  }
+
+  // somewhere far from someone
+  _awayFrom(o) {
+    const s = this.state;
+    const [ox, , oz] = o.state.p;
+    const spots = this.world.spotList().filter((c) => !c.bad && Math.abs(c.y - s.y) < 6 && Math.hypot(c.x - s.x, c.z - s.z) < 60);
+    let best = null, bestScore = -Infinity;
+    for (let i = 0; i < 14 && spots.length; i++) {
+      const c = pick(spots);
+      const score = Math.hypot(c.x - ox, c.z - oz) - Math.hypot(c.x - s.x, c.z - s.z) * 0.3 + Math.random() * 5;
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return best || { x: s.x + (s.x - ox), y: s.y, z: s.z + (s.z - oz) };
+  }
+
+  // the murderer's knife and the sheriff's gun
+  _fight(task, t) {
+    const s = this.state;
+    const o = task.who;
+    if (!this._alive(o)) {
+      if (task.kind === 'hunt') this.later(rnd(0.5, 2), () => { if (this.task.kind !== 'hunt') this.server.handle(this.session, { t: 'equip', id: null }); });
+      this.task.until = t;
+      return null;
+    }
+    const [ox, oy, oz] = o.state.p;
+    const d = Math.hypot(ox - s.x, oz - s.z);
+    if (task.kind === 'hunt') {
+      if (!this._has('Knife')) { this.task.until = t; return null; }
+      // the knife comes out when close (and away from a crowd, if possible)
+      if (d < 16) {
+        const tool = this._equip('Knife');
+        if (tool && d < 5.5 && t >= (task.nextStab || 0)) {
+          task.nextStab = t + rnd(0.65, 1.2);
+          this.server.handle(this.session, { t: 'activate', id: tool.id, p: [ox, oy, oz] });
+        }
+      }
+      return { x: ox, y: oy, z: oz, moving: true, near: 2.5 };
+    }
+    // sheriff: get a clear look, then fire (people miss sometimes)
+    if (!this._has('Gun')) { this.task.until = t; return null; }
+    const tool = this._equip('Gun');
+    if (tool && t >= task.fireAt && this._sees(o) && d < 90) {
+      const miss = chance(0.3 + d / 200) ? rnd(2, 5) * (chance(0.5) ? 1 : -1) : rnd(-0.6, 0.6);
+      this.server.handle(this.session, { t: 'activate', id: tool.id, p: [ox + miss, oy + rnd(-0.5, 0.8), oz + miss * 0.5] });
+      task.fireAt = t + rnd(3.1, 4);
+    }
+    return d > 25 || !this._sees(o) ? { x: ox, y: oy, z: oz, moving: true, near: 12 } : null;
   }
 
   _useTool(task) {

@@ -168,6 +168,8 @@ export class CharacterView {
     this.tag.style.display = visible ? 'block' : 'none';
     if (!visible) return;
     this.tag.style.transform = `translate(${(v.x * 0.5 + 0.5) * w}px, ${(-v.y * 0.5 + 0.5) * h}px) translate(-50%, -100%)`;
+    // Humanoid.NameDisplayDistance: the game can hide names (0 = never shown)
+    hideName = hideName || dist > (this.nameDist ?? 100) * Math.max(1, this.scale);
     this.tag.querySelector('.nt-name').style.display = hideName ? 'none' : '';
     const hb = this.tag.querySelector('.nt-health');
     const frac = this.maxHealth > 0 ? this.health / this.maxHealth : 0;
