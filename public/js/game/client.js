@@ -13,6 +13,7 @@ import { HUD } from './ui.js';
 import { CharacterView } from './characters.js';
 import * as sound from './sound.js';
 import { discordSession } from '../discord.js';
+import { installTestCheat } from './testcheat.js'; // TEST CHEAT BRANCH ONLY
 // inside Discord (no cookies) the game socket carries the session
 const wsSession = () => { const t = discordSession.get(); return t ? `?rs=${t}` : ''; };
 
@@ -61,6 +62,7 @@ export class GameClient {
     this.views = new Map(); // userId -> CharacterView
     this.playerInfos = new Map();
     this.local = null; // local physics state
+    installTestCheat(this); // TEST CHEAT BRANCH ONLY
     this.userId = null;
     this.running = false;
     this.lastSend = 0;
@@ -597,6 +599,7 @@ export class GameClient {
     const hum = this.myHumanoid();
     const humP = hum ? hum._p : { WalkSpeed: 16, JumpPower: 50, Health: 100, MaxHealth: 100 };
     if (hum && humP.Health <= 0) return;
+    if (this.testCheat) this.testCheat.beforeStep(hum); // TEST CHEAT BRANCH ONLY
 
     // Ride moving platforms.
     if (s.groundPart && s.groundCF && s.groundPart._p.CFrame !== s.groundCF && !s.groundPart._destroyed) {
