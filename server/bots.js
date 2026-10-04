@@ -11,19 +11,75 @@ const POOL_MAX = 120; // bot accounts at most
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
-const SKIN = ['#eab892', '#cc8e69', '#a0703c', '#f5cd30', '#ffcc99', '#d7c59a', '#7c5c46'];
-const CLOTH = ['#c4281c', '#0d69ac', '#4b974b', '#f5cd30', '#6b327c', '#ff66cc', '#da8541', '#1b2a35', '#00aaaa', '#ffffff', '#a3a2a5', '#635f62'];
-const PRE = ['', '', '', '', 'xX', 'Pro', 'Its', 'Mr', 'Lil', 'Super', 'The', 'Epic', 'Cool', 'Dark', 'Mega', 'Real', 'Not', 'Just'];
-const CORE = ['Gamer', 'Builder', 'Noob', 'Ninja', 'Dragon', 'Pizza', 'Cookie', 'Shadow', 'Blox', 'Robi', 'Panda', 'Wolf', 'Fox', 'Kitty', 'Tiger', 'Bacon',
-  'Slayer', 'Storm', 'Pixel', 'Cake', 'Bunny', 'Lava', 'Obby', 'Doge', 'Creeper', 'Frost', 'Toast', 'Sniper', 'Knight', 'Unicorn', 'Potato', 'Banana', 'Rocket', 'Ghost'];
-const RU = ['Sasha', 'Dima', 'Vanya', 'Masha', 'Nastya', 'Kirill', 'Artem', 'Lera', 'Misha', 'Polina', 'Egor', 'Sonya', 'Maks', 'Katya', 'Danya', 'Vika', 'Timur', 'Alina', 'Gleb', 'Dasha'];
+// ---------------------------------------------------------------- names
+// Names like real players pick: a first name with numbers, a word with a
+// birth year, something short made up, a keyboard smash...
+const EN_BOYS = ['jeff', 'alex', 'max', 'ben', 'sam', 'tom', 'jake', 'liam', 'noah', 'ethan', 'ryan', 'tyler', 'dylan', 'josh', 'mason', 'leo', 'chris', 'nick', 'kyle', 'luke', 'owen', 'jack', 'matt', 'danny'];
+const EN_GIRLS = ['mia', 'emma', 'lily', 'ava', 'zoe', 'kate', 'ella', 'chloe', 'ruby', 'amy', 'lucy', 'sophie', 'grace', 'molly', 'hannah', 'bella'];
+const RU_BOYS = ['petr', 'sasha', 'dima', 'vanya', 'misha', 'egor', 'artem', 'kirill', 'maks', 'timur', 'gleb', 'danya', 'nikita', 'vova', 'andrey', 'ilya', 'roma', 'sergey', 'denis', 'pasha', 'arsen', 'lyoha', 'stas', 'kostya'];
+const RU_GIRLS = ['masha', 'nastya', 'lera', 'polina', 'sonya', 'katya', 'vika', 'alina', 'dasha', 'liza', 'anya', 'yulya', 'ksyusha', 'veronika', 'arina', 'milana'];
+const RU_WORDS = ['rossomakh', 'kotik', 'volk', 'zaika', 'ezhik', 'pelmen', 'shrek', 'banan', 'kartoshka', 'medved', 'tigr', 'sobaka', 'lisenok', 'kapibara', 'pirozhok', 'enot', 'barsik', 'kolobok', 'babaika'];
+const EN_WORDS = ['ninja', 'potato', 'cookie', 'panda', 'shadow', 'gamer', 'builder', 'pizza', 'bacon', 'dragon', 'wolf', 'kitty', 'bunny', 'cupcake', 'noob', 'tiger', 'fox', 'cool', 'super', 'crazy'];
+const EN_ENDS = ['kid', 'boy', 'girl', 'lover', 'master', 'man', 'king', 'queen', 'fan'];
+const MASH = ['qwe', 'rty', 'asd', 'fgh', 'zxc', 'ytr', 'dfg', 'hjk', 'yui', 'uio', 'kjh', 'vbn', 'ewq', 'rtyy', 'sdf', 'ghj'];
+const SYL = ['ted', 'mo', 'lo', 'ki', 'ma', 'xi', 'ny', 'ra', 'zu', 'pi', 'ko', 'li', 'vo', 'da', 'shi', 'tu', 'be', 'ni'];
+const ENDS = ['kee', 'ky', 'ik', 'xx', 'y', 'ka', 'sha', 'ito', 'oo', 'ie'];
 
-function makeName(ru) {
-  if (ru) return pick(RU) + pick(['', '_', '']) + pick([String(Math.floor(rnd(1, 99))), String(Math.floor(rnd(2008, 2016))), 'Pro', 'Top', 'Krut', 'YT', String(Math.floor(rnd(100, 9999)))]);
-  const pre = pick(PRE);
-  let n = pre + (pre === 'xX' ? pick(CORE) + 'Xx' : pick(CORE));
-  if (Math.random() < 0.4) n += pick(CORE);
-  return n + pick(['', '', '_' + Math.floor(rnd(1, 999)), String(Math.floor(rnd(1, 9999))), 'YT', '_TV', String(Math.floor(rnd(2007, 2015)))]);
+const digits = (min, max) => String(Math.floor(rnd(min, max)));
+const year = () => digits(2006, 2017);
+const num = () => pick([digits(1, 100), digits(1, 100), year(), digits(100, 1000), digits(1000, 100000), digits(100000, 1000000)]);
+const cap = (w) => w[0].toUpperCase() + w.slice(1);
+
+// -> { name, girl }
+export function makeName(ru) {
+  const girl = Math.random() < 0.4;
+  const first = pick(ru ? (girl ? RU_GIRLS : RU_BOYS) : (girl ? EN_GIRLS : EN_BOYS));
+  const word = pick(ru && Math.random() < 0.7 ? RU_WORDS : EN_WORDS);
+  let n;
+  const r = Math.random();
+  if (r < 0.3) n = first + num(); // petr10140
+  else if (r < 0.38) n = cap(first) + digits(10, 100) + cap(pick(['rut', 'pro', 'kun', 'top', 'ok', 'off', 'x'])); // Jeff69Rut
+  else if (r < 0.56) n = cap(word) + digits(1, 100); // Rossomakh67
+  else if (r < 0.68) n = pick(SYL) + pick(SYL) + pick(ENDS); // tedkee
+  else if (r < 0.76) n = pick(MASH) + pick(MASH).slice(0, 2) + digits(10, 1000000); // rtyydy526263
+  else if (r < 0.86) n = Math.random() < 0.5 ? first + '_' + word : word + '_' + first; // dima_pelmen
+  else n = pick(EN_WORDS) + pick(EN_ENDS.filter((e) => (girl ? !['boy', 'man', 'king'].includes(e) : !['girl', 'queen'].includes(e)))) + (Math.random() < 0.6 ? pick([year(), digits(1, 100)]) : ''); // coolkid2011
+  if (Math.random() < 0.4 && !/_/.test(n)) n = cap(n);
+  return { name: n.slice(0, 20), girl };
+}
+
+// ---------------------------------------------------------------- looks
+// Whole outfits from the official catalog, the way people dress: hair and
+// a face, a shirt with matching pants, sometimes a hat.
+const SKIN = ['#eab892', '#eab892', '#ffcc99', '#f2c6a0', '#cc8e69', '#a0703c', '#7c5c46'];
+const STYLES = [
+  // [weight, girls?, hair, face, shirt, pants, hats (some of the time)]
+  [5, null, ['Bacon Hair', 'Pal Hair'], ['Smile'], ['Blue Hoodie'], ['Jeans'], []], // a new account: the starter look
+  [5, false, ['Bacon Hair', 'Brown Charmer Hair', 'Pal Hair', 'Blonde Spiked Hair'], ['Smile', 'Man Face', 'Chill', 'Winning Smile', 'Silly Fun'], ['Blue Hoodie', 'Red Plaid Shirt', 'Striped Tee', 'Green Camo Jacket'], ['Jeans', 'Khakis', 'Black Pants', 'Camo Pants'], ['Classic Robis Cap', 'Beanie', 'Headphones', 'Sunglasses']],
+  [4, true, ['Long Pink Hair', 'Brown Charmer Hair', 'Blonde Spiked Hair'], ['Woman Face', 'Smile', 'Super Super Happy Face', 'Winning Smile'], ['Striped Tee', 'Blue Hoodie', 'Red Plaid Shirt'], ['Black Pants', 'Jeans', 'Khakis'], ['Party Hat', 'Beanie', 'Tiny Wings', 'Headphones']],
+  [1.5, false, ['Brown Charmer Hair', 'Pal Hair'], ['Man Face', 'Chill'], ['Black Suit'], ['Suit Pants'], ['Stylish Top Hat', 'Sunglasses']],
+  [1.5, null, ['Bacon Hair', 'Pal Hair'], ['Epic Face', 'Silly Fun', 'Shocked'], ['Green Camo Jacket', 'Blue Hoodie'], ['Camo Pants', 'Black Pants'], ['Headphones', 'Viking Helm', 'Pirate Hat', 'Traffic Cone']],
+  [1, null, ['Bacon Hair'], ['Smile'], ['Builders Club Shirt'], ['Black Pants', 'Jeans'], ['Classic Robis Cap']],
+];
+
+function makeLook(girl, byName) {
+  const id = (n) => (byName[n] ? byName[n].id : null);
+  const skin = pick(SKIN);
+  // the classic noob: no clothes, yellow, blue and green
+  if (Math.random() < 0.07) {
+    return { bodyColors: { head: '#f5cd30', leftArm: '#f5cd30', rightArm: '#f5cd30', torso: '#0d69ac', leftLeg: '#4b974b', rightLeg: '#4b974b' }, wearing: [id('Smile'), Math.random() < 0.4 ? id('Noob') : null].filter(Boolean) };
+  }
+  const fits = STYLES.filter((x) => x[1] === null || x[1] === girl);
+  let r = Math.random() * fits.reduce((a, x) => a + x[0], 0);
+  let st = fits[0];
+  for (const x of fits) { if ((r -= x[0]) <= 0) { st = x; break; } }
+  const [, , hair, face, shirt, pants, hats] = st;
+  const wearing = [pick(hair), pick(face), pick(shirt), pick(pants)];
+  if (hats.length && Math.random() < 0.35) wearing.push(pick(hats));
+  if (Math.random() < 0.1) wearing.push(pick(['Robis Logo T-Shirt', 'I <3 Robis', 'Gold Star', 'Oof']));
+  const shirtItem = byName[wearing[2]], pantsItem = byName[wearing[3]];
+  const tc = shirtItem?.data?.color || skin, lc = pantsItem?.data?.color || skin;
+  return { bodyColors: { head: skin, leftArm: skin, rightArm: skin, torso: tc, leftLeg: lc, rightLeg: lc }, wearing: wearing.map(id).filter(Boolean) };
 }
 
 export function installBots(api, { db, manager, requireAdmin, bad }) {
@@ -38,36 +94,61 @@ export function installBots(api, { db, manager, requireAdmin, bad }) {
   const validName = (n) => /^[A-Za-z0-9_]{3,20}$/.test(n) && !/^_|_$/.test(n) && (n.match(/_/g) || []).length <= 1;
   const taken = (n) => Object.values(D.users).some((u) => u.username.toLowerCase() === n.toLowerCase());
 
-  const looks = () => {
-    const skin = pick(SKIN);
-    const noob = Math.random() < 0.15; // the classic yellow-blue-green
-    const shirt = pick(CLOTH), pants = pick(CLOTH);
-    const bodyColors = noob
-      ? { head: '#f5cd30', leftArm: '#f5cd30', rightArm: '#f5cd30', torso: '#0d69ac', leftLeg: '#4b974b', rightLeg: '#4b974b' }
-      : { head: skin, leftArm: skin, rightArm: skin, torso: shirt, leftLeg: pants, rightLeg: pants };
-    const items = Object.values(D.items).filter((i) => !i.limited && (i.price || 0) <= 400 && !i.custom);
-    const wearing = [];
-    if (!noob) {
-      for (const [type, p] of [['Shirt', 0.85], ['Pants', 0.85], ['Hat', 0.45], ['Hair', 0.55], ['Face', 0.5], ['TShirt', 0.15]]) {
-        const of = items.filter((i) => i.type === type);
-        if (of.length && Math.random() < p) wearing.push(pick(of).id);
-      }
+  // the official catalog by name (outfits only use those)
+  const catalog = () => {
+    const out = {};
+    for (const i of Object.values(D.items)) if (!i.limited && !i.custom && !out[i.name]) out[i.name] = i;
+    return out;
+  };
+  // Bots signed up while Robis has been around (not before the first real
+  // players), more of them lately.
+  const siteStart = () => {
+    const real = Object.values(D.users).filter((u) => !u.bot && !u.system && u.created).map((u) => u.created);
+    return Math.min(Date.now() - 86400e3, real.length ? Math.min(...real) : Date.now());
+  };
+  const joinDate = () => {
+    const a = siteStart(), b = Date.now() - 3600e3;
+    return Math.floor(a + (b - a) * Math.pow(Math.random(), 0.7));
+  };
+  const freshName = (ru) => {
+    for (let i = 0; i < 40; i++) {
+      const x = makeName(ru);
+      if (validName(x.name) && !taken(x.name)) return x;
     }
-    return { bodyColors, wearing };
+    return null;
+  };
+  const dress = (u, girl) => {
+    u.avatar = makeLook(girl, catalog());
+    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...u.avatar.wearing])];
   };
 
   const newBotUser = () => {
     const ru = Math.random() * 100 < B.ru;
-    let name = '';
-    for (let i = 0; i < 30 && (!name || !validName(name) || taken(name)); i++) name = makeName(ru);
-    if (!validName(name) || taken(name)) return null;
-    const u = createUser(db, name, null, { bot: true, botLang: ru ? 'ru' : 'en', robits: Math.floor(rnd(0, 600)), created: Date.now() - Math.floor(rnd(5, 900)) * 86400e3 });
+    const nm = freshName(ru);
+    if (!nm) return null;
+    const u = createUser(db, nm.name, null, { bot: true, botLang: ru ? 'ru' : 'en', girl: nm.girl, robits: Math.floor(rnd(20, 2500)), created: joinDate() });
     delete u.salt; delete u.hash;
-    u.avatar = looks();
-    D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...u.avatar.wearing])];
+    u.lastOnline = u.created;
+    dress(u, nm.girl);
     db.save();
     return u;
   };
+
+  // Bot accounts from before: new names, outfits and sign-up dates (once).
+  if ((B.looks || 1) < 2) {
+    for (const u of Object.values(D.users)) {
+      if (!u.bot) continue;
+      const ru = u.botLang === 'ru';
+      const nm = freshName(ru);
+      if (nm) { u.username = nm.name; u.girl = nm.girl; }
+      dress(u, !!u.girl);
+      u.created = joinDate();
+      if ((u.lastOnline || 0) < u.created) u.lastOnline = u.created;
+      if (u.robits < 20) u.robits = Math.floor(rnd(20, 2500));
+    }
+    B.looks = 2;
+    db.save();
+  }
 
   const freeBotUser = () => {
     const free = Object.values(D.users).filter((u) => u.bot && !u.banned && !live.has(u.id) && !manager.findUser(u.id));
