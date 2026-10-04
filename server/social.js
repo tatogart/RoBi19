@@ -3,8 +3,9 @@
 // ban becomes a mute or a trade ban) and ban appeals with a screenshot or a
 // video.
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
+// bare names: the phone / standalone build swaps them for empty modules (then files stay in memory)
+import fs from 'fs';
+import path from 'path';
 
 const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').trim().slice(0, n);
 const int = (v, lo, hi, d = lo) => { const n = Math.trunc(+v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d; };
@@ -22,9 +23,11 @@ export function installSocial(api, ctx) {
   if (!D.appeals) D.appeals = [];
   const now = () => Date.now();
   // appeal screenshots / videos live in files next to the database
-  const mediaDir = path.join(db.dir || '.', 'appeals');
+  const hasFiles = typeof fs.writeFileSync === 'function' && !!db.dir;
+  const mediaDir = hasFiles ? path.join(db.dir, 'appeals') : '';
   const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov' };
-  const mediaPath = (a) => path.join(mediaDir, `${a.id}.${EXT[a.mediaType] || 'bin'}`);
+  const mediaPath = (a) => (hasFiles ? path.join(mediaDir, `${a.id}.${EXT[a.mediaType] || 'bin'}`) : '');
+  const memMedia = new Map(); // standalone: appeal id -> data URL
   const friends = (a, b) => (D.friends[a] || []).includes(b);
 
   // ---------------------------------------------------------------- sales
@@ -254,8 +257,10 @@ export function installSocial(api, ctx) {
       reason, explanation, media: false, mediaType: media ? media.slice(5, media.indexOf(';')) : '',
     };
     if (media) {
-      fs.mkdirSync(mediaDir, { recursive: true });
-      fs.writeFileSync(mediaPath(a), Buffer.from(media.slice(media.indexOf(',') + 1), 'base64'));
+      if (hasFiles) {
+        fs.mkdirSync(mediaDir, { recursive: true });
+        fs.writeFileSync(mediaPath(a), Buffer.from(media.slice(media.indexOf(',') + 1), 'base64'));
+      } else memMedia.set(a.id, media);
       a.media = true;
     }
     D.appeals.push(a);
@@ -276,7 +281,17 @@ export function installSocial(api, ctx) {
   // the screenshot / video of an appeal
   api.get('/admin/appeals/:id/media', requireStaff, (req, res) => {
     const a = D.appeals.find((x) => x.id === +req.params.id);
-    if (!a || !a.media || !fs.existsSync(mediaPath(a))) return bad(res, 'No file', 404);
+    if (!a || !a.media) return bad(res, 'No file', 404);
+    if (!hasFiles) {
+      // the phone / standalone version: the file is kept in memory
+      const m = memMedia.get(a.id);
+      if (!m) return bad(res, 'No file', 404);
+      const bin = atob(m.slice(m.indexOf(',') + 1));
+      res.setHeader('Content-Type', a.mediaType);
+      res.body = new Blob([Uint8Array.from(bin, (c) => c.charCodeAt(0))], { type: a.mediaType });
+      return;
+    }
+    if (!fs.existsSync(mediaPath(a))) return bad(res, 'No file', 404);
     res.setHeader('Content-Type', a.mediaType);
     res.setHeader('Content-Security-Policy', "default-src 'none'");
     res.sendFile(path.resolve(mediaPath(a)));
