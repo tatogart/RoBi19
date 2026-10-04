@@ -15,3 +15,9 @@ fs.writeFileSync(new URL('./robis-cheat.user.js', import.meta.url), `// ==UserSc
 // ==/UserScript==
 ${src}`);
 console.log('bookmarklet:', min.length, 'chars');
+// the short one, for phones
+const lite = (await esbuild.transform(fs.readFileSync(new URL('./robis-cheat-lite.js', import.meta.url), 'utf8'), { minify: true, target: 'es2020' })).code.trim();
+// only the characters a bookmark needs escaped: it stays short and readable
+const liteUrl = 'javascript:' + lite.replace(/%/g, '%25').replace(/#/g, '%23').replace(/\n/g, ' ');
+fs.writeFileSync(new URL('./bookmarklet-lite.txt', import.meta.url), liteUrl + '\n');
+console.log('lite bookmarklet:', liteUrl.length, 'chars');
