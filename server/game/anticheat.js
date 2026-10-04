@@ -72,7 +72,9 @@ export class AntiCheat {
       if (ac.score >= 6) this.suspect(session, ac);
     };
     // teleport: far in one step (sideways, or straight up)
-    if (d > Math.max(30, walk * dt * 4) || ny - oy > Math.max(30, 120 * dt)) { strike('teleport', 4, `moved ${Math.hypot(nx - ox, ny - oy, nz - oz).toFixed(0)} studs in ${dt.toFixed(2)} s`); ac.dist = 0; ac.span = 0; ac.riseFrom = null; return; }
+    // (the most a launch pad / trampoline can lift you in dt: v = 120, gravity)
+    const tUp = Math.min(dt, 0.6);
+    if (d > Math.max(30, walk * dt * 4) || ny - oy > Math.max(30, 120 * tUp - 98 * tUp * tUp + 6)) { strike('teleport', 4, `moved ${Math.hypot(nx - ox, ny - oy, nz - oz).toFixed(0)} studs in ${dt.toFixed(2)} s`); ac.dist = 0; ac.span = 0; ac.riseFrom = null; return; }
     // speed: over about a second
     ac.dist += d; ac.span += dt;
     if (ac.span >= 1) {
