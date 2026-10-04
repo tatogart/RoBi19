@@ -29,7 +29,7 @@ export function createViewer(root, rp, { onProgress } = {}) {
   const camBtn = el('button', { class: 'btn btn-small on', text: tr('🎯 Follow suspect') });
   const xrayBtn = el('button', { class: 'btn btn-small', text: tr('👁 X-ray walls') });
   const restart = el('button', { class: 'btn btn-small', text: '⟲' });
-  root.replaceChildren(el('div', { class: 'ow-stage' }, canvas, el('div', { class: 'ow-legend' }, el('span', { class: 'ow-sus', text: tr('SUSPECT') }), ' ', el('b', { class: 'no-i18n', text: rp.bots[rp.suspect].name }))),
+  root.replaceChildren(el('div', { class: 'ow-stage' }, canvas, el('div', { class: 'ow-legend' }, el('span', { class: 'ow-sus', text: tr('SUSPECT') }), ' ', el('b', { class: 'no-i18n', text: rp.bots[rp.suspect].name }), rp.real ? el('span', { class: 'ow-real', text: ' · ' + tr('a real game') }) : null)),
     el('div', { class: 'ow-controls' }, playBtn, restart, time, clock, speedBtn, camBtn, xrayBtn));
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -41,23 +41,27 @@ export function createViewer(root, rp, { onProgress } = {}) {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.4));
   const sun = new THREE.DirectionalLight(0xffffff, 1.8);
   sun.position.set(40, 80, 30);
-  sun.castShadow = true;
+  sun.castShadow = !rp.real; // real maps can be anywhere: no shadows there
   Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70 });
   sun.shadow.mapSize.set(1024, 1024);
   scene.add(sun);
   const A = rp.arena;
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(A * 2, 1, A * 2), new THREE.MeshLambertMaterial({ color: '#5b8f4f' }));
-  floor.position.y = -0.5; floor.receiveShadow = true; scene.add(floor);
-  const grid = new THREE.GridHelper(A * 2, A / 2, 0x3f6b37, 0x4c7d44); grid.position.y = 0.02; scene.add(grid);
+  // a real game brings its own map (the parts around the action)
+  const [CX, CZ] = rp.center || [0, 0];
+  if (!rp.real) {
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(A * 2, 1, A * 2), new THREE.MeshLambertMaterial({ color: '#5b8f4f' }));
+    floor.position.y = -0.5; floor.receiveShadow = true; scene.add(floor);
+    const grid = new THREE.GridHelper(A * 2, A / 2, 0x3f6b37, 0x4c7d44); grid.position.y = 0.02; scene.add(grid);
+  }
   const wallMats = [];
   for (const w of rp.walls) {
     const m = new THREE.MeshLambertMaterial({ color: w.color, transparent: true, opacity: 1 });
     wallMats.push(m);
     const b = new THREE.Mesh(new THREE.BoxGeometry(w.w, w.h, w.d), m);
-    b.position.set(w.x, w.h / 2, w.z); b.castShadow = true; b.receiveShadow = true;
+    b.position.set(w.x, w.y ?? w.h / 2, w.z); b.castShadow = true; b.receiveShadow = true;
     scene.add(b);
   }
-  for (const [x, z, sx, sz] of [[0, -A, A * 2, 1], [0, A, A * 2, 1], [-A, 0, 1, A * 2], [A, 0, 1, A * 2]]) {
+  for (const [x, z, sx, sz] of rp.real ? [] : [[0, -A, A * 2, 1], [0, A, A * 2, 1], [-A, 0, 1, A * 2], [A, 0, 1, A * 2]]) {
     const b = new THREE.Mesh(new THREE.BoxGeometry(sx, 3, sz), new THREE.MeshLambertMaterial({ color: '#635f62' }));
     b.position.set(x, 1.5, z); scene.add(b);
   }
@@ -153,7 +157,7 @@ export function createViewer(root, rp, { onProgress } = {}) {
       bot.av.group.visible = !(bot.flash > 0 && Math.floor(now / 60) % 2);
       if (i === rp.suspect && follow) target.lerp(new THREE.Vector3(x, y, z), Math.min(1, dt * 6));
     });
-    if (!follow) target.lerp(new THREE.Vector3(0, 0, 0), Math.min(1, dt * 3));
+    if (!follow) target.lerp(new THREE.Vector3(CX, 0, CZ), Math.min(1, dt * 3));
     for (const bm of beams.splice(0)) { bm.life -= dt; if (bm.life > 0) { bm.line.material.opacity = bm.life * 4; beams.push(bm); } else { scene.remove(bm.line); bm.line.geometry.dispose(); bm.line.material.dispose(); } }
     for (const pf of poofs.splice(0)) { pf.life -= dt; if (pf.life > 0) { pf.p.scale.setScalar(1 + (0.5 - pf.life) * 3); pf.p.material.opacity = pf.life; poofs.push(pf); } else { scene.remove(pf.p); } }
     const d = follow ? dist * 0.55 : dist * 1.4;

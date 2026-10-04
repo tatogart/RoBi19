@@ -1893,3 +1893,43 @@ test('Robis Overwatch: access, weekly cases, verdicts and the admin view', async
   await call('POST', '/admin/overwatch', { op: 'remove', user: 'Detective' }, admin);
   assert.equal((await call('GET', '/overwatch', null, p.cookie)).data.access, false);
 });
+
+test('the anti-cheat turns a speed-hacker into a real Overwatch case', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const hacker = await call('POST', '/auth/signup', { username: 'SpeedyHax', password: 'secret123' });
+  const honest = await call('POST', '/auth/signup', { username: 'HonestAbe', password: 'secret123' });
+  const cross = (await call('GET', '/games?q=Crossroads')).data.games.find((g) => g.name === 'Crossroads');
+  const h = await join(hacker.cookie, { placeId: cross.id });
+  await h.wait((m) => m.t === 'welcome');
+  const o = await join(honest.cookie, { placeId: cross.id });
+  await o.wait((m) => m.t === 'welcome');
+  await new Promise((r) => setTimeout(r, 3300)); // just spawned: no checks yet
+  // the honest player walks at 16 studs/s, the hacker runs at 90 and teleports
+  let hx = 0, ox = 5;
+  for (let i = 0; i < 45; i++) {
+    hx += i % 15 === 14 ? 60 : 9;
+    ox += 1.6;
+    h.ws.send(JSON.stringify({ t: 'move', p: [hx, 3, 20], ry: 0, a: 'walk' }));
+    o.ws.send(JSON.stringify({ t: 'move', p: [ox, 3, -20], ry: 0, a: 'walk' }));
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  await new Promise((r) => setTimeout(r, 4600)); // the case is made a few seconds later
+  const r = (await call('GET', '/admin/overwatch', null, admin)).data;
+  const c = r.real.find((x) => x.username === 'SpeedyHax');
+  assert.ok(c, JSON.stringify(r.real));
+  assert.ok(c.why.speed || c.why.teleport);
+  assert.ok(!r.real.some((x) => x.username === 'HonestAbe'));
+  const full = (await call('GET', `/admin/overwatch/case/${c.id}`, null, admin)).data;
+  assert.equal(full.replay.real, true);
+  assert.equal(full.replay.bots[0].name, 'SpeedyHax');
+  assert.ok(full.replay.bots.some((b) => b.name === 'HonestAbe'));
+  assert.ok(full.replay.frames.length > 50 && full.replay.walls.length > 0);
+  // investigators can get it; the suspect can't judge their own case
+  await call('POST', '/admin/overwatch', { op: 'add', user: 'HonestAbe' }, admin);
+  let got = null;
+  for (let i = 0; i < 12 && !got; i++) { const x = (await call('GET', '/overwatch/case', null, honest.cookie)).data; if (x.real) got = x; }
+  assert.ok(got && got.id === c.id);
+  await call('POST', '/admin/overwatch', { op: 'real', id: c.id, status: 'cheater' }, admin);
+  assert.equal((await call('GET', '/admin/overwatch', null, admin)).data.real.find((x) => x.id === c.id).status, 'cheater');
+  h.ws.close(); o.ws.close();
+});

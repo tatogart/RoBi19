@@ -14,6 +14,7 @@ import { installServices } from './services.js';
 import { filterChat } from './chatfilter.js';
 import { findHuntSpot } from './huntspot.js';
 import { RUNE_TIME } from '../huntquests.js';
+import { AntiCheat } from './anticheat.js';
 
 const TICK_HZ = 30;
 const REPLICATED = new Set(['Workspace', 'Players', 'Lighting', 'ReplicatedStorage', 'StarterGui', 'Teams']);
@@ -83,6 +84,7 @@ export class GameServer {
     for (const d of game.GetDescendants()) if (d instanceof Script) this._maybeQueueScript(d);
     this.touching = new Map(); // key -> [a, b]
     this.grid = new SpatialGrid(16);
+    this.anticheat = new AntiCheat(this);
     this.timer = setInterval(() => this.tick(), 1000 / TICK_HZ);
     this.lastTick = performance.now();
     this.emptySince = Date.now();
@@ -909,6 +911,8 @@ export class GameServer {
     }
     session.character = model;
     session.state = { p: [cf.x, cf.y, cf.z], ry: 0, a: 'idle', v: [0, 0, 0] };
+    session.spawnedAt = this.time;
+    session.ac = null;
     session.respawnAt = 0;
     model.Parent = this.game.Workspace;
     player.Character = model;
@@ -1158,6 +1162,7 @@ export class GameServer {
       v.model.Parent = v.parent;
     }
     this.send(session, { t: 'drive', on: false });
+    session.lastServerTp = this.time; // getting out of a car moves the player
     // Step out beside the car, not inside it.
     if (aside && session.character) {
       const ry = session.state.ry || 0;
@@ -1173,6 +1178,7 @@ export class GameServer {
     this._posing = false;
     if (session) {
       session.state.p = [cf.x, cf.y, cf.z];
+      session.lastServerTp = this.time; // the anti-cheat lets this jump through
       // A just-loaded character must reach the client first, or its spawn would undo the teleport.
       if (this.queue.some((op) => op[0] === 'char')) this.flush();
       this.send(session, { t: 'teleport', cf: cf.toArray() });
@@ -1188,6 +1194,7 @@ export class GameServer {
         const hum = ch.FindFirstChildOfClass('Humanoid');
         const [x, y, z] = msg.p.map(Number);
         if (![x, y, z].every(Number.isFinite)) return;
+        if (!this.isTest && !this.privateId) this.anticheat.check(session, x, y, z);
         session.state = { p: [x, y, z], ry: +msg.ry || 0, a: String(msg.a || 'idle').slice(0, 16), v: msg.v || [0, 0, 0] };
         if (hum && hum.Health > 0) {
           this._posing = true;
@@ -1285,6 +1292,7 @@ export class GameServer {
       this._physics(dt);
       this._touches();
       this._checkCharacters();
+      if (!this.isTest) this.anticheat.sample();
       this.game.GetService('RunService')._fire('Heartbeat', dt);
       if (Math.floor(this.time / 30) !== Math.floor((this.time - dt) / 30)) this.rt.collectInstances();
     } catch (e) {

@@ -9,10 +9,30 @@ const MONDAY = Date.UTC(2024, 0, 1); // a Monday
 const weekNo = (t = Date.now()) => Math.floor((t - MONDAY) / WEEK);
 const PER_WEEK = 10;
 
-export function installOverwatch(api, { db, requireUser, requireAdmin, bad, hooks, log }) {
+export function installOverwatch(api, { db, manager, requireUser, requireAdmin, bad, hooks, log }) {
   const D = db.data;
   if (!D.overwatch) D.overwatch = { mode: 'chosen', access: [], salt: 0, answers: [] };
   const O = D.overwatch;
+  if (!O.real) O.real = [];
+  if (O.anticheat === undefined) O.anticheat = true;
+  // Real cases: made by the anti-cheat in games (server/game/anticheat.js).
+  // Nobody knows the truth: the investigators vote, the admins decide.
+  const REAL_KEEP = 30;
+  if (manager) manager.overwatch = {
+    enabled: () => !!O.anticheat,
+    addCase: (c) => {
+      const id = 'r' + ((O.realNext = (O.realNext || 0) + 1));
+      O.real.push({ id, created: Date.now(), status: 'open', gameName: D.games[c.gameId]?.name || 'a game', ...c });
+      // keep the newest; decided ones go first
+      while (O.real.length > REAL_KEEP) {
+        const i = O.real.findIndex((x) => x.status !== 'open');
+        O.real.splice(i >= 0 ? i : 0, 1);
+      }
+      db.save();
+    },
+  };
+  const realById = (id) => O.real.find((x) => x.id === id);
+  const realVotes = (r) => { const a = O.answers.filter((x) => x.caseId === r.id); return { cheater: a.filter((x) => x.verdict === 'cheater').length, fair: a.filter((x) => x.verdict === 'fair').length }; };
   const hasAccess = (u) => !!u && !u.system && (u.isAdmin || O.mode === 'everyone' || (O.mode === 'chosen' && O.access.includes(u.id)));
   hooks.overwatchAccess = hasAccess;
 
@@ -39,7 +59,7 @@ export function installOverwatch(api, { db, requireUser, requireAdmin, bad, hook
   const opened = new Map(); // `${uid}:${caseId}` -> when the replay was sent (to stop instant answers)
 
   const stats = (uid) => {
-    const mine = O.answers.filter((a) => a.uid === uid);
+    const mine = O.answers.filter((a) => a.uid === uid && !a.real);
     const thisWeek = weekNo();
     const done = mine.filter((a) => a.week < thisWeek); // results only show after the week
     const correct = done.filter((a) => a.correct).length;
@@ -66,7 +86,14 @@ export function installOverwatch(api, { db, requireUser, requireAdmin, bad, hook
     const u = req.user;
     if (!hasAccess(u)) return bad(res, 'You don\'t have access to Overwatch.', 403);
     const answered = new Set(O.answers.filter((a) => a.uid === u.id).map((a) => a.caseId));
+    // a real case from a game (half the time, when there is one)
+    const real = O.real.filter((r) => r.status === 'open' && r.uid !== u.id && !answered.has(r.id));
     const left = casesFor(weekNo()).filter((c) => !answered.has(c.id));
+    if (real.length && (!left.length || Math.random() < 0.5)) {
+      const r = real[0];
+      opened.set(`${u.id}:${r.id}`, Date.now());
+      return res.json({ id: r.id, real: true, number: PER_WEEK - left.length + 1, of: PER_WEEK, replay: r.replay });
+    }
     if (!left.length) return res.json({ done: true });
     const c = left[Math.floor(Math.random() * left.length)];
     opened.set(`${u.id}:${c.id}`, Date.now());
@@ -76,6 +103,22 @@ export function installOverwatch(api, { db, requireUser, requireAdmin, bad, hook
   api.post('/overwatch/case/:id', requireUser, (req, res) => {
     const u = req.user;
     if (!hasAccess(u)) return bad(res, 'You don\'t have access to Overwatch.', 403);
+    const r = realById(req.params.id);
+    if (r) {
+      if (r.status !== 'open' || r.uid === u.id) return bad(res, 'This case is closed. Watch a new one!', 404);
+      if (O.answers.some((a) => a.uid === u.id && a.caseId === r.id)) return bad(res, 'You already judged this case.');
+      const verdict = req.body?.verdict === 'cheater' ? 'cheater' : req.body?.verdict === 'fair' ? 'fair' : '';
+      if (!verdict) return bad(res, 'Cheater or fair?');
+      const at = opened.get(`${u.id}:${r.id}`);
+      if (!at || Date.now() - at < 4000) return bad(res, 'Watch the replay first!');
+      const tags = (Array.isArray(req.body?.tags) ? req.body.tags : []).filter((t) => TAGS.includes(t)).slice(0, 6);
+      O.answers.push({ uid: u.id, caseId: r.id, week: weekNo(), salt: -1, real: true, verdict, tags, correct: null, t: Date.now() });
+      // enough votes: the case waits for the admins with the players' verdict
+      const v = realVotes(r);
+      if (v.cheater + v.fair >= 3) r.verdict = v.cheater / (v.cheater + v.fair) >= 0.7 ? 'cheater' : v.fair / (v.cheater + v.fair) >= 0.7 ? 'fair' : 'unsure';
+      db.save();
+      return res.json({ ok: true, stats: stats(u.id) });
+    }
     const c = caseById(req.params.id);
     if (!c || c.week !== weekNo()) return bad(res, 'This case is closed. Watch a new one!', 404);
     if (O.answers.some((a) => a.uid === u.id && a.caseId === c.id)) return bad(res, 'You already judged this case.');
@@ -103,22 +146,25 @@ export function installOverwatch(api, { db, requireUser, requireAdmin, bad, hook
       return { id: c.id, kind: c.kind, kindName: OW_KIND_NAMES[c.kind], suspect: r.bots[r.suspect].name, votes: { cheater: a.filter((x) => x.verdict === 'cheater').length, fair: a.filter((x) => x.verdict === 'fair').length }, correct: a.length ? Math.round((a.filter((x) => x.correct).length / a.length) * 100) : null };
     });
     const by = new Map();
-    for (const a of O.answers) {
+    for (const a of O.answers.filter((x) => !x.real)) {
       const e = by.get(a.uid) || { uid: a.uid, answered: 0, correct: 0, thisWeek: 0, last: 0 };
       e.answered++; if (a.correct) e.correct++; if (a.week === week) e.thisWeek++; e.last = Math.max(e.last, a.t);
       by.set(a.uid, e);
     }
     res.json({
-      mode: O.mode, week, nextWeek: MONDAY + (week + 1) * WEEK,
+      mode: O.mode, anticheat: !!O.anticheat, week, nextWeek: MONDAY + (week + 1) * WEEK,
+      real: O.real.slice().reverse().map((r) => ({ id: r.id, created: r.created, status: r.status, uid: r.uid, username: r.username, gameName: r.gameName, why: r.why, detail: r.detail, votes: realVotes(r), verdict: r.verdict || '' })),
       access: O.access.map((id) => ({ id, username: D.users[id]?.username || '?' })),
       cases,
       investigators: [...by.values()].map((e) => ({ ...e, username: D.users[e.uid]?.username || '?', accuracy: Math.round((e.correct / e.answered) * 100), hasAccess: hasAccess(D.users[e.uid]) })).sort((a, b) => b.answered - a.answered).slice(0, 100),
-      recent: O.answers.slice(-40).reverse().map((a) => { const c = caseById(a.caseId); return { ...a, username: D.users[a.uid]?.username || '?', kind: c ? c.kind : '?' }; }),
+      recent: O.answers.slice(-40).reverse().map((a) => { const c = a.real ? null : caseById(a.caseId); return { ...a, username: D.users[a.uid]?.username || '?', kind: a.real ? 'real' : c ? c.kind : '?' }; }),
       total: O.answers.length,
     });
   });
   // the replay of a case, for the admins (with the truth)
   api.get('/admin/overwatch/case/:id', requireAdmin, (req, res) => {
+    const r = realById(req.params.id);
+    if (r) return res.json({ id: r.id, kind: 'real', kindName: `Real game: ${r.gameName} · ${r.username} (${r.detail || ''})`, replay: r.replay });
     const c = caseById(req.params.id);
     if (!c) return bad(res, 'Case not found', 404);
     res.json({ id: c.id, kind: c.kind, kindName: OW_KIND_NAMES[c.kind], replay: replay(c) });
@@ -133,6 +179,14 @@ export function installOverwatch(api, { db, requireUser, requireAdmin, bad, hook
       if (!u || u.system) return bad(res, 'Player not found.', 404);
       if (b.op === 'add' && !O.access.includes(u.id)) O.access.push(u.id);
       if (b.op === 'remove') O.access = O.access.filter((x) => x !== u.id);
+    } else if (b.op === 'anticheat') {
+      O.anticheat = !!b.on;
+    } else if (b.op === 'real') {
+      const r = realById(String(b.id));
+      if (!r) return bad(res, 'Case not found', 404);
+      if (!['open', 'cheater', 'clean'].includes(b.status)) return bad(res, 'Unknown status.');
+      r.status = b.status;
+      r.decidedBy = req.user.username;
     } else if (b.op === 'refresh') {
       O.salt = (O.salt || 0) + 1; // new cases right now (answers to the old ones are kept)
     } else return bad(res, 'Unknown action.');

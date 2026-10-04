@@ -2527,7 +2527,7 @@ export function createApi(db, manager, opts = {}) {
   installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial });
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
   installSocial(api, { db, requireUser, requireAdmin, requireStaff, bad, log, giveSerial, publicUser, publicItem, isBanned, setBan, hooks, banDetails });
-  installOverwatch(api, { db, requireUser, requireAdmin, bad, hooks, log });
+  installOverwatch(api, { db, manager, requireUser, requireAdmin, bad, hooks, log });
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });
