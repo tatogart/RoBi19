@@ -47,13 +47,21 @@ export class AntiCheat {
     const dt = now - ac.t;
     const [ox, oy, oz] = [ac.x, ac.y, ac.z];
     Object.assign(ac, { t: now, x: nx, y: ny, z: nz });
-    if (dt <= 0 || dt > 1.5) return;
+    if (dt <= 0) return;
     // things the game itself does: no checks for a moment
     const excused = session.vehicle || hum.Flying || (session.lastServerTp && now - session.lastServerTp < 2) || now - (session.spawnedAt || 0) < 3;
     if (excused) { ac.dist = 0; ac.span = 0; ac.riseFrom = null; return; }
     const scale = Math.max(1, ch._scale || 1);
     const walk = Math.max(16, hum.WalkSpeed) * scale;
     const d = Math.hypot(nx - ox, nz - oz);
+    // A player who stands still sends nothing, so a long gap means they stood
+    // there: a big jump right after it is a teleport too.
+    const step = Math.min(dt, 1);
+    if (dt > 1.5) {
+      if (d > Math.max(30, walk * step * 4) || ny - oy > 30) this.strikeNow(session, ac, now, 'teleport', 4, `moved ${Math.hypot(nx - ox, ny - oy, nz - oz).toFixed(0)} studs at once`);
+      ac.dist = 0; ac.span = 0; ac.riseFrom = null;
+      return;
+    }
     // decay: 1 point every 10 seconds
     ac.score = Math.max(0, ac.score - (now - ac.scoreAt) / 10);
     ac.scoreAt = now;
@@ -63,8 +71,8 @@ export class AntiCheat {
       ac.lastDetail = detail;
       if (ac.score >= 6) this.suspect(session, ac);
     };
-    // teleport: far in one step
-    if (d > Math.max(30, walk * dt * 4)) { strike('teleport', 4, `moved ${d.toFixed(0)} studs in ${dt.toFixed(2)} s`); ac.dist = 0; ac.span = 0; return; }
+    // teleport: far in one step (sideways, or straight up)
+    if (d > Math.max(30, walk * dt * 4) || ny - oy > Math.max(30, 120 * dt)) { strike('teleport', 4, `moved ${Math.hypot(nx - ox, ny - oy, nz - oz).toFixed(0)} studs in ${dt.toFixed(2)} s`); ac.dist = 0; ac.span = 0; ac.riseFrom = null; return; }
     // speed: over about a second
     ac.dist += d; ac.span += dt;
     if (ac.span >= 1) {
@@ -79,6 +87,14 @@ export class AntiCheat {
       if (ac.riseFrom === null) { ac.riseFrom = oy; ac.riseStart = now; }
       if (now - ac.riseStart > 2.2 && ny - ac.riseFrom > 20) { strike('fly', 3, `flew up ${(ny - ac.riseFrom).toFixed(0)} studs`); ac.riseFrom = null; }
     } else if (ny < oy - 0.05) ac.riseFrom = null;
+  }
+
+  strikeNow(session, ac, now, why, pts, detail) {
+    ac.score = Math.max(0, ac.score - (now - ac.scoreAt) / 10) + pts;
+    ac.scoreAt = now;
+    ac.why[why] = (ac.why[why] || 0) + 1;
+    ac.lastDetail = detail;
+    if (ac.score >= 6) this.suspect(session, ac);
   }
 
   nearTruss(x, y, z) {
