@@ -6,6 +6,7 @@ import { installApp, isInstalled } from './install.js';
 import { startInvites } from './invites.js';
 import { startChatParty } from './chatparty.js';
 import { installSecret, startLive } from './fun.js';
+import { checkGifts } from './gifts.js';
 
 const isStaff = (me) => me.isAdmin || (me.perms || []).some((p) => p === 'moderator' || p === 'economy');
 
@@ -83,7 +84,7 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     setDiscordStatus(site.discord.appId, where, me ? `as ${me.username}` : undefined);
   }
   showAnnouncement();
-  if (me) { startInvites(); installSecret(setRobits); startLive(setRobits); }
+  if (me) { startInvites(); installSecret(setRobits); startLive(setRobits); setTimeout(checkGifts, 1200); setInterval(checkGifts, 60000); }
   if (me && nav) startChatParty(me);
   return me;
 }
@@ -185,6 +186,7 @@ function buildNav(me, active) {
     for (const s of SITE.socials) nav.append(el('a', { href: s.url, target: '_blank', rel: 'noopener', class: 'nav-social' }, el('span', { class: 'social-icon', html: SOCIAL_SVG[s.type] || SOCIAL_SVG.other }), el('span', { class: 'no-i18n', text: s.label })));
   }
   nav.append(el('div', { class: 'section-label', text: 'Events' }));
+  if (me.overwatch) nav.append(el('a', { href: '/overwatch', class: active === 'overwatch' ? 'active' : '' }, el('span', { class: 'ow-nav-ic', text: '🕵️' }), el('span', { text: 'Overwatch' })));
   if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-dot' }), el('span', { text: 'The Hunt' })));
   nav.append(el('a', { href: '/game?id=2' }, icon('star'), el('span', { text: 'Obby Week!' })));
   nav.append(el('a', { href: '#', class: 'spin-nav', onclick: (e) => { e.preventDefault(); import('./fun.js').then((f) => f.spinDialog(setRobits)); } }, el('span', { class: 'spin-dot' }), el('span', { text: 'Daily Spin' })));

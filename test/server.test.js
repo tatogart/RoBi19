@@ -1759,3 +1759,137 @@ test('ready-made events for the new maps, and their lobbies can be visited first
   // the preview isn't listed anywhere
   assert.ok(!(await call('GET', '/games?sort=popular&limit=100')).data.games.some((g) => g.id === r.gameId));
 });
+
+test('wishlist, gifts for friends and unwrapping, and sales', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const a = await call('POST', '/auth/signup', { username: 'Wisher', password: 'secret123' });
+  const b = await call('POST', '/auth/signup', { username: 'Gifter', password: 'secret123' });
+  const stranger = (await call('POST', '/auth/signup', { username: 'Stranger1', password: 'secret123' })).cookie;
+  const aid = a.data.user.id, bid = b.data.user.id;
+  const item = (await call('GET', '/catalog?sort=price-asc')).data.items.find((i) => i.price > 0 && i.price <= 60 && !i.limited);
+  assert.ok(item);
+  assert.equal((await call('POST', '/wishlist', { itemId: item.id }, a.cookie)).data.wished, true);
+  // only friends see it
+  assert.equal((await call('GET', `/users/${aid}/wishlist`, null, stranger)).data.hidden, true);
+  assert.equal((await call('POST', `/catalog/${item.id}/gift`, { to: aid }, b.cookie)).status, 400); // not friends
+  await call('POST', `/friends/${aid}/request`, {}, b.cookie);
+  await call('POST', `/friends/${bid}/request`, {}, a.cookie);
+  const w = (await call('GET', `/users/${aid}/wishlist`, null, b.cookie)).data;
+  assert.equal(w.items[0].id, item.id);
+  assert.equal(w.items[0].canGift, true);
+  // a sale: -50% on everything
+  assert.equal((await call('POST', '/admin/sales', { name: 'Black Friday', percent: 50, scope: 'all', starts: Date.now(), ends: Date.now() + 3600e3 }, a.cookie)).status, 403);
+  await call('POST', '/admin/sales', { name: 'Black Friday', percent: 50, scope: 'all', starts: Date.now(), ends: Date.now() + 3600e3 }, admin);
+  const sales = (await call('GET', '/sales')).data;
+  assert.equal(sales.live[0].percent, 50);
+  const onSale = (await call('GET', `/catalog/${item.id}`)).data.item;
+  assert.equal(onSale.price, Math.ceil(item.price / 2));
+  assert.equal(onSale.sale.was, item.price);
+  // gift it (at the sale price), wrapped
+  const before = (await call('GET', '/auth/me', null, b.cookie)).data.user.robits;
+  const g = (await call('POST', `/catalog/${item.id}/gift`, { to: aid, wrap: '#7b5cff', message: 'For you!' }, b.cookie)).data;
+  assert.equal(g.robits, before - onSale.price);
+  assert.equal((await call('POST', `/catalog/${item.id}/gift`, { to: aid }, b.cookie)).status, 400); // already has it
+  const gifts = (await call('GET', '/gifts', null, a.cookie)).data;
+  assert.equal(gifts.unopened.length, 1);
+  assert.equal(gifts.unopened[0].message, 'For you!');
+  assert.equal(gifts.unopened[0].from.username, 'Gifter');
+  assert.ok((await call('GET', `/users/${aid}/inventory`)).data.items.some((i) => i.id === item.id));
+  await call('POST', `/gifts/${gifts.unopened[0].id}/open`, {}, a.cookie);
+  assert.equal((await call('GET', '/gifts', null, a.cookie)).data.unopened.length, 0);
+  assert.equal((await call('GET', `/users/${aid}/wishlist`, null, a.cookie)).data.items.length, 0); // off the wishlist
+  // end the sale: normal price again
+  await call('POST', '/admin/sales', { op: 'end', id: sales.live[0].id }, admin);
+  assert.equal((await call('GET', `/catalog/${item.id}`)).data.item.price, item.price);
+});
+
+test('scam links are spotted', async () => {
+  const { scamLevel } = await import('../shared/scam.js');
+  assert.equal(scamLevel('hello friends'), '');
+  assert.equal(scamLevel('FREE ROBITS at robis-gift.xyz'), 'scam');
+  assert.equal(scamLevel('Бесплатные робиты тут http://bit.ly/x'), 'scam');
+  assert.equal(scamLevel('watch https://youtube.com/watch?v=1'), 'link');
+  assert.equal(scamLevel('join https://t.me/Robisgame'), '');
+  assert.equal(scamLevel('play at myrobis.com/game?id=2', ['myrobis.com']), '');
+});
+
+test('appeals with a screenshot, and a ban becomes a mute and a trade ban', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const bad = await call('POST', '/auth/signup', { username: 'Appealer', password: 'secret123' });
+  const pal = await call('POST', '/auth/signup', { username: 'AppealPal', password: 'secret123' });
+  const uid = bad.data.user.id;
+  await call('POST', `/admin/users/${uid}/ban`, { banned: true, reason: 'Spamming', duration: '7d' }, admin);
+  // logging in shows the ban and gives an appeal key
+  const login = await call('POST', '/auth/login', { username: 'Appealer', password: 'secret123' });
+  assert.equal(login.status, 403);
+  assert.equal(login.data.banned, true);
+  const key = login.data.appealKey;
+  assert.match(key, /^[0-9a-f]{36}$/);
+  assert.equal((await call('POST', '/auth/login', { username: 'Appealer', password: 'wrongpass' })).data.appealKey, undefined);
+  const info = (await call('GET', '/appeals/info?key=' + key)).data;
+  assert.equal(info.bans[0].reason, 'Spamming');
+  assert.equal(info.bans[0].active, true);
+  assert.equal((await call('POST', '/appeals', { key, banId: info.bans[0].id, reason: 'I didn\'t do it', explanation: 'short' })).status, 400);
+  const png = 'data:image/png;base64,' + Buffer.from('fakepng').toString('base64');
+  assert.equal((await call('POST', '/appeals', { key, banId: info.bans[0].id, reason: 'I didn\'t do it', explanation: 'My little brother used my computer, sorry!', media: 'data:text/html;base64,PGI+' })).status, 400);
+  const sent = (await call('POST', '/appeals', { key, banId: info.bans[0].id, reason: 'I didn\'t do it', explanation: 'My little brother used my computer, sorry!', media: png })).data;
+  assert.equal(sent.appeal.status, 'open');
+  assert.equal((await call('POST', '/appeals', { key, banId: 1, reason: 'Other', explanation: 'One more time please please please' })).status, 400); // one at a time
+  // the admins see it, with the picture
+  const list = (await call('GET', '/admin/appeals', null, admin)).data;
+  const ap = list.appeals.find((x) => x.user.username === 'Appealer');
+  assert.ok(ap && ap.media);
+  const media = await fetch(base + `/api/admin/appeals/${ap.id}/media`, { headers: { cookie: admin } });
+  assert.equal(media.headers.get('content-type'), 'image/png');
+  assert.equal(await media.text(), 'fakepng');
+  // accepted: unbanned, but muted and can't trade for 7 days
+  await call('POST', `/admin/appeals/${ap.id}`, { decision: 'both', time: '7d', answer: 'OK, but be careful.' }, admin);
+  const back = await call('POST', '/auth/login', { username: 'Appealer', password: 'secret123' });
+  assert.equal(back.status, 200);
+  assert.ok(back.data.user.restrictions.mute > Date.now() && back.data.user.restrictions.trade > Date.now());
+  assert.equal((await call('POST', '/messages', { to: 'AppealPal', subject: 'hi', body: 'hello' }, back.cookie)).status, 403);
+  assert.equal((await call('POST', '/messages', { to: 'Tester_1', subject: 'hi', body: 'thanks' }, back.cookie)).status, 200); // admins: yes
+  assert.equal((await call('POST', '/trades', { toUserId: pal.data.user.id, give: [], get: [], giveRobits: 1 }, back.cookie)).status, 403);
+  // and in game chat
+  const game = (await call('GET', '/games?sort=popular')).data.games[0];
+  const c = await join(back.cookie, { placeId: game.id });
+  await c.wait((m) => m.t === 'welcome');
+  c.ws.send(JSON.stringify({ t: 'chat', text: 'hello all' }));
+  assert.match((await c.wait((m) => m.t === 'sys' && /muted/.test(m.text))).text, /muted for/);
+  c.ws.close();
+  // the history says how the ban ended
+  const hist = (await call('GET', `/admin/appeals/${ap.id}`, null, admin)).data.history;
+  assert.match(hist[0].endedHow, /mute \+ trade ban/);
+  // lift it
+  await call('POST', `/admin/users/${uid}/restrict`, { clear: true }, admin);
+  assert.equal((await call('POST', '/messages', { to: 'AppealPal', subject: 'hi', body: 'hello' }, back.cookie)).status, 200);
+});
+
+test('Robis Overwatch: access, weekly cases, verdicts and the admin view', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'Detective', password: 'secret123' });
+  assert.equal((await call('GET', '/overwatch', null, p.cookie)).data.access, false);
+  assert.equal((await call('GET', '/overwatch/case', null, p.cookie)).status, 403);
+  await call('POST', '/admin/overwatch', { op: 'add', user: 'Detective' }, admin);
+  assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.overwatch, true);
+  const info = (await call('GET', '/overwatch', null, p.cookie)).data;
+  assert.equal(info.access, true);
+  assert.equal(info.left, 10);
+  const c = (await call('GET', '/overwatch/case', null, p.cookie)).data;
+  assert.equal(c.replay.frames.length, c.replay.fps * c.replay.seconds);
+  assert.equal(c.replay.bots.length, 6);
+  assert.equal(c.replay.kind, undefined); // the truth stays on the server
+  assert.equal((await call('POST', `/overwatch/case/${c.id}`, { verdict: 'cheater' }, p.cookie)).status, 400); // too fast
+  await new Promise((r) => setTimeout(r, 5000));
+  const ans = (await call('POST', `/overwatch/case/${c.id}`, { verdict: 'cheater', tags: ['speed'] }, p.cookie)).data;
+  assert.equal(ans.stats.thisWeek, 1);
+  assert.equal((await call('POST', `/overwatch/case/${c.id}`, { verdict: 'fair' }, p.cookie)).status, 400); // once
+  const adm = (await call('GET', '/admin/overwatch', null, admin)).data;
+  assert.equal(adm.cases.length, 10);
+  assert.ok(adm.cases.filter((x) => x.kind === 'fair').length >= 4);
+  assert.equal(adm.investigators.find((i) => i.username === 'Detective').answered, 1);
+  assert.equal(adm.recent[0].verdict, 'cheater');
+  // taking access away
+  await call('POST', '/admin/overwatch', { op: 'remove', user: 'Detective' }, admin);
+  assert.equal((await call('GET', '/overwatch', null, p.cookie)).data.access, false);
+});

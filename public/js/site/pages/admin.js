@@ -39,6 +39,9 @@ const ICONS = {
   chart: 'M4 20V10m6 10V4m6 16v-7m4 7H2',
   terminal: 'M3 5h18v14H3zm4 4l3 3-3 3m5 0h5',
   crown: 'M3 18h18M4 16L3 7l5 4 4-6 4 6 5-4-1 9z',
+  scale: 'M12 3v18M7 21h10M4 7h16M4 7l-2 6a3 3 0 006 0zm16 0l-2 6a3 3 0 006 0z',
+  eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zm10 3a3 3 0 100-6 3 3 0 000 6z',
+  tag: 'M3 12V3h9l9 9-9 9zm4-5h.01',
 };
 const ic = (name, cls = 'adm-ic') => el('span', { class: cls, html: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[name] || ICONS.box}"/></svg>` });
 
@@ -47,6 +50,8 @@ const nav = el('nav', { class: 'adm-nav' });
 const pageTitle = el('div', { class: 'adm-page-title' });
 const liveBox = el('div', { class: 'adm-live' });
 const body = el('div', { class: 'adm-body' }, spinner());
+// sections pass `cond ? panel : null`: leave the nulls out (the DOM would print "null")
+body.replaceChildren = (...kids) => Element.prototype.replaceChildren.apply(body, kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
 const searchBtn = el('button', { class: 'adm-search', onclick: () => palette() }, ic('search'), el('span', { class: 'adm-search-text', text: 'Search players, items, sections...' }), el('kbd', { text: 'Ctrl K' }));
 app.append(el('div', { class: 'adm' },
   el('aside', { class: 'adm-side' },
@@ -89,11 +94,14 @@ const TABS = {
   activity: { label: 'Activity', group: 'Overview', icon: 'pulse', draw: drawActivity },
   players: { label: 'Players', group: 'People', icon: 'users', draw: drawPlayers },
   reports: { label: 'Reports', group: 'People', icon: 'flag', draw: drawReports, perm: 'moderator' },
+  appeals: { label: 'Appeals', group: 'People', icon: 'scale', draw: drawAppeals, perm: 'moderator' },
+  overwatch: { label: 'Overwatch', group: 'People', icon: 'eye', draw: drawOverwatch, admin: true },
   badges: { label: 'Badges', group: 'People', icon: 'badge', draw: drawBadges, admin: true },
   gifts: { label: 'Gift Center', group: 'Economy', icon: 'gift', draw: drawGifts, admin: true },
   items: { label: 'Items', group: 'Economy', icon: 'box', draw: drawItems },
   promo: { label: 'Promo Codes', group: 'Economy', icon: 'ticket', draw: drawPromo, perm: 'economy' },
   spin: { label: 'Daily Spin', group: 'Economy', icon: 'wheel', draw: drawSpin, admin: true },
+  sales: { label: 'Sales', group: 'Economy', icon: 'tag', draw: drawSales, admin: true },
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
   polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
@@ -344,6 +352,7 @@ async function manage(u0, tab = 'overview') {
         } }))) : null,
       el('div', { class: 'manage-section' }, el('h4', { text: 'Account' }), el('div', { class: 'row wrap' },
         canMod ? el('button', { class: 'btn btn-small' + (u.banned ? '' : ' btn-red'), text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) }) : null,
+        canMod && !u.banned ? el('button', { class: 'btn btn-small', text: 'Mute / No trades', onclick: () => restrictDialog(u) }) : null,
         canMod && ingame ? el('button', { class: 'btn btn-small', text: 'Kick from game', onclick: go(kick) }) : null,
         canMod ? el('button', { class: 'btn btn-small', text: 'Reset password', onclick: go(resetPassword) }) : null,
         perm('moderator') && !lockedAdmin ? el('button', { class: 'btn btn-small', text: 'Change username', onclick: go(rename) }) : null,
@@ -1516,7 +1525,7 @@ function giveRobits(u) {
 }
 
 function ban(u) {
-  if (u.banned) { act(`/admin/users/${u.id}/ban`, { banned: false }, `${u.username} was unbanned`); return; }
+  if (u.banned) { unbanDialog(u); return; }
   const reason = el('input', { class: 'input', placeholder: 'Reason (optional)' });
   const duration = el('select', { class: 'input' },
     [['', 'Forever'], ['1h', '1 hour'], ['1d', '1 day'], ['3d', '3 days'], ['7d', '7 days'], ['30d', '30 days']].map(([v, t]) => el('option', { value: v, text: t })));
@@ -1530,6 +1539,83 @@ function ban(u) {
       el('label', { class: 'field' }, 'Length', duration),
       el('label', { class: 'field' }, 'Reason', reason)),
     buttons: [{ text: 'Ban', cls: 'btn-red', onClick: () => act(`/admin/users/${u.id}/ban`, { banned: true, reason: reason.value, duration: duration.value, device: kind.value === 'device' }, `${u.username} was banned`) }, { text: 'Cancel' }],
+  });
+}
+
+// Removing a ban: fully, or the ban becomes a mute / a trade ban for a while.
+const RESTRICT_TIMES = [['1d', '1 day'], ['3d', '3 days'], ['7d', '7 days'], ['30d', '30 days'], ['365d', '1 year']];
+function unbanDialog(u, after) {
+  const kind = segBtns([['unban', 'Full unban'], ['mute', 'Unban + mute'], ['trade', 'Unban + no trades'], ['both', 'Unban + mute + no trades']], 'unban');
+  const time = segBtns(RESTRICT_TIMES, '7d');
+  const reason = el('input', { class: 'input', maxlength: 200, placeholder: 'Note for the player (optional)' });
+  modal({
+    title: `Remove ${u.username}'s ban`,
+    width: 560,
+    body: el('div', { class: 'quick-event' },
+      el('p', { class: 'small muted', text: 'Partial unban: they can play again, but can\'t chat (mute) or can\'t trade until the time runs out.' }),
+      el('div', { class: 'qe-step', text: 'How' }), kind,
+      el('div', { class: 'qe-step', text: 'For how long (mute / no trades)' }), time, reason),
+    buttons: [{ text: 'Remove the ban', cls: 'btn-green', onClick: async () => {
+      try { await api.post(`/admin/users/${u.id}/soften`, { kind: kind.value, time: time.value, reason: reason.value }); toast(`${u.username} was unbanned`, 'success'); await load(); after && after(); } catch (e) { toast(e.message, 'error'); return false; }
+    } }, { text: 'Cancel' }],
+  });
+}
+// A mute or a trade ban without a ban.
+function restrictDialog(u) {
+  const kind = segBtns([['mute', 'Mute (no chat)'], ['trade', 'No trades'], ['both', 'Both']], 'mute');
+  const time = segBtns([['1h', '1 hour'], ...RESTRICT_TIMES], '1d');
+  const reason = el('input', { class: 'input', maxlength: 200, placeholder: 'Reason (the player sees it)' });
+  modal({
+    title: `Restrict ${u.username}`,
+    width: 560,
+    body: el('div', { class: 'quick-event' }, el('div', { class: 'qe-step', text: 'What' }), kind, el('div', { class: 'qe-step', text: 'How long' }), time, reason),
+    buttons: [
+      { text: 'Restrict', cls: 'btn-red', onClick: async () => { try { await api.post(`/admin/users/${u.id}/restrict`, { kind: kind.value, time: time.value, reason: reason.value }); toast('Done', 'success'); } catch (e) { toast(e.message, 'error'); return false; } } },
+      { text: 'Lift all restrictions', onClick: async () => { try { await api.post(`/admin/users/${u.id}/restrict`, { clear: true }); toast('Restrictions lifted', 'success'); } catch (e) { toast(e.message, 'error'); return false; } } },
+      { text: 'Cancel' }],
+  });
+}
+
+// ---------------------------------------------------------------- appeals
+var appealStatus = 'open';
+async function drawAppeals() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/appeals?status=' + appealStatus); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const c = navBtns.appeals && navBtns.appeals.querySelector('.adm-count');
+  if (c) { c.textContent = r.open ? String(r.open) : ''; c.classList.toggle('on', !!r.open); }
+  body.replaceChildren(
+    el('div', { class: 'adm-filters' }, [['open', `Waiting (${r.open})`], ['accepted', 'Accepted'], ['denied', 'Denied']].map(([k, t]) => el('button', { class: 'adm-filter' + (k === appealStatus ? ' on' : ''), text: t, onclick: () => { appealStatus = k; drawAppeals(); } }))),
+    r.appeals.length ? el('div', { class: 'appeal-list' }, r.appeals.map((a) => el('button', { class: 'appeal-card ' + a.status, onclick: () => openAppeal(a.id) },
+      el('div', { class: 'row', style: { gap: '8px', alignItems: 'center' } }, el('b', { class: 'no-i18n', text: a.user?.username || '?' }), a.media ? el('span', { class: 'pill', text: a.mediaType.startsWith('video') ? '🎬 video' : '🖼 screenshot' }) : null, el('span', { class: 'muted small', text: timeAgo(a.created) })),
+      el('div', { class: 'small' }, el('span', { class: 'muted', text: 'Ban: ' }), el('span', { class: 'no-i18n', text: a.ban.reason || 'no reason' })),
+      el('div', { class: 'small' }, el('b', { text: a.reason })),
+      el('div', { class: 'small muted no-i18n appeal-snippet', text: a.explanation }),
+      a.outcome ? el('div', { class: 'small', text: `${a.outcome} · ${a.decidedBy}` }) : null)))
+      : el('div', { class: 'empty', text: appealStatus === 'open' ? 'No appeals waiting. 🎉' : 'Nothing here.' }));
+}
+async function openAppeal(id) {
+  let r;
+  try { r = await api.get('/admin/appeals/' + id); } catch (e) { toast(e.message, 'error'); return; }
+  const a = r.appeal;
+  const decision = segBtns([['deny', 'Deny (ban stays)'], ['unban', 'Full unban'], ['mute', 'Unban + mute'], ['trade', 'Unban + no trades'], ['both', 'Unban + both']], 'deny');
+  const time = segBtns(RESTRICT_TIMES, '7d');
+  const answer = el('textarea', { class: 'input', rows: 3, maxlength: 500, placeholder: 'Answer to the player (they see it when they try to log in)' });
+  const media = a.media ? (a.mediaType.startsWith('video') ? el('video', { src: `/api/admin/appeals/${a.id}/media`, controls: true, class: 'appeal-media' }) : el('a', { href: `/api/admin/appeals/${a.id}/media`, target: '_blank' }, el('img', { src: `/api/admin/appeals/${a.id}/media`, class: 'appeal-media', alt: 'screenshot' }))) : el('div', { class: 'muted small', text: 'No screenshot or video.' });
+  modal({
+    title: `Appeal #${a.id} · ${a.user?.username || '?'}`,
+    width: 720,
+    body: el('div', { class: 'quick-event' },
+      el('div', { class: 'appeal-ban on' }, el('b', { class: 'no-i18n', text: a.ban.reason || 'No reason given' }), el('span', { class: 'small muted', text: `${a.ban.time ? new Date(a.ban.time).toLocaleString() : ''}${a.ban.until ? ' · until ' + new Date(a.ban.until).toLocaleString() : ' · forever'}` })),
+      el('div', { class: 'qe-step', text: a.reason }),
+      el('p', { class: 'no-i18n', style: { whiteSpace: 'pre-wrap' }, text: a.explanation }),
+      media,
+      r.history.length > 1 ? el('details', {}, el('summary', { text: `Ban history (${r.history.length})` }), r.history.map((h) => el('div', { class: 'small' }, el('span', { class: 'no-i18n', text: `${new Date(h.time).toLocaleDateString()} · ${h.reason || 'no reason'}${h.by ? ' · by ' + h.by : ''}${h.endedHow ? ' · ' + h.endedHow : ''}` })))) : null,
+      a.status === 'open' ? el('div', { class: 'quick-event' }, el('div', { class: 'qe-step', text: 'Decision' }), decision, el('div', { class: 'qe-step', text: 'Mute / no trades for' }), time, answer)
+        : el('div', { class: 'small' }, el('b', { text: a.outcome }), a.answer ? el('div', { class: 'no-i18n', text: '“' + a.answer + '”' }) : null)),
+    buttons: a.status === 'open' ? [{ text: 'Answer', cls: 'btn-primary', onClick: async () => {
+      try { await api.post('/admin/appeals/' + a.id, { decision: decision.value, time: time.value, answer: answer.value }); toast('Answered', 'success'); drawAppeals(); load(); } catch (e) { toast(e.message, 'error'); return false; }
+    } }, { text: 'Close' }] : [{ text: 'Close' }],
   });
 }
 
@@ -1662,6 +1748,7 @@ const segBtns = (opts, val, onChange) => {
   box.value = val;
   const draw = () => box.replaceChildren(...opts.map(([v, t]) => el('button', { type: 'button', class: String(v) === String(box.value) ? 'on' : '', text: t, onclick: () => { box.value = v; draw(); onChange && onChange(v); } })));
   draw();
+  box.set = (v) => { box.value = v; draw(); };
   return box;
 };
 
@@ -1959,4 +2046,83 @@ async function drawAbuse() {
       card('💰 Robits for everyone in the game', null, amount, el('button', { class: 'btn btn-green', text: 'Give', onclick: () => post({ op: 'robits', amount: +amount.value }, 'Given') }))),
     el('p', { class: 'small muted', text: 'In the game you can also type :giant, :tiny, :normal, :size 3, :fireworks, :coinrain, :meteors and :global text in the chat.' }));
   abuseTimer = setInterval(() => { if (current === 'abuse' && !document.hidden && document.activeElement !== msg) drawAbuse(); else if (current !== 'abuse') clearInterval(abuseTimer); }, 10000);
+}
+
+// ---------------------------------------------------------------- Sales
+// "Black Friday": a discount on the catalog for a while, with a countdown.
+const toLocalDT = (t) => { const d = new Date(t - new Date(t).getTimezoneOffset() * 60e3); return d.toISOString().slice(0, 16); };
+async function drawSales() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/sales'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b, msg) => { try { await api.post('/admin/sales', b); toast(msg, 'success'); drawSales(); } catch (e) { toast(e.message, 'error'); } };
+  const name = el('input', { class: 'input', maxlength: 40, value: 'Black Friday' });
+  const pct = segBtns([[10, '-10%'], [20, '-20%'], [30, '-30%'], [50, '-50%'], [70, '-70%']], 50);
+  const scope = el('select', { class: 'input', style: { width: 'auto' } }, [['all', 'Everything'], ['Accessories', 'Accessories'], ['Clothing', 'Clothing'], ['Hat', 'Hats'], ['Hair', 'Hair'], ['Face', 'Faces'], ['Gear', 'Gear'], ['Pet', 'Pets']].map(([v, t]) => el('option', { value: v, text: t })));
+  const starts = el('input', { class: 'input', type: 'datetime-local', value: toLocalDT(Date.now()), style: { width: 'auto' } });
+  const length = segBtns([[3, '3 hours'], [24, '1 day'], [72, '3 days'], [168, '1 week']], 24);
+  const PRESETS = [['Black Friday', 50, 72], ['Cyber Monday', 30, 24], ['Halloween Sale', 40, 72], ['Flash Sale', 70, 3], ['New Year Sale', 50, 168]];
+  const fmt = (t) => new Date(t).toLocaleString();
+  body.replaceChildren(
+    el('div', { class: 'adm-hero sales' }, el('div', {}, el('h2', { text: '🏷️ Sales' }), el('p', { text: 'Discounts on the catalog (not on Limiteds), with a countdown on the catalog and home pages.' }))),
+    card('New sale', null,
+      el('div', { class: 'row wrap', style: { gap: '6px' } }, el('span', { class: 'small muted', text: 'Quick:' }), PRESETS.map(([n, p, h]) => el('button', { class: 'btn btn-small', text: `${n} -${p}%`, onclick: () => { name.value = n; pct.set(p); length.set(h); } }))),
+      el('label', { class: 'field' }, 'Name', name),
+      el('div', { class: 'qe-step', text: 'Discount' }), pct,
+      el('div', { class: 'row wrap', style: { gap: '14px' } }, el('label', { class: 'field' }, 'On', scope), el('label', { class: 'field' }, 'Starts', starts)),
+      el('div', { class: 'qe-step', text: 'How long' }), length,
+      el('button', { class: 'btn btn-green', text: '🏷️ Start the sale', onclick: () => {
+        const s = new Date(starts.value).getTime() || Date.now();
+        post({ name: name.value, percent: +pct.value, scope: scope.value, starts: s, ends: Math.max(s, Date.now()) + +length.value * 3600e3 }, 'Sale created!');
+      } })),
+    card('Sales', null, r.sales.length ? el('div', { class: 'mini-list' }, r.sales.map((s) => el('div', { class: 'mini-row' },
+      el('span', { class: 'mini-text' }, el('b', { class: 'no-i18n', text: `${s.name} -${s.percent}%` }), el('span', { class: 'muted', text: ` · ${s.scope === 'all' ? 'everything' : s.scope} · ${fmt(s.starts)} → ${fmt(s.ends)}` })),
+      s.live ? el('span', { class: 'pill online-pill', text: 'ON NOW' }) : s.starts > Date.now() ? el('span', { class: 'pill', text: 'SOON' }) : el('span', { class: 'pill', text: 'ENDED' }),
+      s.live ? el('button', { class: 'btn btn-small', text: 'End now', onclick: () => post({ op: 'end', id: s.id }, 'Sale ended') }) : null,
+      el('button', { class: 'btn btn-small btn-red', text: '×', onclick: () => post({ op: 'delete', id: s.id }, 'Deleted') }))))
+      : el('div', { class: 'muted small', text: 'No sales yet.' })));
+}
+
+// ---------------------------------------------------------------- Overwatch
+async function drawOverwatch() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/overwatch'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b, msg) => { try { await api.post('/admin/overwatch', b); toast(msg, 'success'); drawOverwatch(); } catch (e) { toast(e.message, 'error'); } };
+  const mode = segBtns([['off', 'Off'], ['chosen', 'Only chosen players'], ['everyone', 'Everyone']], r.mode, (v) => post({ op: 'mode', mode: v }, 'Saved'));
+  const who = whoInput('Player name');
+  const KIND_ICON = { fair: '✅', speed: '⚡', fly: '🕊', teleport: '✨', noclip: '🧱', aimbot: '🎯' };
+  const watch = async (id) => {
+    const c = await api.get('/admin/overwatch/case/' + id);
+    const { createViewer } = await import('../owviewer.js');
+    const box = el('div', { class: 'ow-viewer' });
+    let v = null;
+    modal({ title: `Case ${c.id} · truth: ${c.kindName}`, width: 900, body: box, buttons: [{ text: 'Close' }], onClose: () => v && v.destroy() });
+    v = createViewer(box, c.replay);
+  };
+  body.replaceChildren(usersList(),
+    el('div', { class: 'adm-hero overwatch' }, el('div', {}, el('h2', { text: '🕵️ Overwatch' }), el('p', { text: `Players judge bot replays: cheater or fair? ${r.total} answers so far. New cases every Monday (${new Date(r.nextWeek).toLocaleDateString()}).` })),
+      el('button', { class: 'btn', style: { position: 'relative', zIndex: 1 }, text: '🔄 New cases now', onclick: () => { if (confirm('Make new cases for this week now? Answers to the old ones are kept.')) post({ op: 'refresh' }, 'New cases made'); } })),
+    el('div', { class: 'adm-cards' },
+      card('Who can take part', 'Admins always can', mode,
+        el('div', { class: 'row', style: { gap: '6px' } }, who, el('button', { class: 'btn btn-primary', text: 'Give access', onclick: () => post({ op: 'add', user: who.value }, 'Access given') })),
+        r.access.length ? el('div', { class: 'ow-access' }, r.access.map((a) => el('span', { class: 'holder-chip' }, el('span', { class: 'no-i18n', text: a.username }), el('button', { class: 'chip-x', text: '×', title: 'Take access away', onclick: () => post({ op: 'remove', user: a.id }, 'Access taken away') })))) : el('div', { class: 'muted small', text: 'Nobody chosen yet.' })),
+      card('This week\'s cases', 'The truth is only shown here', el('div', { class: 'mini-list' }, r.cases.map((c) => el('div', { class: 'mini-row' },
+        el('span', { class: 'mini-text' }, el('b', { text: `${KIND_ICON[c.kind] || ''} ${c.kindName}` }), el('span', { class: 'muted no-i18n', text: ` · ${c.suspect}` })),
+        el('span', { class: 'small', text: `🚫 ${c.votes.cheater} · ✅ ${c.votes.fair}${c.correct !== null ? ` · ${c.correct}% right` : ''}` }),
+        el('button', { class: 'btn btn-small', text: '▶', title: 'Watch', onclick: () => watch(c.id) })))))),
+    card('Investigators', 'Everyone who answered, best first', r.investigators.length ? el('table', { class: 'ow-table' },
+      el('tr', {}, ['Player', 'Answers', 'This week', 'Right', 'Accuracy', 'Access', ''].map((t) => el('th', { text: t }))),
+      r.investigators.map((i) => el('tr', {},
+        el('td', {}, el('a', { class: 'no-i18n', href: `/profile?id=${i.uid}`, text: i.username })),
+        el('td', { text: String(i.answered) }), el('td', { text: String(i.thisWeek) }), el('td', { text: String(i.correct) }),
+        el('td', {}, el('span', { class: 'ow-acc ' + (i.accuracy >= 75 ? 'good' : i.accuracy >= 50 ? 'ok' : 'bad'), text: i.accuracy + '%' })),
+        el('td', { text: i.hasAccess ? '✓' : '—' }),
+        el('td', {}, r.access.some((a) => a.id === i.uid) ? el('button', { class: 'btn btn-small', text: 'Remove', onclick: () => post({ op: 'remove', user: i.uid }, 'Access taken away') }) : r.mode === 'chosen' ? el('button', { class: 'btn btn-small', text: 'Give access', onclick: () => post({ op: 'add', user: i.uid }, 'Access given') }) : null))))
+      : el('div', { class: 'muted small', text: 'No answers yet.' })),
+    card('Latest answers', null, r.recent.length ? el('div', { class: 'mini-list' }, r.recent.map((a) => el('div', { class: 'mini-row' },
+      el('span', { class: 'mini-text' }, el('b', { class: 'no-i18n', text: a.username }), ' · ', el('span', { text: a.verdict === 'cheater' ? '🚫 cheater' : '✅ fair' }), a.tags.length ? el('span', { class: 'muted', text: ` (${a.tags.join(', ')})` }) : null,
+        el('span', { class: 'muted', text: ` · really: ${a.kind}` })),
+      el('span', { class: 'small ' + (a.correct ? 'ow-right' : 'ow-wrong'), text: a.correct ? '✓ right' : '✗ wrong' }),
+      el('span', { class: 'muted small', text: timeAgo(a.t) })))) : el('div', { class: 'muted small', text: 'No answers yet.' })));
 }

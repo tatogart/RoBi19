@@ -1,5 +1,6 @@
 // In-game HUD: chat, leaderboard, health, hints, escape menu, dialogs, console.
 import { badgesHtml } from '../badges.js';
+import { scamLevel, SCAM_TEXT } from '/shared/scam.js';
 import { nameColor } from './characters.js';
 import { avatarHeadshot } from '../render/thumbs.js';
 import { setVolume, getVolume, click } from './sound.js';
@@ -197,6 +198,9 @@ export class HUD {
     if (opts.system) line.textContent = text;
     else line.innerHTML = `<span class="who" style="color:${nameColor(name)}">[${esc(name)}]${badgesHtml(opts.flags)}:</span> ${esc(text)}`;
     this.chatLog.append(line);
+    // a link or a "free Robits" message: warn the player
+    const scam = opts.system ? '' : scamLevel(text, [location.host]);
+    if (scam) this.chatLog.append(h('div', 'line system scam-warn ' + scam, esc(SCAM_TEXT[scam])));
     while (this.chatLog.children.length > 100) this.chatLog.firstChild.remove();
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
     this.chat.classList.remove('faded');

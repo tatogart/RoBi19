@@ -1205,6 +1205,8 @@ export class GameServer {
         }
         if (text[0] === ':' && this.adminCommand(session, text)) return;
         if (session.muted) { this.send(session, { t: 'sys', text: 'You are muted.' }); return; }
+        const mutedWhy = this.manager && this.manager.admin && this.manager.admin.muted ? this.manager.admin.muted(session.user) : '';
+        if (mutedWhy) { this.send(session, { t: 'sys', text: mutedWhy }); return; }
         const clean = filterChat(text);
         this.broadcast({ t: 'chat', userId: session.user.id, name: session.user.username, text: clean });
         session.player._fire('Chatted', clean);

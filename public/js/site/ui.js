@@ -1,5 +1,12 @@
 // Shared UI helpers: DOM builder, icons, cards, modals, formatting.
 import { LANG } from '../i18n.js';
+import { scamLevel, SCAM_TEXT } from '/shared/scam.js';
+
+// A red / yellow warning under a message with a suspicious link or a scam phrase.
+export function scamNote(text) {
+  const lvl = scamLevel(text, [location.host]);
+  return lvl ? el('div', { class: 'scam-note ' + lvl, text: SCAM_TEXT[lvl] }) : null;
+}
 import { BADGE_SVG, BADGE_TITLE, sortBadges } from '../badges.js';
 import { avatarHeadshot, gameThumbnail, itemThumbnail } from '../render/thumbs.js';
 
@@ -154,7 +161,8 @@ export function itemCard(it, opts = {}) {
       opts.hidePrice ? null : it.limited && it.remaining === 0
         // sold out: the cheapest copy players are selling
         ? el('div', { class: 'price' + (it.bestPrice ? '' : ' free') }, it.bestPrice ? [icon('robits', 'robits-icon'), fmtNum(it.bestPrice)] : 'Sold out')
-        : el('div', { class: 'price' + (it.price ? '' : ' free') }, it.price ? [icon('robits', 'robits-icon'), fmtNum(it.price)] : 'Free')));
+        : el('div', { class: 'price' + (it.price ? '' : ' free') }, it.price ? [icon('robits', 'robits-icon'), fmtNum(it.price), it.sale ? el('s', { class: 'was', text: fmtNum(it.sale.was) }) : null] : 'Free')));
+  if (it.sale && !opts.hidePrice) card.prepend(el('span', { class: 'sale-badge', text: `-${it.sale.percent}%` }));
   return card;
 }
 

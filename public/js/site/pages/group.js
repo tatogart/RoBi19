@@ -2,7 +2,7 @@
 // for the group's admins, join requests and settings.
 import { initPage } from '../layout.js';
 import { api } from '../api.js';
-import { el, qs, fmtNum, fmtDate, timeAgo, toast, modal, spinner, headshotImg, userLink, groupEmblem } from '../ui.js';
+import { el, qs, fmtNum, fmtDate, timeAgo, toast, modal, spinner, headshotImg, userLink, groupEmblem, scamNote } from '../ui.js';
 
 const me = await initPage({ active: 'groups', requireAuth: false });
 const app = document.getElementById('app');
@@ -79,7 +79,7 @@ function drawWall() {
     el('a', { class: 'wall-head', href: `/profile?id=${p.user.id}` }, headshotImg(p.user, 64)),
     el('div', { class: 'wall-body' },
       el('div', {}, userLink(p.user), el('span', { class: 'small muted', text: ' · ' + timeAgo(p.time) })),
-      el('div', { class: 'no-i18n wall-text', text: p.text })),
+      el('div', { class: 'no-i18n wall-text', text: p.text }), scamNote(p.text)),
     me && (p.user.id === me.id || canAdmin()) ? el('button', { class: 'btn btn-small', title: 'Delete', text: '✕', onclick: () => act(api.del(`/groups/${id}/wall/${p.id}`)) }) : null)))
     : el('div', { class: 'empty', text: 'Nothing on the wall yet.' }));
 }

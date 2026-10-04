@@ -262,3 +262,5 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .big-message.out { opacity: 0; }
 @keyframes big-in { from { transform: translateX(-50%) scale(.4); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 @media (max-width: 700px) { .big-message { font-size: 32px; } }
+.chat .line.scam-warn { color: #ffd23b; font-weight: 700; font-size: 12px; }
+.chat .line.scam-warn.scam { color: #ff6b6b; }

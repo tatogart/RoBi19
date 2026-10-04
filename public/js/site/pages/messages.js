@@ -1,6 +1,6 @@
 import { initPage } from '../layout.js';
 import { api } from '../api.js';
-import { el, qs, headshotImg, spinner, toast, timeAgo, modal } from '../ui.js';
+import { el, qs, headshotImg, spinner, toast, timeAgo, modal, scamNote } from '../ui.js';
 
 await initPage({ active: 'messages' });
 const app = document.getElementById('app');
@@ -38,7 +38,7 @@ async function box(name) {
       if (!m.read && name === 'inbox') { api.post(`/messages/${m.id}/read`); row.classList.remove('unread'); m.read = true; }
       modal({
         title: m.subject, width: 560,
-        body: el('div', {}, el('div', { class: 'small muted', style: { marginBottom: '10px' }, text: `${name === 'sent' ? 'To' : 'From'} ${other?.username} · ${new Date(m.created).toLocaleString()}` }), el('p', { style: { whiteSpace: 'pre-wrap' }, text: m.body })),
+        body: el('div', {}, el('div', { class: 'small muted', style: { marginBottom: '10px' }, text: `${name === 'sent' ? 'To' : 'From'} ${other?.username} · ${new Date(m.created).toLocaleString()}` }), scamNote(m.subject + ' ' + m.body), el('p', { style: { whiteSpace: 'pre-wrap' }, text: m.body })),
         buttons: name === 'inbox' ? [{ text: 'Reply', cls: 'btn-primary', onClick: () => compose(other?.username, 'RE: ' + m.subject) }, { text: 'Close' }] : [{ text: 'Close' }],
       });
     };

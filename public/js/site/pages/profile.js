@@ -2,6 +2,8 @@ import { initPage } from '../layout.js';
 import { api } from '../api.js';
 import { el, qs, fmtFull, fmtDate, headshotImg, avatarCard, gameCard, itemCard, presenceText, toast, modal, spinner, icon, launchGame, MEMBERSHIP, nameBadges, groupEmblem } from '../ui.js';
 import { avatarFullBody } from '../../render/thumbs.js';
+import { giftDialog } from '../gifts.js';
+import { setRobits } from '../layout.js';
 
 const me = await initPage({ active: 'profile', requireAuth: false });
 const app = document.getElementById('app');
@@ -98,7 +100,18 @@ async function about() {
   const robisBadgesP = el('div', { class: 'panel' }, el('h3', { text: 'Robis Badges' }),
     (user.achievements || []).length ? el('div', { class: 'badges' }, user.achievements.map((b) => el('div', { class: 'badge-card robis-badge', title: b.desc },
       el('span', { class: 'rb-icon', text: b.icon }), el('b', { text: b.name }), el('span', { class: 'small muted', text: b.desc })))) : el('div', { class: 'muted', text: 'No Robis Badges yet.' }));
-  body.replaceChildren(aboutPanel, wearing, friendsP, groupsP, favP, robisBadgesP, badgesP, statsP);
+  // The wishlist: friends see it and can gift the items.
+  const wishP = el('div', { class: 'panel' }, el('h3', { text: own ? 'My Wishlist' : 'Wishlist' }), spinner());
+  const drawWish = async () => {
+    let w;
+    try { w = await api.get(`/users/${uid}/wishlist`); } catch { w = { hidden: true, items: [] }; }
+    if (w.hidden) { wishP.remove(); return; }
+    wishP.lastChild.replaceWith(w.items.length ? el('div', { class: 'item-grid wish-grid' }, w.items.map((it) => el('div', { class: 'wish-item' }, itemCard(it),
+      !own && me && it.canGift ? el('button', { class: 'btn btn-small btn-green', text: '🎁 Gift', onclick: () => giftDialog(it, me, { to: uid, onDone: (r) => { setRobits(r.robits); drawWish(); } }) }) : null)))
+      : el('div', { class: 'muted', text: own ? 'Your wishlist is empty. Press "Add to wishlist" on any item in the Catalog - your friends will see it here.' : 'Nothing on the wishlist yet.' }));
+  };
+  drawWish();
+  body.replaceChildren(aboutPanel, wearing, wishP, friendsP, groupsP, favP, robisBadgesP, badgesP, statsP);
   const [fr, fav, grs] = await Promise.all([api.get(`/users/${uid}/friends`), api.get(`/users/${uid}/favorites`), api.get(`/users/${uid}/groups`).catch(() => ({ groups: [], primary: null }))]);
   const ROLE = { owner: 'Owner', admin: 'Admin', member: 'Member' };
   const sorted = grs.groups.slice().sort((a, b) => (grs.primary && b.id === grs.primary.id) - (grs.primary && a.id === grs.primary.id));

@@ -13,6 +13,8 @@ import { filterChat } from './game/chatfilter.js';
 import { installAdminTools } from './admintools.js';
 import { installDiscordStatus } from './discordstatus.js';
 import { installFun } from './fun.js';
+import { installSocial } from './social.js';
+import { installOverwatch } from './overwatch.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -230,7 +232,16 @@ export function createApi(db, manager, opts = {}) {
   // except ones an admin also uses (so the owner's own phone or Wi-Fi never
   // gets banned). opts.ms makes it temporary.
   const BAN_TIMES = { '1h': 3600e3, '1d': 86400e3, '3d': 3 * 86400e3, '7d': 7 * 86400e3, '30d': 30 * 86400e3 };
+  // Filled in by server/social.js (sales, mutes, trade bans, appeals).
+  const hooks = { salePrice: (it) => it.price, saleInfo: () => null, isMuted: () => false, isTradeBanned: () => false, muteMessage: () => 'You are muted.', tradeMessage: () => 'You can\'t trade right now.', appealKey: () => '', overwatchAccess: () => false };
   const setBan = (u, banned, reason, opts = {}) => {
+    // every ban is remembered, so the player can appeal a ban from the list
+    if (banned) {
+      const h = u.banHistory || (u.banHistory = []);
+      for (const x of h) if (!x.endedAt) { x.endedAt = Date.now(); x.endedHow = 'replaced by a new ban'; }
+      h.push({ id: (h.at(-1)?.id || 0) + 1, reason: String(reason || '').slice(0, 200), time: Date.now(), until: opts.ms ? Date.now() + opts.ms : 0, device: !!opts.device, by: opts.by || '' });
+      if (h.length > 30) h.splice(0, h.length - 30);
+    } else for (const x of u.banHistory || []) if (!x.endedAt) { x.endedAt = Date.now(); x.endedHow = 'unbanned'; }
     u.banned = banned;
     u.banReason = banned ? String(reason || '').slice(0, 200) : '';
     u.banUntil = banned && opts.ms ? Date.now() + opts.ms : 0;
@@ -268,6 +279,8 @@ export function createApi(db, manager, opts = {}) {
     can: (u, perm) => can(D.users[u.id] || u, perm),
     opt: (u, perm, key) => popt(D.users[u.id] || u, perm, key),
     banSteps: BAN_STEPS,
+    // a mute from the Admin Panel / an appeal also mutes the in-game chat
+    muted: (u) => hooks.isMuted(D.users[u.id]) ? hooks.muteMessage(D.users[u.id]) : '',
   };
 
   // ------------------------------------------------------------ helpers
@@ -312,6 +325,7 @@ export function createApi(db, manager, opts = {}) {
   const ACHIEVEMENTS = [
     ['admin', '🛡️', 'Administrator', 'Runs this Robis.', (u) => u.isAdmin],
     ['secret', '🕹️', 'Secret Finder', 'Found the secret code hidden somewhere on Robis.', (u) => !!u.secretFound],
+    ['overwatch', '🕵️', 'Overwatch Investigator', 'Judged 10 Overwatch cases correctly.', (u) => (u.owCorrect || 0) >= 10],
     ['lucky', '🍀', 'Lucky Spinner', 'Spun the Daily Spin 7 days in a row.', (u) => (u.spinStreak || 0) >= 7],
     ['hunter', '🗝️', 'The Hunter', 'Found every token in The Hunt.', (u) => (D.hunt?.rewarded?.[u.id] || []).includes('all')],
     ['club', '🏗️', 'Welcome To The Club', 'Has a Builders Club membership.', (u) => u.membership && u.membership !== 'None'],
@@ -374,6 +388,8 @@ export function createApi(db, manager, opts = {}) {
     perms: u.isAdmin ? Object.keys(PERMISSIONS) : (u.perms || []), tradePrivacy: u.tradePrivacy || 'everyone',
     hunt: manager.hunt ? manager.hunt.eligible(u.id) : false, // The Hunt event page in the menu (a live event)
     warning: u.pendingWarning || null, // a warning from the staff not seen yet (a popup)
+    overwatch: hooks.overwatchAccess(u), // Robis Overwatch in the menu
+    restrictions: hooks.restriction ? hooks.restriction(u) : { mute: 0, trade: 0 },
   });
 
   // Owners, admins and the people they add to Team Create can edit a place.
@@ -399,10 +415,10 @@ export function createApi(db, manager, opts = {}) {
   const publicItem = (it, user) => {
     const creator = D.users[it.creatorId];
     return {
-      id: it.id, name: it.name, type: it.type, price: it.price, data: it.data, description: it.description,
+      id: it.id, name: it.name, type: it.type, price: hooks.salePrice(it), basePrice: it.price, sale: hooks.saleInfo(it), data: it.data, description: it.description,
       creator: creator ? { id: creator.id, username: creator.username, flags: userFlags(creator) } : null,
       created: it.created, sales: it.sales, offsale: !!it.offsale, limited: !!it.limited, remaining: it.remaining ?? null, stock: it.stock ?? null, custom: !!it.custom,
-      owned: user ? (D.inventory[user.id] || []).includes(it.id) : false,
+      owned: user ? (D.inventory[user.id] || []).includes(it.id) : false, wished: user ? (user.wishlist || []).includes(it.id) : false,
       serial: user ? serialOf(it, user.id) : null, lastSerial: it.limited ? it.lastSerial || 0 : null,
       bestPrice: it.limited ? bestPrice(it.id) : null,
       myResale: user && it.limited ? ((r) => (r ? { id: r.id, price: r.price } : null))(D.resales.find((r) => r.itemId === it.id && r.sellerId === user.id)) : null,
@@ -466,7 +482,7 @@ export function createApi(db, manager, opts = {}) {
     const { username, password } = req.body || {};
     const user = Object.values(D.users).find((u) => u.username.toLowerCase() === String(username || '').toLowerCase());
     if (!user || !checkPassword(user, String(password || ''))) return bad(res, 'Incorrect username or password.', 401);
-    if (isBanned(user)) return bad(res, banMessage(user), 403);
+    if (isBanned(user)) return res.status(403).json({ error: banMessage(user), banned: true, appealKey: hooks.appealKey(user) });
     const other = !user.isAdmin && bannedClient(db, req.client);
     if (other) return bad(res, `This device is banned from this Robis (account ${other.username}).${banDetails(other)}`, 403);
     noteClient(db, user, req.client);
@@ -581,6 +597,7 @@ export function createApi(db, manager, opts = {}) {
     const from = D.users[t.from], to = D.users[t.to];
     if (!from || !to) return 'That player no longer exists.';
     if (isBanned(from) || isBanned(to)) return 'One of the players is banned.';
+    if (hooks.isTradeBanned(from) || hooks.isTradeBanned(to)) return 'One of the players can\'t trade right now.';
     const side = (owner, other, ids) => {
       const inv = D.inventory[owner.id] || [];
       const theirs = D.inventory[other.id] || [];
@@ -616,6 +633,7 @@ export function createApi(db, manager, opts = {}) {
 
   api.post('/trades', requireUser, (req, res) => {
     const from = req.user;
+    if (hooks.isTradeBanned(from)) return bad(res, hooks.tradeMessage(from), 403);
     const to = D.users[toInt(req.body?.toUserId)];
     if (!to || to.system) return bad(res, 'User not found', 404);
     if (to.id === from.id) return bad(res, 'You can\'t trade with yourself.');
@@ -881,6 +899,7 @@ export function createApi(db, manager, opts = {}) {
   api.post('/groups/:id/wall', requireUser, (req, res) => {
     const gr = groupFor(req, res); if (!gr) return;
     if (!gr.members[req.user.id]) return bad(res, 'Join the group to post on its wall.', 403);
+    if (hooks.isMuted(req.user)) return bad(res, hooks.muteMessage(req.user), 403);
     if (limited(req, res, 'wall', 30, 600e3)) return;
     const text = cleanText(req.body?.text, 500);
     if (!text) return bad(res, 'Write something first.');
@@ -1070,6 +1089,7 @@ export function createApi(db, manager, opts = {}) {
     if (!target) return bad(res, 'Recipient not found');
     if (target.system) return bad(res, 'This account can\'t receive messages.');
     if (!String(body || '').trim()) return bad(res, 'Message is empty');
+    if (hooks.isMuted(req.user) && !target.isAdmin) return bad(res, hooks.muteMessage(req.user) + ' You can still write to the admins.', 403);
     const m = {
       id: db.nextId('message'), from: req.user.id, to: target.id,
       subject: String(subject || '(no subject)').slice(0, 100), body: String(body).slice(0, 5000), created: Date.now(), read: false,
@@ -1330,15 +1350,16 @@ export function createApi(db, manager, opts = {}) {
     if (inv.includes(it.id)) return bad(res, 'You already own this item.');
     if (it.offsale) return bad(res, 'This item is not for sale.');
     if (it.limited && it.remaining !== null && it.remaining <= 0) return bad(res, 'This item is sold out.');
-    if (req.user.robits < it.price) return bad(res, `You need ${it.price - req.user.robits} more Robits to purchase this item.`);
-    req.user.robits -= it.price;
+    const price = hooks.salePrice(it);
+    if (req.user.robits < price) return bad(res, `You need ${price - req.user.robits} more Robits to purchase this item.`);
+    req.user.robits -= price;
     const creator = D.users[it.creatorId];
-    if (creator && creator.id !== req.user.id && it.price > 0) {
-      const cut = Math.floor(it.price * 0.7);
+    if (creator && creator.id !== req.user.id && price > 0) {
+      const cut = Math.floor(price * 0.7);
       creator.robits += cut;
       log(creator.id, cut, `Sold ${it.name}`);
     }
-    log(req.user.id, -it.price, `Purchased ${it.name}`);
+    log(req.user.id, -price, `Purchased ${it.name}${price !== it.price ? ' (on sale)' : ''}`);
     inv.push(it.id);
     it.sales++;
     if (it.limited && it.remaining !== null) it.remaining--;
@@ -2059,6 +2080,10 @@ export function createApi(db, manager, opts = {}) {
     donate: () => 'Changed donate prices',
     spin: (b) => `Daily Spin: ${{ save: 'changed the wheel', toggle: b.on ? 'turned on' : 'turned off', boost: +b.mult > 1 && +b.hours ? `x${+b.mult} boost for ${+b.hours}h` : 'boost off', give: `+${Math.trunc(+b.count || 1)} free spin(s) to ${String(b.target || '').slice(0, 30)}`, reset: `new spin for ${String(b.target || '').slice(0, 30)}`, rig: `next prize for ${String(b.target || '').slice(0, 30)}` }[b.op] || b.op}`,
     fun: (b) => (b.op === 'rain' ? `Robits rain: R$${Math.trunc(+b.amount || 0)} to ${b.target === 'all' ? 'everyone' : 'everyone online'}` : b.op === 'party' ? `Party: ${String(b.text || '').slice(0, 80)}` : `Decorations: ${b.decor}${+b.hours ? ` for ${+b.hours}h` : ''}`),
+    soften: (b) => `Ban removed${b.kind && b.kind !== 'unban' ? ` (now ${b.kind === 'both' ? 'muted + no trades' : b.kind === 'mute' ? 'muted' : 'no trades'} for ${b.time || '7d'})` : ''}`,
+    restrict: (b) => (b.clear ? 'Restrictions lifted' : `${b.kind === 'both' ? 'Muted + no trades' : b.kind === 'mute' ? 'Muted' : 'No trades'} for ${b.time || '1d'}${b.reason ? ': ' + String(b.reason).slice(0, 80) : ''}`),
+    sales: (b) => (b.op ? `Sale #${+b.id}: ${b.op}` : `Sale: ${String(b.name || 'Black Friday').slice(0, 40)} -${Math.trunc(+b.percent || 0)}% (${b.scope || 'all'})`),
+    overwatch: (b) => `Overwatch: ${b.op || 'settings'}${b.user ? ' ' + String(b.user).slice(0, 30) : ''}`,
     abuse: (b) => `Admin Abuse: ${b.op === 'start' ? `started in ${D.games[toInt(b.gameId)]?.name || '?'}` : b.op === 'effect' ? `${b.effect} ${b.on ? 'on' : 'off'}` : b.op === 'once' ? b.effect : b.op === 'message' ? `message: ${String(b.text || '').slice(0, 80)}` : b.op === 'robits' ? `R$${Math.trunc(+b.amount || 0)} to everyone in the game` : b.op}`,
     polls: (b) => (b.op === 'create' ? `Poll: ${String(b.question || '').slice(0, 100)}` : `Poll #${+b.id}: ${b.op}`),
     hunt: (b) => (b.action ? `The Hunt: ${b.action}${b.key ? ' ' + b.key : ''}${b.action === 'schedule' ? ' (times)' : ''}` : b.user ? `The Hunt: ${b.take ? 'took' : 'gave'} ${b.all ? 'all tokens' : 'a token'} ${b.take ? 'from' : 'to'} ${String(b.user).slice(0, 30)}` : `The Hunt settings${b.public !== undefined ? (b.public ? ' (open)' : ' (private)') : ''}`),
@@ -2495,12 +2520,14 @@ export function createApi(db, manager, opts = {}) {
       const step = BAN_TIMES[req.body?.duration] ? req.body.duration : 'forever';
       if (BAN_STEPS.indexOf(step) > BAN_STEPS.indexOf(max)) return bad(res, `Your longest ban is ${max === '1h' ? '1 hour' : max.replace('d', ' days').replace(/^1 days$/, '1 day')}.`, 403);
     }
-    setBan(u, !!req.body?.banned, req.body?.reason, { device: !!req.body?.device, ms: BAN_TIMES[req.body?.duration] || 0 });
+    setBan(u, !!req.body?.banned, req.body?.reason, { device: !!req.body?.device, ms: BAN_TIMES[req.body?.duration] || 0, by: req.user.username });
     res.json({ user: adminUser(u) });
   });
 
   installHunt(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial });
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
+  installSocial(api, { db, requireUser, requireAdmin, requireStaff, bad, log, giveSerial, publicUser, publicItem, isBanned, setBan, hooks, banDetails });
+  installOverwatch(api, { db, requireUser, requireAdmin, bad, hooks, log });
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });

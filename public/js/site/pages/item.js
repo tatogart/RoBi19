@@ -1,6 +1,7 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
 import { confetti } from '../fun.js';
+import { wishButton, giftDialog, salePrice, countdown } from '../gifts.js';
 import { el, icon, fmtFull, fmtDate, qs, modal, toast, userLink, headshotImg } from '../ui.js';
 import { itemThumbnail } from '../../render/thumbs.js';
 
@@ -15,12 +16,16 @@ const buyArea = el('div');
 function renderBuy() {
   buyArea.replaceChildren(...[
     el('div', { class: 'price-line' }, el('span', { class: 'muted', text: 'Price' }),
-      item.price ? el('span', { class: 'big-price' }, icon('robits', 'robits-icon'), fmtFull(item.price)) : el('span', { class: 'big-price', text: 'Free' })),
+      item.price ? el('span', { class: 'big-price' }, icon('robits', 'robits-icon'), fmtFull(item.price)) : el('span', { class: 'big-price', text: 'Free' }), salePrice(item)),
+    item.sale ? (() => { const c = el('b', { class: 'no-i18n' }); countdown(c, item.sale.ends, () => setTimeout(refreshItem, 1200)); return el('div', { class: 'sale-line' }, el('span', { class: 'no-i18n', text: `🔥 ${item.sale.name}` }), ' · ', el('span', { text: 'ends in' }), ' ', c); })() : null,
     item.owned
       ? el('div', { class: 'row wrap' }, el('span', { class: 'pill', text: '✓ You own this item' }),
         item.serial ? el('span', { class: 'pill serial-pill no-i18n', text: `#${item.serial}${item.stock ? ' / ' + fmtFull(item.stock) : ''}` }) : null,
         el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
       : el('button', { class: 'btn btn-green btn-large', text: item.price ? 'Buy' : 'Get', disabled: item.limited && item.remaining === 0, onclick: buy }),
+    me && !item.offsale && !(item.limited && item.remaining === 0) ? el('div', { class: 'row wrap', style: { marginTop: '10px', gap: '8px' } },
+      item.owned ? null : wishButton(item),
+      el('button', { class: 'btn gift-btn', text: '🎁 Gift to a friend', onclick: () => giftDialog(item, me, { onDone: (r) => { setRobits(r.robits); refreshItem(); } }) })) : null,
     item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: item.remaining === 0 ? 'Sold out — buy it from a reseller or get it in a trade.' : item.stock ? `${fmtFull(item.remaining)} of ${fmtFull(item.stock)} remaining` : `${fmtFull(item.remaining)} remaining` }) : null,
     item.limited && item.bestPrice ? el('div', { class: 'price-line', style: { marginTop: '10px' } }, el('span', { class: 'muted', text: 'Best Price' }),
       el('span', { class: 'big-price small-price' }, icon('robits', 'robits-icon'), fmtFull(item.bestPrice))) : null,

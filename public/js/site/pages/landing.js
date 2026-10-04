@@ -36,7 +36,11 @@ lf.addEventListener('submit', async (e) => {
   try {
     await api.post('/auth/login', { username: lf.username.value.trim(), password: lf.password.value });
     location.href = returnUrl;
-  } catch (ex) { toast(ex.message, 'error'); }
+  } catch (ex) {
+    // banned: show why, with a button to appeal
+    if (ex.data && ex.data.banned && ex.data.appealKey) import('../appeal.js').then((m) => m.bannedDialog(ex.message, ex.data.appealKey));
+    else toast(ex.message, 'error');
+  }
 });
 if (params.get('signup')) f.username.focus();
 

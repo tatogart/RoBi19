@@ -1,6 +1,7 @@
 import { initPage } from '../layout.js';
 import { api } from '../api.js';
 import { el, qs, spinner, itemCard } from '../ui.js';
+import { saleBanner } from '../gifts.js';
 
 await initPage({ active: 'catalog', requireAuth: false });
 const app = document.getElementById('app');
@@ -24,6 +25,7 @@ app.append(el('h1', { text: 'Catalog' }),
       el('form', { class: 'row', style: { marginBottom: '16px' }, onsubmit: (e) => { e.preventDefault(); load(); } }, search, sort, el('button', { class: 'btn btn-primary', text: 'Search' })),
       grid)));
 sort.onchange = load;
+saleBanner().then((b) => { if (b) app.querySelector('h1').after(b); });
 
 async function load() {
   for (const b of catBtns) b.classList.toggle('active', b.dataset.k === cat);
