@@ -32,6 +32,8 @@ export function installOverwatch(api, { db, manager, requireUser, requireAdmin, 
     },
   };
   const realById = (id) => O.real.find((x) => x.id === id);
+  // open real cases this player can still judge (never their own)
+  const realFor = (u, answered) => O.real.filter((r) => r.status === 'open' && r.uid !== u.id && !answered.has(r.id));
   const realVotes = (r) => { const a = O.answers.filter((x) => x.caseId === r.id); return { cheater: a.filter((x) => x.verdict === 'cheater').length, fair: a.filter((x) => x.verdict === 'fair').length }; };
   const hasAccess = (u) => !!u && !u.system && (u.isAdmin || O.mode === 'everyone' || (O.mode === 'chosen' && O.access.includes(u.id)));
   hooks.overwatchAccess = hasAccess;
@@ -77,6 +79,7 @@ export function installOverwatch(api, { db, manager, requireUser, requireAdmin, 
     const last = O.answers.filter((a) => a.uid === u.id && a.week === week - 1);
     res.json({
       access: true, week, perWeek: PER_WEEK, left: cases.filter((c) => !answered.has(c.id)).length,
+      realLeft: realFor(u, answered).length, // real cases from games: extra, not part of the week's 10
       nextWeek: MONDAY + (week + 1) * WEEK, stats: st,
       lastWeek: last.length ? { answered: last.length, correct: last.filter((a) => a.correct).length } : null,
     });
@@ -87,12 +90,12 @@ export function installOverwatch(api, { db, manager, requireUser, requireAdmin, 
     if (!hasAccess(u)) return bad(res, 'You don\'t have access to Overwatch.', 403);
     const answered = new Set(O.answers.filter((a) => a.uid === u.id).map((a) => a.caseId));
     // a real case from a game (half the time, when there is one)
-    const real = O.real.filter((r) => r.status === 'open' && r.uid !== u.id && !answered.has(r.id));
+    const real = realFor(u, answered);
     const left = casesFor(weekNo()).filter((c) => !answered.has(c.id));
     if (real.length && (!left.length || Math.random() < 0.5)) {
       const r = real[0];
       opened.set(`${u.id}:${r.id}`, Date.now());
-      return res.json({ id: r.id, real: true, number: PER_WEEK - left.length + 1, of: PER_WEEK, replay: r.replay });
+      return res.json({ id: r.id, real: true, realLeft: real.length, replay: r.replay });
     }
     if (!left.length) return res.json({ done: true });
     const c = left[Math.floor(Math.random() * left.length)];

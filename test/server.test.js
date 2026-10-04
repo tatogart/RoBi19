@@ -1997,3 +1997,18 @@ test('bots join games, play, and the cheater among them gets caught', async () =
   assert.equal((await call('GET', '/users/' + fair.uid)).status, 404);
   c.ws.close();
 });
+
+test('real Overwatch cases are extra: never "case 11 of 10"', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const info = (await call('GET', '/overwatch', null, admin)).data;
+  assert.ok(info.realLeft >= 1, 'earlier tests made real cases');
+  let real = null;
+  for (let i = 0; i < 40 && !real; i++) {
+    const c = (await call('GET', '/overwatch/case', null, admin)).data;
+    if (c.real) real = c;
+    else assert.ok(c.number <= c.of);
+  }
+  assert.ok(real, 'a real case comes up');
+  assert.equal(real.number, undefined);
+  assert.ok(real.realLeft >= 1);
+});

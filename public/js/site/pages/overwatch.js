@@ -26,15 +26,17 @@ async function load() {
   head.replaceChildren(hero(),
     el('div', { class: 'ow-stats' },
       stat(`${info.perWeek - info.left} / ${info.perWeek}`, tr('cases this week')),
+      info.realLeft ? stat('🚨 ' + info.realLeft, tr('real cases from games')) : null,
       stat(s.accuracy === null ? '—' : s.accuracy + '%', tr('your accuracy')),
       stat(String(s.correct), tr('correct verdicts')),
       stat(new Date(info.nextWeek).toLocaleDateString(), tr('new cases'))),
     ...(info.lastWeek ? [el('div', { class: 'ow-last' }, tr(`Last week: ${info.lastWeek.correct} of ${info.lastWeek.answered} of your verdicts were right.`))] : []));
-  if (!info.left) { stage.replaceChildren(el('div', { class: 'panel empty' }, el('div', { style: { fontSize: '40px' }, text: '🕵️' }), el('b', { text: tr('All cases of this week are judged. Thanks, investigator!') }), el('div', { class: 'muted', text: tr('New cases come every Monday.') }))); return; }
+  if (!info.left && !info.realLeft) { stage.replaceChildren(el('div', { class: 'panel empty' }, el('div', { style: { fontSize: '40px' }, text: '🕵️' }), el('b', { text: tr('All cases of this week are judged. Thanks, investigator!') }), el('div', { class: 'muted', text: tr('New cases come every Monday.') }))); return; }
   stage.replaceChildren(el('div', { class: 'ow-intro panel' },
     el('h3', { text: tr('How it works') }),
     el('p', { text: tr('You get a replay of a laser tag game. One player - the SUSPECT, in red - may be cheating. Watch closely (you can slow it down, turn the camera, see through walls) and decide: cheater or fair player?') }),
     el('p', { class: 'small muted', text: tr('Watch at least half of the replay before you decide. Your accuracy is shown after the week ends.') }),
+    info.realLeft ? el('p', { class: 'small', text: tr(info.left ? 'Sometimes you get a real case from a game instead: a real player the anti-cheat spotted. These are extra, they are not part of the 10.' : 'This week\'s 10 cases are done, but there are real cases from games waiting for you.') }) : null,
     el('button', { class: 'btn btn-green btn-large', text: tr('▶ Watch a case'), onclick: openCase })));
 }
 const hero = () => el('div', { class: 'ow-hero' }, el('div', { class: 'ow-logo', text: '🕵️' }), el('div', {}, el('h1', { text: 'Robis Overwatch' }), el('p', { text: tr('Help the Robis team catch cheaters. New cases every week.') })));
@@ -60,7 +62,7 @@ async function openCase() {
   cheat.onclick = () => send('cheater');
   fair.onclick = () => send('fair');
   stage.replaceChildren(el('div', { class: 'ow-case' },
-    el('div', { class: 'ow-case-head' }, el('b', { text: tr(`Case ${c.number} of ${c.of}`) }), el('span', { class: 'muted small no-i18n', text: '#' + c.id })),
+    el('div', { class: 'ow-case-head' }, el('b', { text: c.real ? tr(`🚨 Real case from a game (${c.realLeft} waiting)`) : tr(`Case ${c.number} of ${c.of}`) }), el('span', { class: 'muted small no-i18n', text: '#' + c.id })),
     box,
     el('div', { class: 'ow-verdict panel' },
       el('b', { text: tr('Was the suspect cheating?') }), watched,
