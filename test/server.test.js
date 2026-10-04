@@ -1933,3 +1933,23 @@ test('the anti-cheat turns a speed-hacker into a real Overwatch case', async () 
   assert.equal((await call('GET', '/admin/overwatch', null, admin)).data.real.find((x) => x.id === c.id).status, 'cheater');
   h.ws.close(); o.ws.close();
 });
+
+test('the anti-cheat also sees teleports after standing still, and straight up', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const tp = await call('POST', '/auth/signup', { username: 'TpAfterIdle', password: 'secret123' });
+  const cross = (await call('GET', '/games?q=Crossroads')).data.games.find((g) => g.name === 'Crossroads');
+  const c = await join(tp.cookie, { placeId: cross.id });
+  await c.wait((m) => m.t === 'welcome');
+  await new Promise((r) => setTimeout(r, 3300));
+  const mv = (x, y, z) => c.ws.send(JSON.stringify({ t: 'move', p: [x, y, z], ry: 0, a: 'idle' }));
+  mv(0, 3, 30);
+  await new Promise((r) => setTimeout(r, 2000)); // stands still
+  mv(90, 3, 30); // then jumps 90 studs
+  await new Promise((r) => setTimeout(r, 2000));
+  mv(90, 60, 30); // and 57 straight up
+  await new Promise((r) => setTimeout(r, 4800));
+  const r = (await call('GET', '/admin/overwatch', null, admin)).data;
+  const k = r.real.find((x) => x.username === 'TpAfterIdle');
+  assert.ok(k && k.why.teleport >= 2, JSON.stringify(r.real.map((x) => x.username)));
+  c.ws.close();
+});
