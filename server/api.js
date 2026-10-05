@@ -518,7 +518,7 @@ export function createApi(db, manager, opts = {}) {
     const { username, password } = req.body || {};
     const user = Object.values(D.users).find((u) => u.username.toLowerCase() === String(username || '').toLowerCase());
     if (!user || !checkPassword(user, String(password || ''))) return bad(res, 'Incorrect username or password.', 401);
-    if (isBanned(user)) return res.status(403).json({ error: banMessage(user), banned: true, appealKey: hooks.appealKey(user) });
+    if (isBanned(user)) return res.status(403).json({ error: banMessage(user), banned: true, appealKey: hooks.appealKey(user), appealReply: hooks.appealReply ? hooks.appealReply(user) : false });
     const other = !user.isAdmin && bannedClient(db, req.client);
     if (other) return bad(res, `This device is banned from this Robis (account ${other.username}).${banDetails(other)}`, 403);
     noteClient(db, user, req.client);

@@ -38,7 +38,7 @@ lf.addEventListener('submit', async (e) => {
     location.href = returnUrl;
   } catch (ex) {
     // banned: show why, with a button to appeal
-    if (ex.data && ex.data.banned && ex.data.appealKey) import('../appeal.js').then((m) => m.bannedDialog(ex.message, ex.data.appealKey));
+    if (ex.data && ex.data.banned && ex.data.appealKey) import('../appeal.js').then((m) => m.bannedDialog(ex.message, ex.data.appealKey, ex.data.appealReply));
     else toast(ex.message, 'error');
   }
 });

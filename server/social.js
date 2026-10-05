@@ -221,6 +221,9 @@ export function installSocial(api, ctx) {
     return {
       id: a.id, status: a.status, created: a.created, decided: a.decided || 0, decidedBy: a.decidedBy || '', answer: a.answer || '', outcome: a.outcome || '',
       ban: a.ban, reason: a.reason, explanation: a.explanation, media: !!a.media, mediaType: a.mediaType || '',
+      // the chat with the Robis team while the appeal is open
+      chat: (a.chat || []).map((m) => ({ n: m.n, from: m.from, name: m.from === 'staff' ? (full ? m.name : 'Robis team') : m.name, text: m.text, time: m.time, media: !!m.media, mediaType: m.mediaType || '' })),
+      waiting: a.status !== 'open' ? '' : (a.chat || []).length && a.chat.at(-1).from === 'staff' ? 'player' : 'staff',
       user: u ? { id: u.id, username: u.username, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0 } : null,
     };
   };
@@ -297,6 +300,92 @@ export function installSocial(api, ctx) {
     res.setHeader('Content-Security-Policy', "default-src 'none'");
     res.sendFile(path.resolve(mediaPath(a)));
   });
+  // ---- the appeal chat: the team asks (for proof, details), the player answers
+  const chatPath = (a, m) => (hasFiles ? path.join(mediaDir, `${a.id}-c${m.n}.${EXT[m.mediaType] || 'bin'}`) : '');
+  const sendFile = (res, a, m) => {
+    if (!hasFiles) {
+      const d = memMedia.get(`${a.id}-c${m.n}`);
+      if (!d) return bad(res, 'No file', 404);
+      const bin = atob(d.slice(d.indexOf(',') + 1));
+      res.setHeader('Content-Type', m.mediaType);
+      res.body = new Blob([Uint8Array.from(bin, (c) => c.charCodeAt(0))], { type: m.mediaType });
+      return;
+    }
+    if (!fs.existsSync(chatPath(a, m))) return bad(res, 'No file', 404);
+    res.setHeader('Content-Type', m.mediaType);
+    res.setHeader('Content-Security-Policy', "default-src 'none'");
+    res.sendFile(path.resolve(chatPath(a, m)));
+  };
+  const addChat = (a, from, name, text, media) => {
+    if (!a.chat) a.chat = [];
+    const m = { n: (a.chat.at(-1)?.n || 0) + 1, from, name, text, time: now() };
+    if (media) {
+      m.media = true; m.mediaType = media.slice(5, media.indexOf(';'));
+      if (hasFiles) {
+        fs.mkdirSync(mediaDir, { recursive: true });
+        fs.writeFileSync(chatPath(a, m), Buffer.from(media.slice(media.indexOf(',') + 1), 'base64'));
+      } else memMedia.set(`${a.id}-c${m.n}`, media);
+    }
+    a.chat.push(m);
+    a.updated = now();
+    return m;
+  };
+  const checkMedia = (res, v) => {
+    if (!v) return '';
+    const m = String(v);
+    if (m.length > MAX_MEDIA) { bad(res, 'The file is too big (9 MB at most).'); return null; }
+    if (!MEDIA.test(m)) { bad(res, 'Only pictures (PNG, JPG, GIF, WEBP) and videos (MP4, WEBM, MOV).'); return null; }
+    return m;
+  };
+  // the team writes to the player (the appeal stays open)
+  api.post('/admin/appeals/:id/chat', requireStaff, (req, res) => {
+    const a = D.appeals.find((x) => x.id === +req.params.id);
+    if (!a) return bad(res, 'Appeal not found', 404);
+    if (a.status !== 'open') return bad(res, 'This appeal was already answered.');
+    const text = clean(req.body?.text, 1000);
+    if (!text) return bad(res, 'Write a message.');
+    if ((a.chat || []).length >= 100) return bad(res, 'This chat is full. Decide the appeal.');
+    addChat(a, 'staff', req.user.username, text, '');
+    db.save();
+    res.json({ ok: true, appeal: appealView(a, true) });
+  });
+  api.get('/admin/appeals/:id/chat/:n/media', requireStaff, (req, res) => {
+    const a = D.appeals.find((x) => x.id === +req.params.id);
+    const m = a && (a.chat || []).find((x) => x.n === +req.params.n);
+    if (!m || !m.media) return bad(res, 'No file', 404);
+    sendFile(res, a, m);
+  });
+  // the banned player answers (with the appeal key from the login)
+  api.post('/appeals/:id/chat', (req, res) => {
+    const b = req.body || {};
+    const u = byKey(b.key);
+    if (!u) return bad(res, 'This appeal link has expired. Log in again to get a new one.', 403);
+    const a = D.appeals.find((x) => x.id === +req.params.id && x.userId === u.id);
+    if (!a) return bad(res, 'Appeal not found', 404);
+    if (a.status !== 'open') return bad(res, 'This appeal was already answered.');
+    const chat = a.chat || [];
+    if (!chat.length) return bad(res, 'Wait until the Robis team writes to you.');
+    if (chat.length >= 100) return bad(res, 'This chat is full.');
+    if (chat.slice(-5).length === 5 && chat.slice(-5).every((m) => m.from === 'player')) return bad(res, 'Wait for the Robis team to answer.');
+    const text = clean(b.text, 1000);
+    const media = checkMedia(res, b.media);
+    if (media === null) return;
+    if (!text && !media) return bad(res, 'Write a message or add a file.');
+    addChat(a, 'player', u.username, text, media);
+    db.save();
+    res.json({ ok: true, appeal: appealView(a) });
+  });
+  // the player sees their own files again
+  api.get('/appeals/:id/chat/:n/media', (req, res) => {
+    const u = byKey(req.query.key);
+    const a = u && D.appeals.find((x) => x.id === +req.params.id && x.userId === u.id);
+    const m = a && (a.chat || []).find((x) => x.n === +req.params.n);
+    if (!m || !m.media) return bad(res, 'No file', 404);
+    sendFile(res, a, m);
+  });
+  // a banned player trying to log in: did the team write to them?
+  hooks.appealReply = (u) => D.appeals.some((a) => a.userId === u.id && a.status === 'open' && (a.chat || []).length && a.chat.at(-1).from === 'staff');
+
   // { decision: 'deny' | 'unban' | 'mute' | 'trade' | 'both', time, answer }
   api.post('/admin/appeals/:id', requireStaff, (req, res) => {
     const a = D.appeals.find((x) => x.id === +req.params.id);

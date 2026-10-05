@@ -2240,3 +2240,45 @@ test('Control Center 5.0: player tools and site tools', async () => {
   assert.ok((await csv.text()).startsWith('id,username'));
   assert.equal((await call('POST', '/admin/tools', { op: 'deleteGuests' }, p.cookie)).status, 403);
 });
+
+test('appeal chat: the team asks for proof, the banned player answers', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const u = await call('POST', '/auth/signup', { username: 'ChatAppealer', password: 'secret123' });
+  await call('POST', `/admin/users/${u.data.user.id}/ban`, { banned: true, reason: 'Exploiting', duration: '7d' }, admin);
+  let login = await call('POST', '/auth/login', { username: 'ChatAppealer', password: 'secret123' });
+  let key = login.data.appealKey;
+  assert.equal(login.data.appealReply, false);
+  const info = (await call('GET', '/appeals/info?key=' + key)).data;
+  const sent = (await call('POST', '/appeals', { key, banId: info.bans[0].id, reason: 'I didn\'t do it', explanation: 'I never used any exploit, I swear on everything!' })).data.appeal;
+  // the player can't write first
+  assert.equal((await call('POST', `/appeals/${sent.id}/chat`, { key, text: 'hello?' })).status, 400);
+  // the team asks
+  const ask = await call('POST', `/admin/appeals/${sent.id}/chat`, { text: 'Please send a video.' }, admin);
+  assert.equal(ask.status, 200);
+  assert.equal(ask.data.appeal.waiting, 'player');
+  // the player sees it when logging in again
+  login = await call('POST', '/auth/login', { username: 'ChatAppealer', password: 'secret123' });
+  assert.equal(login.data.appealReply, true);
+  key = login.data.appealKey;
+  const mine = (await call('GET', '/appeals/info?key=' + key)).data.appeals[0];
+  assert.equal(mine.chat[0].text, 'Please send a video.');
+  assert.equal(mine.chat[0].name, 'Robis team'); // the player doesn't see who
+  // and answers with proof
+  const vid = 'data:video/mp4;base64,' + Buffer.from('fakevideo').toString('base64');
+  const r = await call('POST', `/appeals/${sent.id}/chat`, { key, text: 'Here it is', media: vid });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.appeal.waiting, 'staff');
+  const ap = (await call('GET', `/admin/appeals/${sent.id}`, null, admin)).data.appeal;
+  assert.equal(ap.chat.length, 2);
+  assert.equal(ap.chat[0].name, 'Tester_1');
+  const f = await fetch(base + `/api/admin/appeals/${sent.id}/chat/2/media`, { headers: { cookie: admin } });
+  assert.equal(f.headers.get('content-type'), 'video/mp4');
+  assert.equal(await f.text(), 'fakevideo');
+  // a wrong key gets nothing
+  assert.equal((await call('POST', `/appeals/${sent.id}/chat`, { key: 'f'.repeat(36), text: 'x' })).status, 403);
+  // other players can't write in the team chat
+  assert.equal((await call('POST', `/admin/appeals/${sent.id}/chat`, { text: 'hi' }, u.cookie)).status, 401);
+  // decided: the chat closes
+  await call('POST', `/admin/appeals/${sent.id}`, { decision: 'unban' }, admin);
+  assert.equal((await call('POST', `/admin/appeals/${sent.id}/chat`, { text: 'more?' }, admin)).status, 400);
+});

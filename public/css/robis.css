@@ -1470,3 +1470,12 @@ html[data-theme="dark"] .item-card .thumb { background: linear-gradient(#45484b,
 .adm-classic .adm-logo { background: rgba(255,255,255,.18) !important; color: #fff !important; border: 1px solid rgba(255,255,255,.4); }
 .adm-classic .adm-hero, .adm-classic .adm-welcome { background: linear-gradient(180deg, #4a8ad8, #1f5fae) !important; border-radius: 3px !important; padding: 12px 14px !important; border: 1px solid #154c92; box-shadow: none !important; }
 .adm-classic .adm-card, .adm-classic .adm-stat, .adm-classic .adm-chip { border-radius: 3px !important; box-shadow: none !important; }
+/* appeal chat */
+.appeal-chat { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; padding: 8px; background: var(--gray-bg); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; }
+.appeal-msg { max-width: 85%; padding: 6px 10px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; }
+.appeal-msg.staff { align-self: flex-start; border-color: #9cc8ee; background: #eaf4ff; }
+.appeal-msg.player { align-self: flex-end; border-color: #b9e3c4; background: #ecfaef; }
+.appeal-msg.first { opacity: .85; }
+html[data-theme="dark"] .appeal-msg.staff { background: #1d3147; border-color: #2d5b86; }
+html[data-theme="dark"] .appeal-msg.player { background: #1d3a27; border-color: #2e6a42; }
+.appeal-new-reply { font-weight: 700; color: var(--green, #00b06f); }

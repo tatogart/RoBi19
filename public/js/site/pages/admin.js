@@ -1692,12 +1692,44 @@ async function drawAppeals() {
   body.replaceChildren(
     el('div', { class: 'adm-filters' }, [['open', `Waiting (${r.open})`], ['accepted', 'Accepted'], ['denied', 'Denied']].map(([k, t]) => el('button', { class: 'adm-filter' + (k === appealStatus ? ' on' : ''), text: t, onclick: () => { appealStatus = k; drawAppeals(); } }))),
     r.appeals.length ? el('div', { class: 'appeal-list' }, r.appeals.map((a) => el('button', { class: 'appeal-card ' + a.status, onclick: () => openAppeal(a.id) },
-      el('div', { class: 'row', style: { gap: '8px', alignItems: 'center' } }, el('b', { class: 'no-i18n', text: a.user?.username || '?' }), a.media ? el('span', { class: 'pill', text: a.mediaType.startsWith('video') ? '🎬 video' : '🖼 screenshot' }) : null, el('span', { class: 'muted small', text: timeAgo(a.created) })),
+      el('div', { class: 'row', style: { gap: '8px', alignItems: 'center' } }, el('b', { class: 'no-i18n', text: a.user?.username || '?' }),
+        a.chat.length ? el('span', { class: 'pill' + (a.waiting === 'staff' ? ' warn-pill' : ''), text: a.waiting === 'staff' ? `💬 new reply (${a.chat.length})` : `💬 waiting for the player (${a.chat.length})` }) : null,
+        a.media ? el('span', { class: 'pill', text: a.mediaType.startsWith('video') ? '🎬 video' : '🖼 screenshot' }) : null, el('span', { class: 'muted small', text: timeAgo(a.created) })),
       el('div', { class: 'small' }, el('span', { class: 'muted', text: 'Ban: ' }), el('span', { class: 'no-i18n', text: a.ban.reason || 'no reason' })),
       el('div', { class: 'small' }, el('b', { text: a.reason })),
       el('div', { class: 'small muted no-i18n appeal-snippet', text: a.explanation }),
       a.outcome ? el('div', { class: 'small', text: `${a.outcome} · ${a.decidedBy}` }) : null)))
       : el('div', { class: 'empty', text: appealStatus === 'open' ? 'No appeals waiting. 🎉' : 'Nothing here.' }));
+}
+// The chat with the banned player: ask for details or proof before deciding.
+const APPEAL_ASKS = [
+  'Please send a screenshot or a video that shows what happened.',
+  'Tell us more: when did it happen, in which game, and who else was there?',
+  'Do you have proof that someone else used your account?',
+  'Thanks! We are checking your proof now.',
+];
+function appealChatBox(a) {
+  const log = el('div', { class: 'appeal-chat' });
+  const draw = () => {
+    log.replaceChildren(...(a.chat.length ? a.chat.map((m) => el('div', { class: 'appeal-msg ' + m.from },
+      el('div', { class: 'small muted' }, el('b', { class: 'no-i18n', text: m.from === 'staff' ? m.name + ' (team)' : m.name }), ' · ' + timeAgo(m.time)),
+      m.text ? el('div', { class: 'no-i18n', text: m.text }) : null,
+      m.media ? (m.mediaType.startsWith('video') ? el('video', { src: `/api/admin/appeals/${a.id}/chat/${m.n}/media`, controls: true, class: 'appeal-media' })
+        : el('a', { href: `/api/admin/appeals/${a.id}/chat/${m.n}/media`, target: '_blank' }, el('img', { src: `/api/admin/appeals/${a.id}/chat/${m.n}/media`, class: 'appeal-media', alt: 'proof' }))) : null))
+      : [el('div', { class: 'muted small', text: 'No messages yet. Ask the player for details or proof: they see it the next time they try to log in.' })]));
+    requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
+  };
+  draw();
+  if (a.status !== 'open') return el('div', {}, el('div', { class: 'qe-step', text: 'Chat' }), log);
+  const text = el('textarea', { class: 'input', rows: 2, maxlength: 1000, placeholder: 'Write to the player (the ban stays while you talk)' });
+  const send = async () => {
+    if (!text.value.trim()) return toast('Write a message.', 'error');
+    try { const r = await api.post(`/admin/appeals/${a.id}/chat`, { text: text.value }); a.chat = r.appeal.chat; a.waiting = r.appeal.waiting; text.value = ''; draw(); toast('Sent', 'success'); } catch (e) { toast(e.message, 'error'); }
+  };
+  return el('div', {},
+    el('div', { class: 'qe-step', text: 'Chat with the player' }), log,
+    el('div', { class: 'promo-chosen', style: { margin: '6px 0' } }, APPEAL_ASKS.map((t) => el('button', { class: 'holder-chip', text: t, onclick: () => { text.value = tr(t); text.focus(); } }))),
+    el('div', { class: 'row' }, text, el('button', { class: 'btn btn-primary', text: 'Send', onclick: send })));
 }
 async function openAppeal(id) {
   let r;
@@ -1715,6 +1747,7 @@ async function openAppeal(id) {
       el('div', { class: 'qe-step', text: a.reason }),
       el('p', { class: 'no-i18n', style: { whiteSpace: 'pre-wrap' }, text: a.explanation }),
       media,
+      a.status === 'open' || a.chat.length ? appealChatBox(a) : null,
       r.history.length > 1 ? el('details', {}, el('summary', { text: `Ban history (${r.history.length})` }), r.history.map((h) => el('div', { class: 'small' }, el('span', { class: 'no-i18n', text: `${new Date(h.time).toLocaleDateString()} · ${h.reason || 'no reason'}${h.by ? ' · by ' + h.by : ''}${h.endedHow ? ' · ' + h.endedHow : ''}` })))) : null,
       a.status === 'open' ? el('div', { class: 'quick-event' }, el('div', { class: 'qe-step', text: 'Decision' }), decision, el('div', { class: 'qe-step', text: 'Mute / no trades for' }), time, answer)
         : el('div', { class: 'small' }, el('b', { text: a.outcome }), a.answer ? el('div', { class: 'no-i18n', text: '“' + a.answer + '”' }) : null)),
