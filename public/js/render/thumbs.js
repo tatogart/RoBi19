@@ -160,11 +160,18 @@ export function itemThumbnail(item, size = 200) {
     if (item.data && item.data.model === 'wings') {
       av.group.rotation.y = 0.5;
       cam.position.set(0, 1.2, 10); cam.lookAt(0, 0.3, 0);
-    } else if (t === 'Hat' || t === 'Hair' || t === 'Face') {
+    } else if (t === 'Accessory' && item.data && item.data.slot !== 'face') {
+      // the whole upper body; things on the back are shown from behind
+      for (const k of ['Left Leg', 'Right Leg']) av.limbs[k].visible = false;
+      const back = item.data.slot === 'back';
+      av.group.rotation.y = back ? 0.6 : Math.PI + (item.data.slot === 'shoulder' ? -0.7 : 0.35);
+      cam.position.set(0, 1.4, 8.2); cam.lookAt(0, 0.55, 0);
+    } else if (t === 'Hat' || t === 'Hair' || t === 'Face' || t === 'Accessory') {
       for (const k of ['Torso', 'Left Arm', 'Right Arm', 'Left Leg', 'Right Leg']) av.limbs[k].visible = false;
-      av.group.rotation.y = Math.PI + (t === 'Face' ? 0 : 0.6);
-      const y = av.pivots.head.position.y + (t === 'Face' ? 0 : 0.35);
-      cam.position.set(0, y + 0.8, t === 'Face' ? 4.2 : 6.2);
+      const flat = t === 'Face' || t === 'Accessory';
+      av.group.rotation.y = Math.PI + (flat ? 0.25 : 0.6);
+      const y = av.pivots.head.position.y + (flat ? 0 : 0.35);
+      cam.position.set(0, y + 0.8, flat ? 4.6 : 6.2);
       cam.lookAt(0, y, 0);
     } else if (t === 'Gear') {
       av.animate('idle', 0.5, 0);

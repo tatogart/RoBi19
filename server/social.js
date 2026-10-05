@@ -118,6 +118,7 @@ export function installSocial(api, ctx) {
     if (!friends(from.id, to.id)) return bad(res, 'You can only send gifts to friends.');
     if (isBanned(to)) return bad(res, 'This player can\'t get gifts right now.');
     if (it.offsale) return bad(res, 'This item is not for sale.');
+    if (it.data && it.data.devOnly) return bad(res, 'Developer items can\'t be gifted: everyone unlocks them by making a game.');
     if (it.limited && it.remaining !== null && it.remaining <= 0) return bad(res, 'This item is sold out.');
     const inv = D.inventory[to.id] || (D.inventory[to.id] = []);
     if (inv.includes(it.id) || D.gifts.some((g) => g.to === to.id && g.itemId === it.id && !g.opened)) return bad(res, `${to.username} already has this item.`);

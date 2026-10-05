@@ -1300,3 +1300,84 @@ body.adm-full .rbx-content { margin-left: 0; max-width: none; padding: 14px 16px
   .adm-top { flex-wrap: wrap; }
   .cc-attn-item { flex: 1 1 140px; }
 }
+.item-card .dev-tag { background: #1b2a35; color: #3ddc84; }
+.dev-lock { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; border-radius: 8px; background: rgba(0,162,255,.08); border: 1px dashed rgba(0,162,255,.5); }
+
+/* ------------------------------------------------------------ Robis look v3: compact, closer to 2019 */
+:root {
+  --radius: 4px; --radius-lg: 6px;
+  --gray-bg: #f2f4f5; --text: #393b3d; --text-light: #757575; --border: #e3e3e3;
+  --shadow: 0 1px 4px rgba(25, 25, 25, .12); --ring: 0 0 0 0 transparent;
+  --shadow-hover: 0 2px 10px rgba(25, 25, 25, .2);
+}
+html[data-theme="dark"] {
+  --gray-bg: #232527; --panel: #393b3d; --text: #ffffff; --text-light: #b8b8b8; --border: #4d4f51;
+  --shadow: 0 1px 4px rgba(0, 0, 0, .5); --shadow-hover: 0 2px 10px rgba(0, 0, 0, .6);
+}
+body { font-size: 15px; background: var(--gray-bg); }
+h1 { font-size: 27px; letter-spacing: 0; }
+h2 { font-size: 21px; }
+h3 { font-size: 18px; }
+.rbx-content { padding: 18px 26px 50px; max-width: 1100px; }
+.section { margin-bottom: 22px; }
+.section-header { margin-bottom: 8px; }
+.section-header h2 { font-size: 20px; }
+.section-header h2::before { display: none; }
+.panel { border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+
+/* the flat blue bar of 2019 */
+.rbx-header { background: var(--blue); box-shadow: 0 1px 3px rgba(0, 0, 0, .2); }
+.rbx-header nav.main a { border-radius: 0; height: 100%; margin: 0; padding: 0 12px; font-size: 15px; }
+.rbx-header nav.main a.active, .rbx-header nav.main a:hover { background: rgba(255, 255, 255, .15); }
+.rbx-header .search input { border-radius: 3px; height: 28px; padding-left: 10px; background: #fff; }
+.rbx-header .right a, .rbx-header .right button.icon-btn { border-radius: 3px; }
+.dropdown { border-radius: 4px; padding: 4px 0; }
+.dropdown a, .dropdown button { border-radius: 0; }
+
+/* the left menu: white, a blue bar on the open page */
+.rbx-leftnav { background: var(--panel); backdrop-filter: none; }
+.rbx-leftnav .user { margin: 0 0 6px; padding: 6px 16px 12px; border-radius: 0; background: none; border-bottom: 1px solid var(--border); }
+.rbx-leftnav .user .headshot { box-shadow: none; }
+.rbx-leftnav a { margin: 0; border-radius: 0; padding: 8px 16px; font-size: 15px; }
+.rbx-leftnav a:hover { background: var(--gray-bg); }
+.rbx-leftnav a.active { background: var(--gray-bg); color: var(--text); }
+.rbx-leftnav a.active::before { display: block; }
+.rbx-leftnav a svg { width: 20px; height: 20px; }
+
+/* cards: small corners, a soft shadow, a small lift */
+.game-card, .item-card { border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.game-card:hover, .item-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+.game-card:hover .thumb img, .item-card:hover .thumb img { transform: scale(1.03); }
+.game-row { gap: 12px; }
+.game-row .game-card { flex: 0 0 150px; }
+.game-card .info { padding: 7px 9px 9px; }
+.game-card .name { font-size: 14px; height: 35px; }
+.item-card .thumb { background: linear-gradient(#f7f7f7, #e4e4e4); }
+html[data-theme="dark"] .item-card .thumb { background: linear-gradient(#45484b, #333537); }
+.item-card .limited-tag, .item-card .owned-tag, .game-card .featured-tag { border-radius: 2px; box-shadow: none; }
+
+/* buttons, fields, tabs: flat like 2019 */
+.btn { border-radius: var(--radius); padding: 6px 13px; font-size: 14px; }
+.btn-primary { background: var(--blue); border-color: var(--blue); }
+.btn-primary:not(:disabled):hover { background: var(--blue-hover); box-shadow: none; }
+.btn-green { background: var(--green); border-color: var(--green); }
+.btn-green:not(:disabled):hover { background: var(--green-hover); box-shadow: none; }
+.btn-red { border-radius: var(--radius); }
+.input, select.input, textarea.input { border-radius: 3px; }
+.tabs { border-radius: var(--radius) var(--radius) 0 0; padding: 0; gap: 0; }
+.tabs button { border-radius: 0; border-bottom: 3px solid transparent; }
+.tabs button:hover { background: none; color: var(--text); }
+.tabs button.active { background: none; color: var(--text); border-bottom-color: var(--blue); }
+.tabs + .panel { border-radius: 0 0 var(--radius) var(--radius); }
+.modal { border-radius: 6px; }
+.greet { padding: 14px 16px; border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
+.greet .greet-head { width: 110px !important; height: 110px !important; box-shadow: none; background: #d4d4d4 !important; }
+.greet h1 { font-weight: 700; }
+.social-banner { border-radius: var(--radius); padding: 11px 16px; }
+
+/* the Control Center follows: smaller corners */
+.adm { border-radius: 8px; }
+.adm-side { border-radius: 8px 0 0 8px; }
+.adm-main { border-radius: 0 8px 8px 0; }
+.adm-hero, .adm-card, .cc-attn-item, .cc-switch, .cc-pinned, .cc-online { border-radius: 8px; }
+@media (max-width: 860px) { .adm-side { border-radius: 8px 8px 0 0; } .adm-main { border-radius: 0 0 8px 8px; } .rbx-content { padding: 12px 10px 70px; } }

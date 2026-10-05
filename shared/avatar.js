@@ -16,8 +16,8 @@ export const DEFAULT_AVATAR = {
   wearing: [],
 };
 
-export const ITEM_TYPES = ['Hat', 'Hair', 'Face', 'Shirt', 'Pants', 'TShirt', 'Gear', 'Pet'];
-export const WEAR_LIMITS = { Hat: 3, Hair: 1, Face: 1, Shirt: 1, Pants: 1, TShirt: 1, Gear: 1, Pet: 1 };
+export const ITEM_TYPES = ['Hat', 'Hair', 'Accessory', 'Face', 'Shirt', 'Pants', 'TShirt', 'Gear', 'Pet'];
+export const WEAR_LIMITS = { Hat: 3, Hair: 1, Accessory: 4, Face: 1, Shirt: 1, Pants: 1, TShirt: 1, Gear: 1, Pet: 1 };
 
 // Built-in catalog. `data` tells the renderer how to draw the item.
 export const CATALOG = [
@@ -109,6 +109,30 @@ export const CATALOG = [
   { name: 'Rainbow Tee', type: 'TShirt', price: 3, data: { graphic: 'rainbow' }, desc: 'A happy rainbow.' },
   { name: 'Kitty Tee', type: 'TShirt', price: 3, data: { graphic: 'kitty' }, desc: 'A cute kitty face.' },
   { name: 'Cherry Tee', type: 'TShirt', price: 2, data: { graphic: 'cherry' }, desc: 'Two little cherries.' },
+  // ---- accessories, like Roblox's: on the shoulder, back, neck, waist, face or front (data.slot)
+  { name: 'Busy Bee Buddy', type: 'Accessory', price: 0, data: { model: 'bee', slot: 'shoulder', color: '#ffc400', accent: '#1b1b1b' }, desc: 'A friendly bee that rides on your shoulder. Free for everyone!' },
+  { name: 'Shoulder Parrot', type: 'Accessory', price: 120, data: { model: 'parrot', slot: 'shoulder', color: '#e8243c', accent: '#2d7de0' }, desc: 'Squawk! A pirate\'s best friend.' },
+  { name: 'Shoulder Kitty', type: 'Accessory', price: 90, data: { model: 'shouldercat', slot: 'shoulder', color: '#e8913a', accent: '#ffffff' }, desc: 'A tiny kitty napping on your shoulder.' },
+  { name: 'Classic Backpack', type: 'Accessory', price: 40, data: { model: 'backpack', slot: 'back', color: '#2d7de0', accent: '#f5cd30' }, desc: 'Ready for school. Or an adventure.' },
+  { name: 'Hero Cape', type: 'Accessory', price: 75, data: { model: 'cape', slot: 'back', color: '#c4281c', accent: '#f5cd30' }, desc: 'Every hero needs one.' },
+  { name: 'Royal Purple Cape', type: 'Accessory', price: 150, data: { model: 'cape', slot: 'back', color: '#5b2a8a', accent: '#ffffff' }, desc: 'With a white trim.' },
+  { name: 'Rocket Jetpack', type: 'Accessory', price: 200, data: { model: 'jetpack', slot: 'back', color: '#a3a2a5', accent: '#ff7a1a' }, desc: 'Does not actually fly. Probably.' },
+  { name: 'Katana Sheath', type: 'Accessory', price: 110, data: { model: 'katana', slot: 'back', color: '#1b1b1b', accent: '#c4281c' }, desc: 'A sword on your back, ninja style.' },
+  { name: 'Cozy Scarf', type: 'Accessory', price: 30, data: { model: 'scarf', slot: 'neck', color: '#c4281c', accent: '#ffffff' }, desc: 'Warm and stripey.' },
+  { name: 'Gold Chain', type: 'Accessory', price: 250, data: { model: 'chain', slot: 'neck', color: '#ffc400', accent: '#ffe680' }, desc: 'Bling.' },
+  { name: 'Red Bow Tie', type: 'Accessory', price: 20, data: { model: 'bowtie', slot: 'neck', color: '#c4281c', accent: '#8a1a12' }, desc: 'Fancy.' },
+  { name: 'Fanny Pack', type: 'Accessory', price: 25, data: { model: 'fannypack', slot: 'waist', color: '#00a2ff', accent: '#ff66cc' }, desc: 'Totally 90s.' },
+  { name: 'Sword Belt', type: 'Accessory', price: 85, data: { model: 'swordbelt', slot: 'waist', color: '#5a3b1e', accent: '#b4b4b4' }, desc: 'A sword on your hip.' },
+  { name: 'Nerd Glasses', type: 'Accessory', price: 15, data: { model: 'nerdglasses', slot: 'face', color: '#1b1b1b', accent: '#ffffff' }, desc: 'Big round glasses.' },
+  { name: 'Ninja Mask', type: 'Accessory', price: 45, data: { model: 'ninjamask', slot: 'face', color: '#1b1b1b', accent: '#c4281c' }, desc: 'Stealthy.' },
+  { name: 'Teddy Bear Hug', type: 'Accessory', price: 60, data: { model: 'teddy', slot: 'front', color: '#a0703c', accent: '#f2d2b0' }, desc: 'A teddy bear you carry everywhere.' },
+  // ---- developer items: only for people who made a game (or the Robis team)
+  { name: 'Developer Hard Hat', type: 'Hat', price: 0, data: { model: 'hardhat', color: '#f5cd30', accent: '#1b1b1b', devOnly: true }, desc: 'For developers only: make a game in Create to unlock it. The builder\'s classic.' },
+  { name: 'Code Visor', type: 'Accessory', price: 0, data: { model: 'codevisor', slot: 'face', color: '#0f1117', accent: '#3ddc84', devOnly: true }, desc: 'For developers only. See the world in Lua.' },
+  { name: 'Builder\'s Tool Belt', type: 'Accessory', price: 0, data: { model: 'toolbelt', slot: 'waist', color: '#7a4b2a', accent: '#b4b4b4', devOnly: true }, desc: 'For developers only. A hammer, a wrench and a lot of bricks to place.' },
+  { name: 'Dev Badge', type: 'Accessory', price: 0, data: { model: 'devbadge', slot: 'front', color: '#00a2ff', accent: '#ffffff', devOnly: true }, desc: 'For developers only. Wear it with pride.' },
+  { name: 'Laptop Backpack', type: 'Accessory', price: 0, data: { model: 'laptoppack', slot: 'back', color: '#2a2d33', accent: '#00a2ff', devOnly: true }, desc: 'For developers only. Robis Studio, always with you.' },
+  { name: 'Developer Hoodie', type: 'Shirt', price: 0, data: { color: '#1b2a35', accent: '#3ddc84', pattern: 'dev', devOnly: true }, desc: 'For developers only. </> on the front.' },
   // Gear
   { name: 'Classic Sword', type: 'Gear', price: 100, data: { model: 'sword', color: '#b4b4b4' }, desc: 'The linked sword. Cosmetic.' },
   { name: 'Rocket Launcher', type: 'Gear', price: 250, data: { model: 'rocket', color: '#4b974b' }, desc: 'Cosmetic rocket launcher.' },

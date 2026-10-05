@@ -2064,3 +2064,25 @@ test('Hide and Seek Extreme is a game', async () => {
   const g = (await call('GET', '/games?q=Hide')).data.games.find((x) => x.name === 'Hide and Seek Extreme');
   assert.ok(g);
 });
+
+test('accessories, and developer items only for people who made a game', async () => {
+  const p = await call('POST', '/auth/signup', { username: 'NewDev1', password: 'secret123' });
+  const acc = (await call('GET', '/catalog?type=Accessory', null, p.cookie)).data.items;
+  const bee = acc.find((i) => i.name === 'Busy Bee Buddy');
+  assert.ok(bee && bee.price === 0 && bee.data.slot === 'shoulder');
+  assert.equal((await call('POST', `/catalog/${bee.id}/buy`, {}, p.cookie)).status, 200);
+  const cape = acc.find((i) => i.name === 'Hero Cape');
+  await call('POST', `/catalog/${cape.id}/buy`, {}, p.cookie);
+  const avatar = (await call('GET', '/avatar', null, p.cookie)).data.avatar;
+  const put = await call('PUT', '/avatar', { ...avatar, wearing: [...avatar.wearing, bee.id, cape.id] }, p.cookie);
+  assert.equal(put.status, 200, JSON.stringify(put.data));
+  // developer items
+  const dev = (await call('GET', '/catalog?type=Developer', null, p.cookie)).data.items;
+  const hat = dev.find((i) => i.name === 'Developer Hard Hat');
+  assert.ok(hat && hat.devOnly && hat.canGet === false);
+  assert.equal((await call('POST', `/catalog/${hat.id}/buy`, {}, p.cookie)).status, 403);
+  await call('POST', '/games', { name: 'My First Obby', template: 'baseplate' }, p.cookie);
+  const again = (await call('GET', `/catalog/${hat.id}`, null, p.cookie)).data;
+  assert.equal((again.item || again).canGet, true);
+  assert.equal((await call('POST', `/catalog/${hat.id}/buy`, {}, p.cookie)).status, 200);
+});

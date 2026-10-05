@@ -78,6 +78,8 @@ function makeLook(girl, byName) {
   const wearing = [pick(hair), pick(face), pick(shirt), pick(pants)];
   if (hats.length && Math.random() < (girl ? 0.6 : 0.35)) wearing.push(pick(hats));
   if (Math.random() < (girl ? 0.2 : 0.1)) wearing.push(pick(girl ? ['Rainbow Tee', 'Kitty Tee', 'Cherry Tee', 'I <3 Robis'] : ['Robis Logo T-Shirt', 'I <3 Robis', 'Gold Star', 'Oof']));
+  // an accessory now and then (the free bee most of all)
+  if (Math.random() < 0.35) wearing.push(pick(['Busy Bee Buddy', 'Busy Bee Buddy', 'Classic Backpack', 'Cozy Scarf', 'Hero Cape', 'Shoulder Parrot', 'Fanny Pack', 'Nerd Glasses', girl ? 'Shoulder Kitty' : 'Katana Sheath', girl ? 'Teddy Bear Hug' : 'Red Bow Tie']));
   const shirtItem = byName[wearing[2]], pantsItem = byName[wearing[3]];
   const tc = shirtItem?.data?.color || skin, lc = pantsItem?.data?.color || skin;
   return { bodyColors: { head: skin, leftArm: skin, rightArm: skin, torso: tc, leftLeg: lc, rightLeg: lc }, wearing: wearing.map(id).filter(Boolean) };
@@ -135,6 +137,17 @@ export function installBots(api, { db, manager, requireAdmin, bad, deleteAccount
     return u;
   };
 
+  // Accessories came out: some bots put one on (once).
+  if (B.looks === 3) {
+    const by = catalog();
+    for (const u of Object.values(D.users)) {
+      if (!u.bot || !u.avatar || Math.random() > 0.35) continue;
+      const it = by[pick(['Busy Bee Buddy', 'Classic Backpack', 'Cozy Scarf', 'Hero Cape', 'Shoulder Parrot', 'Nerd Glasses'])];
+      if (it && !u.avatar.wearing.includes(it.id)) { u.avatar.wearing.push(it.id); D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), it.id])]; }
+    }
+    B.looks = 4;
+    db.save();
+  }
   // The girls' collection came out: bot girls go shopping (once).
   if ((B.looks || 1) === 2) {
     for (const u of Object.values(D.users)) if (u.bot && u.girl) dress(u, true);

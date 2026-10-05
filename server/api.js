@@ -416,12 +416,16 @@ export function createApi(db, manager, opts = {}) {
     };
   };
 
+  // Developer items: for players who made a game, and the Robis team.
+  const isDeveloper = (u) => !!u && (u.isAdmin || (u.perms || []).length > 0 || Object.values(D.games).some((g) => g.creatorId === u.id));
+  hooks.isDeveloper = isDeveloper;
   const publicItem = (it, user) => {
     const creator = D.users[it.creatorId];
     return {
       id: it.id, name: it.name, type: it.type, price: hooks.salePrice(it), basePrice: it.price, sale: hooks.saleInfo(it), data: it.data, description: it.description,
       creator: creator ? { id: creator.id, username: creator.username, flags: userFlags(creator) } : null,
       created: it.created, sales: it.sales, offsale: !!it.offsale, limited: !!it.limited, remaining: it.remaining ?? null, stock: it.stock ?? null, custom: !!it.custom,
+      devOnly: !!(it.data && it.data.devOnly), canGet: it.data && it.data.devOnly ? isDeveloper(user) : true,
       owned: user ? (D.inventory[user.id] || []).includes(it.id) : false, wished: user ? (user.wishlist || []).includes(it.id) : false,
       serial: user ? serialOf(it, user.id) : null, lastSerial: it.limited ? it.lastSerial || 0 : null,
       bestPrice: it.limited ? bestPrice(it.id) : null,
@@ -1132,7 +1136,7 @@ export function createApi(db, manager, opts = {}) {
   // ------------------------------------------------------------ catalog
   api.get('/catalog', (req, res) => {
     const { type, q, sort } = req.query;
-    let items = Object.values(D.items).filter((i) => !i.offsale && (!type || type === 'All' || i.type === type || (type === 'Accessories' && (i.type === 'Hat' || i.type === 'Hair')) || (type === 'Clothing' && ['Shirt', 'Pants', 'TShirt'].includes(i.type)) || (type === 'Collectibles' && i.limited)));
+    let items = Object.values(D.items).filter((i) => !i.offsale && (!type || type === 'All' || i.type === type || (type === 'Accessories' && (i.type === 'Hat' || i.type === 'Hair' || i.type === 'Accessory')) || (type === 'Developer' && i.data && i.data.devOnly) || (type === 'Clothing' && ['Shirt', 'Pants', 'TShirt'].includes(i.type)) || (type === 'Collectibles' && i.limited)));
     if (q) items = items.filter((i) => i.name.toLowerCase().includes(String(q).toLowerCase()));
     if (req.query.creator) items = items.filter((i) => i.creatorId === toInt(req.query.creator));
     if (sort === 'price-asc') items.sort((a, b) => a.price - b.price);
@@ -1354,6 +1358,7 @@ export function createApi(db, manager, opts = {}) {
     if (inv.includes(it.id)) return bad(res, 'You already own this item.');
     if (it.offsale) return bad(res, 'This item is not for sale.');
     if (it.limited && it.remaining !== null && it.remaining <= 0) return bad(res, 'This item is sold out.');
+    if (it.data && it.data.devOnly && !isDeveloper(req.user)) return bad(res, 'This item is for developers only. Make a game in Create to unlock it!', 403);
     const price = hooks.salePrice(it);
     if (req.user.robits < price) return bad(res, `You need ${price - req.user.robits} more Robits to purchase this item.`);
     req.user.robits -= price;

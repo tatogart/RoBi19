@@ -5,7 +5,7 @@ import * as THREE from 'three';
 export function resolveItems(avatar) {
   const r = { bodyColors: avatar?.bodyColors || {}, hats: [], face: { face: 'smile' }, shirt: null, pants: null, tshirt: null, gear: null, pet: null };
   for (const it of avatar?.items || []) {
-    if (it.type === 'Hat' || it.type === 'Hair') r.hats.push(it.data);
+    if (it.type === 'Hat' || it.type === 'Hair' || it.type === 'Accessory') r.hats.push(it.data);
     else if (it.type === 'Face') r.face = it.data;
     else if (it.type === 'Shirt') r.shirt = it.data;
     else if (it.type === 'Pants') r.pants = it.data;
@@ -302,6 +302,17 @@ function drawPattern(ctx, w, h, d, face) {
     case 'ruffle':
       ctx.fillStyle = accent;
       for (const y of face === 'front' ? [h * 0.08, h * 0.24] : [h * 0.08]) for (let x = 0; x < w; x += 8) { ctx.beginPath(); ctx.arc(x + 4, y, 4, 0, Math.PI); ctx.fill(); }
+      break;
+    case 'dev':
+      if (face === 'front') {
+        ctx.fillStyle = shade(color, 1.25);
+        ctx.beginPath(); ctx.roundRect(w * 0.2, h * 0.6, w * 0.6, h * 0.28, 6); ctx.fill();
+        ctx.fillStyle = accent; ctx.font = `900 ${Math.floor(w * 0.26)}px monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('</>', w / 2, h * 0.36);
+      } else if (face === 'back') {
+        ctx.fillStyle = shade(color, 1.25);
+        ctx.beginPath(); ctx.ellipse(w * 0.5, 0, w * 0.35, h * 0.28, 0, 0, Math.PI); ctx.fill();
+      }
       break;
     case 'bc':
       if (face === 'front') {
@@ -621,6 +632,215 @@ const HATS = {
       const w = M(new THREE.SphereGeometry(1, 16, 10), mat(d.color, { roughness: 0.9 }), s * 0.9, 0.4, 0.7, 0, s * 0.5, s * 0.4);
       w.scale.set(0.9, 0.45, 0.1);
       g.add(w);
+    }
+    return g;
+  },
+  // ---- accessories (data.slot): shoulder / back / neck / waist / front sit on
+  // the torso (2 x 2 x 1: front is -z, the right shoulder is +x), face on the head
+  bee(d) {
+    const g = new THREE.Group();
+    const body = new THREE.Group();
+    const y = mat(d.color, { roughness: 0.5 }), k = mat(d.accent || '#1b1b1b', { roughness: 0.6 });
+    [[0.22, y], [0.02, k], [-0.17, y]].forEach(([z, m], i) => { const s = M(new THREE.SphereGeometry(0.2 - i * 0.02, 14, 10), m, 0, 0, z); s.scale.set(1, 0.95, 0.75); body.add(s); });
+    body.add(M(new THREE.SphereGeometry(0.15, 12, 10), k, 0, 0.04, -0.34));
+    for (const sx of [-1, 1]) body.add(M(new THREE.SphereGeometry(0.035, 6, 6), mat('#ffffff'), sx * 0.07, 0.08, -0.47));
+    body.add(M(new THREE.ConeGeometry(0.04, 0.12, 6), k, 0, 0, 0.42, Math.PI / 2, 0, 0));
+    const wing = new THREE.MeshStandardMaterial({ color: '#e8f6ff', transparent: true, opacity: 0.65, roughness: 0.2 });
+    for (const sx of [-1, 1]) { const w = M(new THREE.SphereGeometry(0.2, 12, 8), wing, sx * 0.17, 0.2, 0.02, 0, 0, sx * 0.5); w.scale.set(1, 0.18, 0.6); body.add(w); }
+    body.position.set(1.5, 1.5, 0.05);
+    body.rotation.y = -0.5;
+    body.scale.setScalar(1.6);
+    g.add(body);
+    return g;
+  },
+  parrot(d) {
+    const g = new THREE.Group();
+    const red = mat(d.color), blue = mat(d.accent);
+    const b = M(new THREE.SphereGeometry(0.22, 14, 10), red, 1.5, 1.45, 0.05); b.scale.set(0.9, 1.25, 0.9); g.add(b);
+    g.add(M(new THREE.SphereGeometry(0.16, 12, 10), red, 1.5, 1.82, -0.05));
+    g.add(M(new THREE.ConeGeometry(0.06, 0.16, 8), mat('#f5cd30'), 1.5, 1.78, -0.24, -Math.PI / 2, 0, 0));
+    for (const sx of [-1, 1]) g.add(M(new THREE.SphereGeometry(0.03, 6, 6), mat('#111'), 1.5 + sx * 0.09, 1.86, -0.15));
+    for (const sx of [-1, 1]) { const w = M(new THREE.SphereGeometry(0.15, 10, 8), blue, 1.5 + sx * 0.18, 1.45, 0.08); w.scale.set(0.35, 1.1, 0.9); g.add(w); }
+    const t = M(new THREE.BoxGeometry(0.12, 0.45, 0.06), blue, 1.5, 1.2, 0.3, -0.6, 0, 0); g.add(t);
+    return g;
+  },
+  shouldercat(d) {
+    const g = new THREE.Group();
+    const fur = mat(d.color, { roughness: 0.9 });
+    const b = M(new THREE.SphereGeometry(0.25, 14, 10), fur, 1.5, 1.2, 0.08); b.scale.set(0.9, 0.62, 1.3); g.add(b);
+    g.add(M(new THREE.SphereGeometry(0.19, 14, 10), fur, 1.5, 1.33, -0.27));
+    for (const sx of [-1, 1]) g.add(M(new THREE.ConeGeometry(0.07, 0.14, 4), fur, 1.5 + sx * 0.1, 1.5, -0.27));
+    for (const sx of [-1, 1]) g.add(M(new THREE.BoxGeometry(0.06, 0.015, 0.02), mat('#111'), 1.5 + sx * 0.07, 1.36, -0.45));
+    g.add(M(new THREE.SphereGeometry(0.06, 8, 6), mat(d.accent), 1.5, 1.27, -0.43));
+    const tail = M(new THREE.CylinderGeometry(0.04, 0.05, 0.5, 8), fur, 1.5, 1.05, 0.5, 1.1, 0, 0); g.add(tail);
+    return g;
+  },
+  backpack(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.8 });
+    const bag = M(new THREE.BoxGeometry(1.35, 1.5, 0.55), m, 0, 0.05, 0.8); g.add(bag);
+    const top = M(new THREE.SphereGeometry(0.68, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), m, 0, 0.78, 0.8);
+    top.scale.set(1, 0.3, 0.4);
+    g.add(top);
+    g.add(M(new THREE.BoxGeometry(0.9, 0.55, 0.15), mat(d.accent, { roughness: 0.8 }), 0, -0.35, 1.12));
+    for (const sx of [-1, 1]) {
+      g.add(M(new THREE.BoxGeometry(0.16, 0.12, 1.1), m, sx * 0.45, 1.02, 0.25));
+      g.add(M(new THREE.BoxGeometry(0.16, 1.3, 0.06), m, sx * 0.45, 0.4, -0.53));
+    }
+    return g;
+  },
+  cape(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.75, side: THREE.DoubleSide });
+    const c = M(new THREE.BoxGeometry(1.95, 2.9, 0.06), m, 0, -0.45, 0.62, 0.1, 0, 0); g.add(c);
+    g.add(M(new THREE.BoxGeometry(2.05, 0.18, 0.7), mat(d.accent), 0, 1.0, 0.25));
+    for (const sx of [-1, 1]) g.add(M(new THREE.SphereGeometry(0.09, 8, 6), mat(d.accent, { metalness: 0.6, roughness: 0.3 }), sx * 0.72, 0.92, -0.52));
+    return g;
+  },
+  jetpack(d) {
+    const g = new THREE.Group();
+    const metal = mat(d.color, { metalness: 0.7, roughness: 0.35 });
+    for (const sx of [-1, 1]) {
+      g.add(M(new THREE.CylinderGeometry(0.28, 0.28, 1.4, 16), metal, sx * 0.34, 0.15, 0.85));
+      g.add(M(new THREE.SphereGeometry(0.28, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal, sx * 0.34, 0.85, 0.85));
+      g.add(M(new THREE.ConeGeometry(0.2, 0.3, 14), mat('#444', { metalness: 0.6 }), sx * 0.34, -0.7, 0.85, Math.PI, 0, 0));
+      const fl = new THREE.MeshBasicMaterial({ color: d.accent }); fl.toneMapped = false;
+      g.add(M(new THREE.ConeGeometry(0.13, 0.4, 10), fl, sx * 0.34, -1.05, 0.85, Math.PI, 0, 0));
+    }
+    g.add(M(new THREE.BoxGeometry(0.5, 1.0, 0.2), mat('#2a2a2a'), 0, 0.15, 0.6));
+    return g;
+  },
+  katana(d) {
+    const g = new THREE.Group();
+    const sheath = M(new THREE.BoxGeometry(0.16, 2.6, 0.12), mat(d.color, { roughness: 0.4 }), 0, 0, 0.62, 0, 0, 0.7);
+    g.add(sheath);
+    g.add(M(new THREE.BoxGeometry(0.14, 0.7, 0.14), mat(d.accent), -0.98, 1.15, 0.62, 0, 0, 0.7));
+    g.add(M(new THREE.BoxGeometry(0.4, 0.06, 0.2), mat('#c9a227', { metalness: 0.7 }), -0.75, 0.9, 0.62, 0, 0, 0.7));
+    return g;
+  },
+  scarf(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.95 });
+    const ring = M(new THREE.TorusGeometry(0.52, 0.17, 10, 24), m, 0, 1.05, 0, Math.PI / 2, 0, 0); ring.scale.set(1.15, 0.8, 1); g.add(ring);
+    for (let i = 0; i < 3; i++) g.add(M(new THREE.BoxGeometry(0.34, 0.1, 0.1), mat(d.accent, { roughness: 0.95 }), 0.35, 0.65 - i * 0.28, -0.6));
+    g.add(M(new THREE.BoxGeometry(0.34, 0.9, 0.08), m, 0.35, 0.5, -0.58, 0, 0, 0.08));
+    return g;
+  },
+  chain(d) {
+    const g = new THREE.Group();
+    const gold = mat(d.color, { metalness: 0.9, roughness: 0.2 });
+    const ring = M(new THREE.TorusGeometry(0.55, 0.045, 8, 32), gold, 0, 0.82, -0.12, 1.15, 0, 0); g.add(ring);
+    g.add(M(new THREE.CylinderGeometry(0.17, 0.17, 0.05, 20), gold, 0, 0.3, -0.56, Math.PI / 2, 0, 0));
+    g.add(M(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 6), mat(d.accent, { metalness: 0.8, roughness: 0.15 }), 0, 0.3, -0.58, Math.PI / 2, 0, 0));
+    return g;
+  },
+  bowtie(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color);
+    for (const sx of [-1, 1]) g.add(M(new THREE.ConeGeometry(0.16, 0.32, 4), m, sx * 0.17, 0.85, -0.55, 0, 0, sx * Math.PI / 2));
+    g.add(M(new THREE.BoxGeometry(0.12, 0.14, 0.1), mat(d.accent), 0, 0.85, -0.57));
+    return g;
+  },
+  fannypack(d) {
+    const g = new THREE.Group();
+    const bag = M(new THREE.BoxGeometry(0.9, 0.38, 0.32), mat(d.color, { roughness: 0.6 }), 0, -0.82, -0.66); g.add(bag);
+    g.add(M(new THREE.BoxGeometry(0.75, 0.04, 0.02), mat('#dddddd', { metalness: 0.5 }), 0, -0.74, -0.83));
+    g.add(M(new THREE.BoxGeometry(2.04, 0.12, 1.04), mat(d.accent), 0, -0.82, 0));
+    return g;
+  },
+  swordbelt(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.BoxGeometry(2.06, 0.2, 1.06), mat(d.color, { roughness: 0.7 }), 0, -0.85, 0));
+    g.add(M(new THREE.BoxGeometry(0.3, 0.26, 0.05), mat('#c9a227', { metalness: 0.8 }), 0, -0.85, -0.55));
+    const blade = M(new THREE.BoxGeometry(0.1, 1.6, 0.06), mat(d.accent, { metalness: 0.8, roughness: 0.2 }), -1.1, -1.55, -0.1, 0, 0, 0.2); g.add(blade);
+    g.add(M(new THREE.BoxGeometry(0.4, 0.07, 0.12), mat('#c9a227', { metalness: 0.7 }), -0.96, -0.82, -0.1, 0, 0, 0.2));
+    g.add(M(new THREE.BoxGeometry(0.09, 0.35, 0.09), mat('#3a2412'), -0.93, -0.6, -0.1, 0, 0, 0.2));
+    return g;
+  },
+  nerdglasses(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color);
+    for (const sx of [-1, 1]) {
+      g.add(M(new THREE.TorusGeometry(0.18, 0.035, 8, 20), m, sx * 0.24, 0.1, -0.66));
+      const lens = new THREE.MeshStandardMaterial({ color: '#dff4ff', transparent: true, opacity: 0.35, roughness: 0.1 });
+      g.add(M(new THREE.CircleGeometry(0.17, 20), lens, sx * 0.24, 0.1, -0.67, 0, Math.PI, 0));
+    }
+    g.add(M(new THREE.BoxGeometry(0.14, 0.035, 0.03), m, 0, 0.12, -0.66));
+    for (const sx of [-1, 1]) g.add(M(new THREE.BoxGeometry(0.03, 0.035, 0.6), m, sx * 0.42, 0.12, -0.38));
+    return g;
+  },
+  ninjamask(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.9 });
+    const band = M(new THREE.CylinderGeometry(0.635, 0.6, 0.55, 28, 1, true, Math.PI * 0.62, Math.PI * 0.76), m, 0, -0.22, 0); g.add(band);
+    for (const sx of [-1, 1]) g.add(M(new THREE.BoxGeometry(0.08, 0.35, 0.05), mat(d.accent), sx * 0.08, -0.3, 0.64, 0, 0, sx * 0.4));
+    return g;
+  },
+  teddy(d) {
+    const g = new THREE.Group();
+    const fur = mat(d.color, { roughness: 0.95 }), light = mat(d.accent, { roughness: 0.95 });
+    const b = M(new THREE.SphereGeometry(0.42, 16, 12), fur, 0, -0.35, -0.85); b.scale.set(1, 1.1, 0.8); g.add(b);
+    g.add(M(new THREE.SphereGeometry(0.33, 16, 12), fur, 0, 0.25, -0.95));
+    for (const sx of [-1, 1]) g.add(M(new THREE.SphereGeometry(0.12, 10, 8), fur, sx * 0.25, 0.5, -0.95));
+    g.add(M(new THREE.SphereGeometry(0.13, 10, 8), light, 0, 0.18, -1.22));
+    g.add(M(new THREE.SphereGeometry(0.04, 6, 6), mat('#111'), 0, 0.22, -1.34));
+    for (const sx of [-1, 1]) g.add(M(new THREE.SphereGeometry(0.04, 6, 6), mat('#111'), sx * 0.11, 0.33, -1.24));
+    g.add(M(new THREE.SphereGeometry(0.2, 12, 10), light, 0, -0.35, -1.15));
+    return g;
+  },
+  // ---- developer items
+  hardhat(d) {
+    const g = new THREE.Group();
+    const y = mat(d.color, { roughness: 0.35 });
+    const dome = M(new THREE.SphereGeometry(0.68, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), y, 0, 0.3, 0); dome.scale.set(1, 0.95, 1.05); g.add(dome);
+    g.add(M(new THREE.CylinderGeometry(0.86, 0.86, 0.06, 28), y, 0, 0.32, -0.06));
+    g.add(M(new THREE.BoxGeometry(0.16, 0.12, 1.3), y, 0, 0.96, 0));
+    g.add(M(new THREE.BoxGeometry(0.36, 0.2, 0.05), mat(d.accent), 0, 0.62, -0.66, 0.35, 0, 0));
+    return g;
+  },
+  codevisor(d) {
+    const g = new THREE.Group();
+    const [c, ctx] = makeCanvas(128, 32);
+    ctx.fillStyle = d.color; ctx.fillRect(0, 0, 128, 32);
+    ctx.fillStyle = d.accent; ctx.font = '700 11px monospace';
+    for (let i = 0; i < 3; i++) ctx.fillText(['local p = 1', 'end) -- ok', 'print("hi")'][i], 4 + i * 6, 10 + i * 9);
+    const m = new THREE.MeshBasicMaterial({ map: toTexture(c), transparent: true, opacity: 0.92 });
+    m.toneMapped = false;
+    g.add(M(new THREE.CylinderGeometry(0.645, 0.645, 0.3, 28, 1, true, Math.PI * 0.65, Math.PI * 0.7), m, 0, 0.12, 0));
+    g.add(M(new THREE.TorusGeometry(0.64, 0.03, 6, 28), mat('#333'), 0, 0.12, 0, Math.PI / 2, 0, 0));
+    return g;
+  },
+  toolbelt(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.BoxGeometry(2.06, 0.22, 1.06), mat(d.color, { roughness: 0.8 }), 0, -0.85, 0));
+    g.add(M(new THREE.BoxGeometry(0.45, 0.4, 0.2), mat(d.color, { roughness: 0.8 }), 0.55, -1.0, -0.6));
+    g.add(M(new THREE.BoxGeometry(0.08, 0.6, 0.08), mat('#6b4a2f'), -0.6, -1.05, -0.58));
+    g.add(M(new THREE.BoxGeometry(0.3, 0.12, 0.12), mat(d.accent, { metalness: 0.8, roughness: 0.3 }), -0.6, -0.72, -0.58));
+    g.add(M(new THREE.BoxGeometry(0.06, 0.45, 0.04), mat(d.accent, { metalness: 0.8, roughness: 0.3 }), 0.55, -0.62, -0.7));
+    g.add(M(new THREE.BoxGeometry(0.22, 0.14, 0.16), mat('#e8413c'), 0.15, -0.95, -0.62));
+    return g;
+  },
+  devbadge(d) {
+    const g = new THREE.Group();
+    const [c, ctx] = makeCanvas(64, 64);
+    ctx.fillStyle = d.color; ctx.beginPath(); ctx.arc(32, 32, 31, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = d.accent; ctx.font = '900 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('DEV', 32, 33);
+    const face = new THREE.MeshStandardMaterial({ map: toTexture(c), roughness: 0.4, metalness: 0.2 });
+    const rim = mat('#dfe6ee', { metalness: 0.8, roughness: 0.25 });
+    g.add(M(new THREE.CylinderGeometry(0.24, 0.24, 0.05, 24), [rim, face, rim], 0.48, 0.45, -0.53, -Math.PI / 2, 0, 0));
+    return g;
+  },
+  laptoppack(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.7 });
+    g.add(M(new THREE.BoxGeometry(1.35, 1.5, 0.5), m, 0, 0.05, 0.78));
+    const [c, ctx] = makeCanvas(64, 64);
+    ctx.fillStyle = '#c9ced6'; ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = d.accent; ctx.save(); ctx.translate(32, 32); ctx.rotate(Math.PI / 12); ctx.fillRect(-12, -12, 24, 24); ctx.fillStyle = '#fff'; ctx.fillRect(-4, -4, 8, 8); ctx.restore();
+    g.add(M(new THREE.BoxGeometry(1.15, 0.85, 0.06), [mat('#c9ced6'), mat('#c9ced6'), mat('#c9ced6'), mat('#c9ced6'), new THREE.MeshStandardMaterial({ map: toTexture(c), roughness: 0.3, metalness: 0.4 }), mat('#c9ced6')], 0, 0.3, 1.06));
+    for (const sx of [-1, 1]) {
+      g.add(M(new THREE.BoxGeometry(0.16, 0.12, 1.1), m, sx * 0.45, 1.02, 0.25));
+      g.add(M(new THREE.BoxGeometry(0.16, 1.3, 0.06), m, sx * 0.45, 0.4, -0.53));
     }
     return g;
   },
@@ -991,7 +1211,8 @@ export function buildAvatar(avatar, opts = {}) {
     if (!fn) continue;
     const acc = fn(d);
     if (acc.userData.bighead) { head.scale.setScalar(1.45); headPivot.position.y = 1.72; continue; }
-    if (acc.userData.attach === 'torso') torso.add(acc); else head.add(acc);
+    // accessories (data.slot) other than the face sit on the torso
+    if (acc.userData.attach === 'torso' || (d.slot && d.slot !== 'face')) torso.add(acc); else head.add(acc);
     if (acc.userData.spin) root.userData.spin = acc.userData.spin;
   }
   let gear = null;
