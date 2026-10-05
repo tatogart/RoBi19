@@ -242,6 +242,21 @@ export function createApi(db, manager, opts = {}) {
   // Filled in by server/social.js (sales, mutes, trade bans, appeals).
   // Control Center switches (server/control.js) can turn features off
   api.use((req, res, next) => (hooks.featureGate ? hooks.featureGate(req, res, next) : next()));
+  // What guests can't do (see /auth/guest): they try Robis out, nothing more.
+  const GUEST_BLOCKS = [
+    [/^\/groups$/, 'Guests can\'t create groups.'],
+    [/^\/account\/(username|password)$/, 'Guests can\'t change their username or password. Sign up to get your own account!'],
+    [/^\/friends\/\d+\/(request|accept)$/, 'Guests can\'t add friends. Sign up to make friends!'],
+    [/^\/gamepasses\/\d+\/buy$/, 'Guests can\'t buy game passes.'],
+    [/^\/auth\/admin-code$/, 'Guests can\'t do that.'],
+    [/^\/(trades|resales|catalog\/\d+\/(gift|resell)|catalog\/create|promocodes\/redeem|economy\/stipend)/, 'Guests can\'t do that. Sign up to get Robits!'],
+  ];
+  api.use((req, res, next) => {
+    if (!req.user || !req.user.guest || req.method !== 'POST') return next();
+    const hit = GUEST_BLOCKS.find(([re]) => re.test(req.path));
+    if (hit) return bad(res, hit[1], 403);
+    next();
+  });
   const hooks = { salePrice: (it) => it.price, saleInfo: () => null, isMuted: () => false, isTradeBanned: () => false, muteMessage: () => 'You are muted.', tradeMessage: () => 'You can\'t trade right now.', appealKey: () => '', overwatchAccess: () => false };
   const setBan = (u, banned, reason, opts = {}) => {
     // every ban is remembered, so the player can appeal a ban from the list
@@ -399,6 +414,7 @@ export function createApi(db, manager, opts = {}) {
     warning: u.pendingWarning || null, // a warning from the staff not seen yet (a popup)
     overwatch: hooks.overwatchAccess(u), // Robis Overwatch in the menu
     awards: hooks.awardsLive ? hooks.awardsLive() : null, // Robis Awards in the menu (voting or results)
+    guest: !!u.guest, // a guest account (see /auth/guest)
     restrictions: hooks.restriction ? hooks.restriction(u) : { mute: 0, trade: 0 },
   });
 
@@ -473,7 +489,7 @@ export function createApi(db, manager, opts = {}) {
     if (typeof password !== 'string' || password.length < 6) return bad(res, 'Password must be at least 6 characters.');
     if (password.toLowerCase() === username.toLowerCase()) return bad(res, 'Password cannot be your username.');
     // The very first person to sign up on a fresh server becomes its admin.
-    const isFirst = firstUserIsAdmin && !Object.values(D.users).some((u) => !u.system);
+    const isFirst = firstUserIsAdmin && !Object.values(D.users).some((u) => !u.system && !u.guest && !u.bot);
     if (!isFirst && siteSettings(D).signups === false) return bad(res, 'Sign-ups are closed right now. Try again later!', 403);
     if (nameTaken(username, null, isFirst)) {
       return bad(res, username.toLowerCase() === OWNER_NAME.toLowerCase()
@@ -511,8 +527,49 @@ export function createApi(db, manager, opts = {}) {
     const token = sessionToken(req);
     if (token) destroySession(db, token);
     setCookie(res, sessionCookie('', 0));
+    // a guest account lives until its guest logs out
+    if (req.user && req.user.guest) deleteAccount(req.user);
     res.json({ ok: true });
   });
+
+  // ------------------------------------------------------------ guests
+  // "Play as guest": an account with no password, no Robits and the guest
+  // look (items nobody else can get). Logging out deletes it.
+  const GUEST_LOOK = ['Guest Cap', 'Guest Shirt', 'Guest Pants', 'Smile'];
+  const GUEST_BODY = { head: '#f5cd30', torso: '#f5cd30', leftArm: '#f5cd30', rightArm: '#f5cd30', leftLeg: '#f5cd30', rightLeg: '#f5cd30' };
+  // a guest's Robits are always 0, whatever tries to give them some
+  const lockGuest = (u) => Object.defineProperty(u, 'robits', { get: () => 0, set: () => {}, enumerable: true, configurable: true });
+  for (const u of Object.values(D.users)) if (u.guest) lockGuest(u);
+  api.post('/auth/guest', (req, res) => {
+    if (limited(req, res, 'guest', 10, 3600e3)) return;
+    const banned = bannedClient(db, req.client);
+    if (banned) return bad(res, `This device is banned from this Robis (account ${banned.username}).${banDetails(banned)}`, 403);
+    if (siteSettings(D).signups === false || siteSettings(D).guests === false) return bad(res, 'Guest play is closed right now. Try again later!', 403);
+    let name;
+    for (let i = 0; i < 50 && (!name || nameTaken(name)); i++) name = 'Guest_' + (10000 + Math.floor(Math.random() * 90000));
+    if (nameTaken(name)) return bad(res, 'Try again in a moment.');
+    const user = createUser(db, name, null, { guest: true, blurb: 'Just visiting Robis!' });
+    delete user.salt; delete user.hash;
+    lockGuest(user);
+    const look = GUEST_LOOK.map((n) => Object.values(D.items).find((i) => i.name === n && !i.custom)).filter(Boolean).map((i) => i.id);
+    D.inventory[user.id] = look;
+    user.avatar = { bodyColors: { ...GUEST_BODY }, wearing: look };
+    noteClient(db, user, req.client);
+    const token = createSession(db, user.id);
+    db.save();
+    setCookie(res, sessionCookie(token));
+    res.json({ user: me(user), ...(req.headers['x-robis-discord'] ? { session: token } : {}) });
+  });
+  // guests who closed the tab and never came back
+  const sweepGuests = () => {
+    const live = new Set(Object.values(D.sessions).map((x) => x.userId));
+    for (const u of Object.values(D.users)) {
+      if (!u.guest) continue;
+      if (!live.has(u.id) || Date.now() - (u.lastOnline || u.created) > 3 * 86400e3) { if (!manager.findUser(u.id)) deleteAccount(u); }
+    }
+  };
+  setTimeout(sweepGuests, 5000).unref?.();
+  setInterval(sweepGuests, 3600e3).unref?.();
 
   // The avatar as the game renders it (used when joining a friend's room).
   api.get('/avatar/resolved', requireUser, (req, res) => res.json({ avatar: resolvedAvatar(req.user) }));
@@ -650,6 +707,7 @@ export function createApi(db, manager, opts = {}) {
     if (hooks.isTradeBanned(from)) return bad(res, hooks.tradeMessage(from), 403);
     const to = D.users[toInt(req.body?.toUserId)];
     if (!to || to.system) return bad(res, 'User not found', 404);
+    if (to.guest) return bad(res, 'Guests can\'t trade.');
     if (to.id === from.id) return bad(res, 'You can\'t trade with yourself.');
     const privacy = to.tradePrivacy || 'everyone';
     if (privacy === 'nobody' || (privacy === 'friends' && !(D.friends[to.id] || []).includes(from.id))) return bad(res, `${to.username} isn't accepting trades from you.`);
@@ -1040,6 +1098,7 @@ export function createApi(db, manager, opts = {}) {
     const other = D.users[id];
     if (!other || id === req.user.id) return bad(res, 'Invalid user');
     if (other.system) return bad(res, 'This account does not accept friend requests.');
+    if (other.guest) return bad(res, 'Guests can\'t add friends.');
     if ((D.friends[req.user.id] || []).includes(id)) return bad(res, 'Already friends');
     // Accept automatically if they already asked us.
     const back = D.friendRequests.findIndex((r) => r.from === id && r.to === req.user.id);
@@ -1166,7 +1225,7 @@ export function createApi(db, manager, opts = {}) {
   const HEX6 = /^#[0-9a-f]{6}$/i;
   const IMG = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
   const MODELS = {
-    Hat: [...new Set(CATALOG.filter((i) => i.type === 'Hat').map((i) => i.data.model))],
+    Hat: [...new Set(CATALOG.filter((i) => i.type === 'Hat' && !i.data.guestOnly).map((i) => i.data.model))],
     Hair: [...new Set(CATALOG.filter((i) => i.type === 'Hair').map((i) => i.data.model))],
     Pet: [...new Set(CATALOG.filter((i) => i.type === 'Pet').map((i) => i.data.model))],
   };
@@ -1239,7 +1298,7 @@ export function createApi(db, manager, opts = {}) {
     const id = db.nextId('item');
     D.items[id] = {
       id, name, type, price, data, description: String(b.description || '').slice(0, 500),
-      creatorId: req.user.id, created: Date.now(), sales: 0, limited, remaining: limited ? stock : null, stock: limited ? stock : null, custom: true,
+      creatorId: req.user.id, created: Date.now(), sales: 0, limited, remaining: limited ? stock : null, stock: limited ? stock : null, custom: true, feePaid: true,
     };
     // The creator keeps a copy of normal items; a Limited's whole stock goes on sale.
     if (!limited) (D.inventory[req.user.id] || (D.inventory[req.user.id] = [])).push(id);
@@ -1255,13 +1314,43 @@ export function createApi(db, manager, opts = {}) {
     if (!it.custom) return bad(res, 'Built-in items can\'t be deleted.');
     if (it.creatorId !== req.user.id && !modCan(req.user, 'groups')) return bad(res, 'You don\'t have permission to do that.', 403);
     if (it.limited && it.sales > 0 && !modCan(req.user, 'groups')) return bad(res, 'Players already own this Limited, so it can\'t be deleted.');
+    removeItem(it);
+    db.save();
+    res.json({ ok: true });
+  });
+  function removeItem(it) {
     delete D.items[it.id];
     delete D.serials[it.id];
     for (const list of Object.values(D.inventory)) { const i = list.indexOf(it.id); if (i >= 0) list.splice(i, 1); }
     for (const u of Object.values(D.users)) if (u.avatar && Array.isArray(u.avatar.wearing)) u.avatar.wearing = u.avatar.wearing.filter((x) => x !== it.id);
+  }
+
+  // Once: the items players uploaded before there was an upload fee pay it
+  // now. Oldest first, while the owner's Robits last; the ones they can't
+  // pay for are deleted.
+  if (!D.meta.uploadFeesBackfilled) {
+    D.meta.uploadFeesBackfilled = true;
+    const owed = {};
+    for (const it of Object.values(D.items)) {
+      if (!it.custom || it.limited || it.feePaid) continue;
+      const u = D.users[it.creatorId];
+      if (!u || u.isAdmin || can(u, 'items')) continue;
+      (owed[u.id] || (owed[u.id] = [])).push(it);
+    }
+    for (const [uid, list] of Object.entries(owed)) {
+      const u = D.users[uid];
+      list.sort((a, b) => a.created - b.created);
+      for (const it of list) {
+        const fee = UPLOAD_FEES[it.type] || 100;
+        if ((u.robits || 0) >= fee) {
+          u.robits -= fee;
+          it.feePaid = true;
+          log(u.id, -fee, `Upload fee: ${it.name}`);
+        } else removeItem(it);
+      }
+    }
     db.save();
-    res.json({ ok: true });
-  });
+  }
 
   // Turns any item into a Limited with a stock (0 = off sale right away, trade only),
   // or back into a normal item.

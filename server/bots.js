@@ -248,7 +248,7 @@ export function installBots(api, { db, manager, requireAdmin, bad, deleteAccount
     for (const b of live.values()) {
       if (b.gone || b.friendAsked) continue;
       for (const o of b.server.sessions.values()) {
-        if (o === b.session || !o.user || o.user.system) continue;
+        if (o === b.session || !o.user || o.user.system || o.user.guest) continue;
         if (now - Math.max(b.session.joinedAt, o.joinedAt) < 150e3) continue; // played together a bit first
         const k = b.user.id + ':' + o.user.id;
         if (asked.has(k)) continue;

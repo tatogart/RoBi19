@@ -58,7 +58,7 @@ export function seed(db) {
     db.data.items[id] = {
       id, name: it.name, type: it.type, price: it.price, data: it.data, description: it.desc,
       creatorId: 1, created: now - (CATALOG.length - i) * 86400e3, sales: Math.floor(Math.random() * 50000),
-      limited: !!it.limited, remaining: it.limited ? 100 : null,
+      limited: !!it.limited, remaining: it.limited ? 100 : null, ...(it.offsale ? { offsale: true } : {}),
     };
   }
   // "Robis" is a system account: it owns the catalog and the showcase games,
@@ -131,7 +131,7 @@ export function addCatalogItems(db) {
     D.items[id] = {
       id, name: it.name, type: it.type, price: it.price, data: it.data, description: it.desc,
       creatorId: owner ? owner.id : 1, created: Date.now(), sales: 0,
-      limited: !!it.limited, remaining: it.limited ? 100 : null,
+      limited: !!it.limited, remaining: it.limited ? 100 : null, ...(it.offsale ? { offsale: true } : {}),
     };
     added++;
   }

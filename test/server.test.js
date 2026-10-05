@@ -2120,3 +2120,65 @@ test('Robis Awards: a season, nominees, voting, winners on game pages', async ()
   assert.ok(trophies.some((t) => t.won && t.category === 'Scariest Game'));
   await call('POST', '/admin/awards', { op: 'delete', id }, admin);
 });
+
+test('guests: no password, no Robits, guest look, deleted on logout', async () => {
+  const g = await call('POST', '/auth/guest');
+  assert.equal(g.status, 200, JSON.stringify(g.data));
+  const u = g.data.user;
+  assert.ok(u.guest && /^Guest_\d+$/.test(u.username) && u.robits === 0);
+  const raw = srv.db.data.users[u.id];
+  assert.ok(!raw.hash && !raw.salt);
+  // the guest look: items nobody else can get
+  const inv = srv.db.data.inventory[u.id].map((id) => srv.db.data.items[id].name);
+  assert.ok(inv.includes('Guest Cap') && inv.includes('Guest Shirt'));
+  const cap = Object.values(srv.db.data.items).find((i) => i.name === 'Guest Cap');
+  assert.ok(cap.offsale && cap.data.guestOnly);
+  const p = await call('POST', '/auth/signup', { username: 'NotAGuest1', password: 'secret123' });
+  assert.equal((await call('POST', `/catalog/${cap.id}/buy`, {}, p.cookie)).status, 400);
+  assert.ok(!(await call('GET', '/catalog?type=Hat')).data.items.some((i) => i.name === 'Guest Cap'));
+  // no Robits, ever
+  raw.robits += 500;
+  assert.equal(raw.robits, 0);
+  assert.equal((await call('POST', '/economy/stipend', {}, g.cookie)).status, 403);
+  // the things guests can't do
+  assert.equal((await call('POST', '/groups', { name: 'Guest Club' }, g.cookie)).status, 403);
+  assert.equal((await call('POST', '/account/username', { username: 'Guesty', password: '' }, g.cookie)).status, 403);
+  assert.equal((await call('POST', '/account/password', { password: '', newPassword: 'abcdef1' }, g.cookie)).status, 403);
+  assert.equal((await call('POST', `/friends/${p.data.user.id}/request`, {}, g.cookie)).status, 403);
+  assert.equal((await call('POST', `/friends/${u.id}/request`, {}, p.cookie)).status, 400);
+  const pass = Object.values(srv.db.data.gamepasses)[0];
+  if (pass) assert.equal((await call('POST', `/gamepasses/${pass.id}/buy`, {}, g.cookie)).status, 403);
+  // can't log in with a password
+  assert.equal((await call('POST', '/auth/login', { username: u.username, password: '' })).status, 401);
+  // logging out deletes the account
+  await call('POST', '/auth/logout', {}, g.cookie);
+  assert.equal(srv.db.data.users[u.id], undefined);
+});
+
+test('upload fees are charged for items made before the fee (or the items go)', async () => {
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'robis-fee-'));
+  try {
+    let s2 = createServer({ dataDir: d2, quiet: true });
+    const D = s2.db.data;
+    const mk = (name, password, robits) => { const id = s2.db.nextId('user'); D.users[id] = { id, username: name, robits, avatar: { wearing: [] }, created: Date.now() }; D.inventory[id] = []; return id; };
+    const rich = mk('RichMaker', 'x', 1000);
+    const poor = mk('PoorMaker', 'x', 250);
+    const item = (uid, name, type, created) => { const id = s2.db.nextId('item'); D.items[id] = { id, name, type, price: 5, data: {}, creatorId: uid, created, sales: 0, custom: true, limited: false }; D.inventory[uid].push(id); return id; };
+    const r1 = item(rich, 'Rich Tee', 'TShirt', 1), r2 = item(rich, 'Rich Face', 'Face', 2);
+    const p1 = item(poor, 'Poor Tee', 'TShirt', 1), p2 = item(poor, 'Poor Shirt', 'Shirt', 2), p3 = item(poor, 'Poor Face', 'Face', 3);
+    D.users[poor].avatar.wearing = [p3];
+    delete D.meta.uploadFeesBackfilled;
+    s2.db.save();
+    await s2.close();
+    s2 = createServer({ dataDir: d2, quiet: true });
+    const E = s2.db.data;
+    assert.equal(E.users[rich].robits, 1000 - 100 - 200);
+    assert.ok(E.items[r1] && E.items[r2]);
+    // 250: the T-shirt (100) and the shirt (150), not the face (200)
+    assert.equal(E.users[poor].robits, 0);
+    assert.ok(E.items[p1] && E.items[p2] && !E.items[p3]);
+    assert.ok(!E.inventory[poor].includes(p3) && !E.users[poor].avatar.wearing.includes(p3));
+    assert.ok(E.transactions.some((t) => t.userId === poor && t.desc === 'Upload fee: Poor Tee'));
+    await s2.close();
+  } finally { fs.rmSync(d2, { recursive: true, force: true }); }
+});

@@ -57,11 +57,17 @@ app.append(discordPanel);
 })();
 
 // ---------------------------------------------------------------- username
+// a guest can't change its name or password; its account goes away on logout
+const account = me.guest ? document.createElement('div') : app;
+if (me.guest) app.append(el('div', { class: 'panel guest-note' },
+  el('h3', { text: 'You are playing as a guest' }),
+  el('p', { text: 'Guests can\'t get Robits, add friends, buy game passes, create groups or change their name. When you log out, this guest account is deleted.' }),
+  el('a', { class: 'btn btn-green', href: '/?signup=1', text: 'Sign up for free' })));
 const nameInput = el('input', { class: 'input', placeholder: 'New username', autocomplete: 'off' });
 const namePass = el('input', { class: 'input', type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
 const current = el('b', { class: 'no-i18n', text: me.username });
 const price = me.isAdmin ? 'Free for admins' : 'R$1,000';
-app.append(el('div', { class: 'panel' },
+account.append(el('div', { class: 'panel' },
   el('h3', { text: 'Account Info' }),
   el('div', { class: 'settings-row' }, el('div', { class: 'settings-label', text: 'Username' }), current),
   el('h4', { text: 'Change Username' }),
@@ -85,12 +91,12 @@ const drawTrading = (v) => tradePanel.replaceChildren(el('h3', { text: 'Trading'
     try { me = (await api.post('/account/trade-privacy', { privacy: p })).user; drawTrading(me.tradePrivacy); toast('Saved', 'success'); } catch (e) { toast(e.message, 'error'); }
   }));
 drawTrading(me.tradePrivacy || 'everyone');
-app.append(tradePanel);
+account.append(tradePanel);
 
 // ---------------------------------------------------------------- password
 const oldPass = el('input', { class: 'input', type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
 const newPass = el('input', { class: 'input', type: 'password', placeholder: 'New password', autocomplete: 'new-password' });
-app.append(el('div', { class: 'panel' },
+account.append(el('div', { class: 'panel' },
   el('h3', { text: 'Security' }),
   el('h4', { text: 'Change Password' }),
   el('div', { class: 'row wrap' }, oldPass, newPass,
@@ -104,7 +110,7 @@ app.append(el('div', { class: 'panel' },
 
 // ---------------------------------------------------------------- delete account
 const delPass = el('input', { class: 'input', type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
-app.append(el('div', { class: 'panel' },
+account.append(el('div', { class: 'panel' },
   el('h3', { text: 'Delete Account' }),
   el('p', { class: 'small muted', text: 'Your account, games, items, friends and messages are deleted for good. This can\'t be undone.' }),
   el('div', { class: 'row wrap' }, delPass,

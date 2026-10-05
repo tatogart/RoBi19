@@ -7,6 +7,7 @@ import { startInvites } from './invites.js';
 import { startChatParty } from './chatparty.js';
 import { installSecret, startLive } from './fun.js';
 import { checkGifts } from './gifts.js';
+import { tr } from '../i18n.js';
 
 const isStaff = (me) => me.isAdmin || (me.perms || []).some((p) => p === 'moderator' || p === 'economy');
 
@@ -125,16 +126,21 @@ function buildHeader(me, active) {
         el('a', { href: '/studio', text: 'Robis Studio' }),
         el('a', { href: '/robits', text: 'Robits & Builders Club' }),
         isStaff(me) ? el('a', { href: '/admin', text: 'Admin Panel' }) : null,
-        me.isAdmin ? null : el('button', { text: 'Enter Admin Code', onclick: adminCodeDialog }),
+        me.isAdmin || me.guest ? null : el('button', { text: 'Enter Admin Code', onclick: adminCodeDialog }),
         window.ROBIS_STANDALONE ? el('button', { text: 'Join a friend', onclick: joinFriendDialog }) : null,
         isInstalled() ? null : el('button', { text: 'Install Robis app', onclick: installApp }),
         el('a', { href: '/settings', text: 'Settings' }),
         el('a', { href: '/help', text: 'Help' }),
-        el('button', { text: 'Logout', onclick: async () => { await api.post('/auth/logout'); location.href = '/'; } }));
+        el('button', { text: 'Logout', onclick: async () => {
+          // a guest account is deleted when its guest logs out
+          if (me.guest && !confirm(tr('Log out? Your guest account and everything in it will be deleted.'))) return;
+          await api.post('/auth/logout'); location.href = '/';
+        } }));
       document.body.append(dd);
       const close = () => { if (dd) { dd.remove(); dd = null; } document.removeEventListener('click', close); };
       setTimeout(() => document.addEventListener('click', close));
     });
+    if (me.guest) right.append(el('a', { href: '/?signup=1', class: 'btn btn-green btn-small guest-signup', text: 'Sign Up' }));
     right.append(robits, bell, gear);
   } else {
     right.append(el('a', { href: '/?signup=1', text: 'Sign Up', class: 'hide-mobile' }), el('a', { href: '/', text: 'Log In', class: 'login-btn' }));

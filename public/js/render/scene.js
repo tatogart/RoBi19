@@ -128,6 +128,42 @@ function textSprite(text, color = '#ffffff', size = 24) {
   return s;
 }
 
+// A billboard is a flat card that always faces the camera, so on a thick or
+// tall part it used to stay half inside the part (and the half that showed
+// changed while you turned the camera). Before every draw push it towards the
+// camera just past its part's surface, and shrink it by the same ratio so it
+// looks the same size from where you stand. Other walls still hide it.
+const _bbA = new THREE.Vector3(), _bbC = new THREE.Vector3(), _bbD = new THREE.Vector3(), _bbO = new THREE.Vector3();
+const _bbX = new THREE.Vector3(), _bbY = new THREE.Vector3(), _bbZ = new THREE.Vector3();
+function keepOutOfPart(s, part) {
+  const base = s.position.clone();
+  const scale = s.scale.clone();
+  s.onBeforeRender = (renderer, scene, camera) => {
+    const host = s.parent;
+    const size = part && part._p && part._p.Size;
+    if (!host || !size) return;
+    host.updateWorldMatrix(true, false);
+    _bbO.setFromMatrixPosition(host.matrixWorld); // the part's centre
+    _bbA.copy(base).applyMatrix4(host.matrixWorld); // where the text hangs
+    _bbC.setFromMatrixPosition(camera.matrixWorld);
+    _bbD.subVectors(_bbC, _bbA);
+    const dist = _bbD.length();
+    if (dist < 0.01) return;
+    _bbD.divideScalar(dist);
+    host.matrixWorld.extractBasis(_bbX, _bbY, _bbZ);
+    _bbX.normalize(); _bbY.normalize(); _bbZ.normalize();
+    // how far the part reaches towards the camera, measured from the text
+    const reach = Math.abs(_bbD.dot(_bbX)) * size.X / 2 + Math.abs(_bbD.dot(_bbY)) * size.Y / 2 + Math.abs(_bbD.dot(_bbZ)) * size.Z / 2
+      - _bbD.dot(_bbO.subVectors(_bbA, _bbO));
+    const push = Math.min(Math.max(0, reach + 0.15), dist * 0.85);
+    const k = push > 0 ? (dist - push) / dist : 1;
+    _bbA.addScaledVector(_bbD, push);
+    s.position.copy(host.worldToLocal(_bbA));
+    s.scale.set(scale.x * k, scale.y * k, 1);
+    s.updateMatrixWorld();
+  };
+}
+
 const MAX_LIGHTS = 8; // pooled point lights (see SceneSync)
 
 export class SceneSync {
@@ -220,6 +256,7 @@ export class SceneSync {
       const s = textSprite(p.Text, '#' + p.TextColor3.toHex().slice(1), p.TextSize);
       s.position.set(p.StudsOffset.X, p.StudsOffset.Y, p.StudsOffset.Z);
       s.visible = p.Enabled;
+      keepOutOfPart(s, parent);
       target.add(s);
       this.effects.set(inst.id, { obj: s });
       return;

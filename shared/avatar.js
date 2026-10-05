@@ -127,6 +127,10 @@ export const CATALOG = [
   { name: 'Ninja Mask', type: 'Accessory', price: 45, data: { model: 'ninjamask', slot: 'face', color: '#1b1b1b', accent: '#c4281c' }, desc: 'Stealthy.' },
   { name: 'Teddy Bear Hug', type: 'Accessory', price: 60, data: { model: 'teddy', slot: 'front', color: '#a0703c', accent: '#f2d2b0' }, desc: 'A teddy bear you carry everywhere.' },
   // ---- developer items: only for people who made a game (or the Robis team)
+  // Guest look (like the old "get Robux free" guests): nobody else can ever get these.
+  { name: 'Guest Cap', type: 'Hat', price: 0, offsale: true, data: { model: 'guestcap', color: '#1b1b1b', accent: '#e8413c', guestOnly: true }, desc: 'Only guests wear this. Make an account to get your own style!' },
+  { name: 'Guest Shirt', type: 'Shirt', price: 0, offsale: true, data: { color: '#1b1b1b', accent: '#ffffff', pattern: 'guest', guestOnly: true }, desc: 'Only guests wear this.' },
+  { name: 'Guest Pants', type: 'Pants', price: 0, offsale: true, data: { color: '#3c3c3c', accent: '#1b1b1b', pattern: 'plain', guestOnly: true }, desc: 'Only guests wear this.' },
   { name: 'Developer Hard Hat', type: 'Hat', price: 0, data: { model: 'hardhat', color: '#f5cd30', accent: '#1b1b1b', devOnly: true }, desc: 'For developers only: make a game in Create to unlock it. The builder\'s classic.' },
   { name: 'Code Visor', type: 'Accessory', price: 0, data: { model: 'codevisor', slot: 'face', color: '#0f1117', accent: '#3ddc84', devOnly: true }, desc: 'For developers only. See the world in Lua.' },
   { name: 'Builder\'s Tool Belt', type: 'Accessory', price: 0, data: { model: 'toolbelt', slot: 'waist', color: '#7a4b2a', accent: '#b4b4b4', devOnly: true }, desc: 'For developers only. A hammer, a wrench and a lot of bricks to place.' },

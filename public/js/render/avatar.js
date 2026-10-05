@@ -314,6 +314,13 @@ function drawPattern(ctx, w, h, d, face) {
         ctx.beginPath(); ctx.ellipse(w * 0.5, 0, w * 0.35, h * 0.28, 0, 0, Math.PI); ctx.fill();
       }
       break;
+    case 'guest':
+      if (face === 'front' || face === 'back') {
+        ctx.fillStyle = accent; ctx.font = `900 ${Math.floor(w * 0.2)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('GUEST', w / 2, h * 0.42);
+        ctx.fillStyle = '#e8413c'; ctx.fillRect(w * 0.2, h * 0.58, w * 0.6, h * 0.05);
+      }
+      break;
     case 'bc':
       if (face === 'front') {
         ctx.fillStyle = accent;
@@ -520,6 +527,17 @@ const HATS = {
     brim.scale.set(1.2, 1, 1);
     g.add(brim);
     g.add(M(new THREE.SphereGeometry(0.08, 8, 6), mat(d.accent), 0, 0.94, 0));
+    return g;
+  },
+  guestcap(d) {
+    const g = HATS.cap(d);
+    // the red emblem on the front
+    const [c, ctx] = makeCanvas(64, 64);
+    ctx.fillStyle = d.accent; ctx.beginPath(); ctx.arc(32, 32, 30, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = '900 40px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('R', 32, 35);
+    const logo = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), new THREE.MeshStandardMaterial({ map: toTexture(c), transparent: true, roughness: 0.6 }));
+    logo.position.set(0, 0.55, -0.6); logo.rotation.set(0.5, Math.PI, 0);
+    g.add(logo);
     return g;
   },
   cone(d) {

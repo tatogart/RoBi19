@@ -1394,3 +1394,9 @@ html[data-theme="dark"] .item-card .thumb { background: linear-gradient(#45484b,
 .aw-adm-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--gray-bg); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 13px; }
 .aw-adm-chip.win { background: #ffd75a; color: #3a2400; font-weight: 700; }
 .aw-adm-chip button { border: 0; background: none; cursor: pointer; color: inherit; font-size: 13px; }
+
+/* guests */
+.guest-btn { margin-top: 8px; background: #4a4a4a; color: #fff; border-color: #333; }
+.guest-btn:hover { background: #5a5a5a; }
+.guest-signup { margin-right: 8px; align-self: center; }
+.guest-note { border-left: 4px solid #e8413c; }

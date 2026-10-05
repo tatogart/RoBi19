@@ -42,6 +42,13 @@ lf.addEventListener('submit', async (e) => {
     else toast(ex.message, 'error');
   }
 });
+// Play as Guest: no password, no Robits; the account is deleted on logout.
+document.getElementById('guest-btn').addEventListener('click', async () => {
+  try {
+    await api.post('/auth/guest');
+    location.href = returnUrl;
+  } catch (ex) { document.getElementById('signup-error').textContent = ex.message; }
+});
 if (params.get('signup')) f.username.focus();
 
 // Phone version: each phone is its own world, so point to the shared server.
