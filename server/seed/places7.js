@@ -2,7 +2,7 @@
 // with a knife, one sheriff with a gun, everyone else innocent. Find out who
 // the murderer is before it's too late! Collect coins during rounds.
 import { Vector3, Color3 } from '../../shared/engine/types.js';
-import { newGame, part, model, folder, script, inst, finish } from './builder.js';
+import { newGame, part, model, folder, script, inst, finish, thumbCam } from './builder.js';
 
 function tool(parent, name, toolModel, color, tip) {
   return inst(parent, 'Tool', { Name: name, ToolModel: toolModel, Color: Color3.fromHex(color), ToolTip: tip || '' });
@@ -66,6 +66,7 @@ export function gameMM2() {
   const how = part(lobby, { name: 'HowTo', size: [1, 1, 1], pos: [0, 6, -21], transparency: 1, canCollide: false });
   inst(how, 'BillboardText', { Text: 'Innocents: hide and survive. Sheriff: shoot the murderer. Murderer: get everyone!', TextSize: 16 });
 
+  thumbCam(ws, [-196, 62, -92], [-262, 0, 2]); // the Mansion from above (the game's picture)
   const maps = folder(ws, 'Maps');
 
   // ---------------------------------------------------------------- map 1: Office

@@ -247,12 +247,25 @@ export async function renderPlace(place, size = 384, opts = {}) {
   const env = new Environment(scene, r);
   env.apply(game.GetService('Lighting'));
   const sync = new SceneSync(game, scene);
-  // Frame the interesting part of the map (ignore giant baseplates).
+  // A place can say where its picture is taken from: a part named
+  // "ThumbnailCamera" (it looks the way its front faces).
+  let shot = null;
+  for (const m of sync.meshes.values()) {
+    if (m.userData.inst.Name !== 'ThumbnailCamera') continue;
+    shot = m.userData.inst._p.CFrame;
+    m.visible = false;
+  }
+  // a dollhouse view: no ceilings or roofs between the camera and the rooms
+  if (shot && !opts.fit) for (const m of sync.meshes.values()) if (/^(Ceiling|Roof)/.test(m.userData.inst.Name) && m.userData.inst._p.CFrame.Position.Y < shot.Position.Y) m.visible = false;
+  // Frame the interesting part of the map (ignore giant baseplates, and the
+  // lobbies floating high above or far below the map itself).
+  const parts = [...sync.meshes.values()].filter((m) => { const s = m.userData.inst._p.Size; return m.visible && s.X * s.Z <= 40000; });
+  const ys = parts.map((m) => m.userData.inst._p.CFrame.Position.Y).sort((a, b) => a - b);
+  const midY = ys.length ? ys[Math.floor(ys.length / 2)] : 0;
   const box = new THREE.Box3();
   const tmp = new THREE.Box3();
-  for (const m of sync.meshes.values()) {
-    const s = m.userData.inst._p.Size;
-    if (s.X * s.Z > 40000) continue;
+  for (const m of parts) {
+    if (!opts.fit && Math.abs(m.userData.inst._p.CFrame.Position.Y - midY) > 90) continue;
     tmp.setFromObject(m);
     box.union(tmp);
   }
@@ -263,8 +276,14 @@ export async function renderPlace(place, size = 384, opts = {}) {
   const radius = opts.fit ? Math.max(1.5, sz.length() / 2) * 1.85
     : Math.min(260, Math.max(opts.minRadius ?? 20, Math.max(sz.x, sz.z) * 0.55, sz.y));
   const cam = new THREE.PerspectiveCamera(45, 1, 0.5, 10000);
-  cam.position.set(center.x + radius * 0.9, center.y + radius * 0.65, center.z + radius * 0.9);
-  cam.lookAt(center.x, center.y - sz.y * 0.1, center.z);
+  if (shot && !opts.fit) {
+    const p = shot.Position, l = shot.LookVector;
+    cam.position.set(p.X, p.Y, p.Z);
+    cam.lookAt(p.X + l.X, p.Y + l.Y, p.Z + l.Z);
+  } else {
+    cam.position.set(center.x + radius * 0.9, center.y + radius * 0.65, center.z + radius * 0.9);
+    cam.lookAt(center.x, center.y - sz.y * 0.1, center.z);
+  }
   env.setFocus(center);
   env.update(0, cam);
   cam.updateMatrixWorld();

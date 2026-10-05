@@ -71,5 +71,6 @@ export class Database {
   // ---- thumbnails ----
   thumbPath(kind, id) { return path.join(this.dir, 'thumbs', `${kind}-${+id}.png`); }
   hasThumb(kind, id) { return fs.existsSync(this.thumbPath(kind, id)); }
+  removeThumb(kind, id) { try { fs.rmSync(this.thumbPath(kind, id), { force: true }); } catch { /* not there */ } }
   writeThumb(kind, id, base64) { fs.writeFileSync(this.thumbPath(kind, id), Buffer.from(base64, 'base64')); }
 }

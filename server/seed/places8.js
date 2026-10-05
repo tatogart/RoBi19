@@ -3,7 +3,7 @@
 // giant tables, in cupboards and behind cereal boxes. Then IT is let out and
 // tags whoever it finds. Found players go back to the lobby.
 import { Vector3, Color3 } from '../../shared/engine/types.js';
-import { newGame, part, model, folder, script, inst, finish } from './builder.js';
+import { newGame, part, model, folder, script, inst, finish, thumbCam } from './builder.js';
 
 // A box with one open side (a cupboard, a wardrobe, a toy box) at (x, y, z),
 // size w x h x d; `open` is the open side: 'front' (-z), 'back', 'left', 'right', 'top'.
@@ -74,6 +74,7 @@ export function gameHideSeek() {
   inst(how, 'BillboardText', { Text: 'You are tiny! Hide anywhere in the giant house. IT has to find you before the time runs out.', TextSize: 15 });
   for (const [x, z] of [[-18, -10], [-20, 12], [6, 14]]) part(lobby, { name: 'Beanbag', size: [5, 3, 5], pos: [x, LY + 2.5, z], color: ['#ff66cc', '#00a2ff', '#4b974b'][Math.abs(x) % 3], material: 'Fabric', shape: 'Ball' });
 
+  thumbCam(ws, [300, 185, -120], [325, 0, 15]); // the giant kitchen from above its front wall
   const maps = folder(ws, 'Maps');
 
   // ---------------------------------------------------------------- map 1: Giant Kitchen

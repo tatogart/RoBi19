@@ -37,7 +37,7 @@ export class Database {
     db.data = Object.assign(EMPTY(), all.get('db') || {});
     for (const [k, v] of all) {
       if (k.startsWith('place:')) db.places.set(+k.slice(6), v);
-      if (k.startsWith('thumb:')) db.thumbs.set(k.slice(6), v);
+      if (k.startsWith('thumb:') && v) db.thumbs.set(k.slice(6), v);
     }
     return db;
   }
@@ -103,6 +103,7 @@ export class Database {
 
   thumbPath(kind, id) { return `${kind}-${+id}`; }
   hasThumb(kind, id) { return this.thumbs.has(this.thumbPath(kind, id)); }
+  removeThumb(kind, id) { const k = this.thumbPath(kind, id); if (this.thumbs.delete(k)) this._put('thumb:' + k, null); }
   writeThumb(kind, id, base64) { const k = this.thumbPath(kind, id); this.thumbs.set(k, base64); this._put('thumb:' + k, base64); }
   readThumb(key) { return this.thumbs.get(key) || null; }
 }

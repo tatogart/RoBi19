@@ -2,7 +2,7 @@
 // house. Find the red key and the blue key, carry them to the locks on the
 // front door (one item at a time!) and escape before Piggy gets you.
 import { Color3 } from '../../shared/engine/types.js';
-import { newGame, part, model, folder, script, inst, finish } from './builder.js';
+import { newGame, part, model, folder, script, inst, finish, thumbCam } from './builder.js';
 
 // A wall from (x1, z1) to (x2, z2) along X or Z, with door gaps (6 wide).
 function wall(parent, x1, z1, x2, z2, h, color, doors = []) {
@@ -42,6 +42,7 @@ export function gamePiggy() {
   inst(how, 'BillboardText', { Text: 'Find the red key and the blue key, open the locks on the front door and escape. Don\'t let Piggy catch you!', TextSize: 15 });
 
   // ---------------------------------------------------------------- the house
+  thumbCam(ws, [62, 78, -98], [0, 0, 4]); // the house without its ceiling
   const h = model(ws, 'House');
   const HX = 0, HZ = 0, W = 110, D = 80, H = 14;
   const x0 = HX - W / 2, x1 = HX + W / 2, z0 = HZ - D / 2, z1 = HZ + D / 2;

@@ -78,3 +78,16 @@ export function tree(parent, x, z, y = 0, scale = 1) {
 }
 
 export function finish(game, meta) { return savePlace(game, meta); }
+
+// Where the game's picture (thumbnail) is taken from: an invisible part that
+// looks from `eye` at `target`. Ceilings and roofs under it are left out of
+// the picture, so indoor maps show their rooms (a dollhouse view).
+export function thumbCam(parent, eye, target) {
+  const p = createInstance('Part');
+  p.Name = 'ThumbnailCamera';
+  p.Size = new Vector3(1, 1, 1);
+  p.CFrame = CFrame.lookAt(new Vector3(...eye), new Vector3(...target));
+  p.Anchored = true; p.CanCollide = false; p.Transparency = 1;
+  p.Parent = parent;
+  return p;
+}

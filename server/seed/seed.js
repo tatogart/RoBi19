@@ -205,7 +205,11 @@ export function addSeedGames(db) {
       if (current && (!existing.seedHash || placeHash(current) === existing.seedHash)) {
         const fresh = sg.build();
         const h = placeHash(fresh);
-        if (h !== placeHash(current)) { db.writePlace(existing.id, fresh); existing.updated = now; }
+        if (h !== placeHash(current)) {
+          db.writePlace(existing.id, fresh); existing.updated = now;
+          // the old picture shows the old map: the next visitor renders a new one
+          if (db.removeThumb) db.removeThumb('game', existing.id);
+        }
         existing.seedHash = h;
         syncSubPlaces(db, existing, sg, now);
       }
