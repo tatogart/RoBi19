@@ -560,13 +560,12 @@ export function createApi(db, manager, opts = {}) {
     setCookie(res, sessionCookie(token));
     res.json({ user: me(user), ...(req.headers['x-robis-discord'] ? { session: token } : {}) });
   });
-  // guests who closed the tab and never came back
+  // A guest account stays as long as its guest is logged in (each visit
+  // pushes the session's end further, see /auth/me). Only a guest whose
+  // session is gone (expired: nobody can log back into it) is deleted.
   const sweepGuests = () => {
-    const live = new Set(Object.values(D.sessions).map((x) => x.userId));
-    for (const u of Object.values(D.users)) {
-      if (!u.guest) continue;
-      if (!live.has(u.id) || Date.now() - (u.lastOnline || u.created) > 3 * 86400e3) { if (!manager.findUser(u.id)) deleteAccount(u); }
-    }
+    const live = new Set(Object.values(D.sessions).filter((x) => x.expires > Date.now()).map((x) => x.userId));
+    for (const u of Object.values(D.users)) if (u.guest && !live.has(u.id) && !manager.findUser(u.id)) deleteAccount(u);
   };
   setTimeout(sweepGuests, 5000).unref?.();
   setInterval(sweepGuests, 3600e3).unref?.();
@@ -579,6 +578,11 @@ export function createApi(db, manager, opts = {}) {
 
   api.get('/auth/me', (req, res) => {
     if (req.user) { noteClient(db, req.user, req.client); markActive(D, req.user.id); }
+    if (req.user && req.user.guest) {
+      // keep the guest logged in while they keep coming back
+      const s = D.sessions[sessionToken(req)];
+      if (s && s.expires - Date.now() < 20 * 86400e3) { s.expires = Date.now() + 30 * 86400e3; setCookie(res, sessionCookie(sessionToken(req), 30)); }
+    }
     res.json({ user: req.user ? me(req.user) : null });
   });
 
