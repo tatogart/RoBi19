@@ -1479,3 +1479,18 @@ html[data-theme="dark"] .item-card .thumb { background: linear-gradient(#45484b,
 html[data-theme="dark"] .appeal-msg.staff { background: #1d3147; border-color: #2d5b86; }
 html[data-theme="dark"] .appeal-msg.player { background: #1d3a27; border-color: #2e6a42; }
 .appeal-new-reply { font-weight: 700; color: var(--green, #00b06f); }
+/* Control Center 5.0 Classic in the dark theme: every light surface gets a dark one */
+html[data-theme="dark"] .adm.adm-classic { border-color: #3a4556; }
+html[data-theme="dark"] .adm-classic .adm-body .panel, html[data-theme="dark"] .adm-classic .adm-card,
+html[data-theme="dark"] .adm-classic .adm-stat, html[data-theme="dark"] .adm-classic .adm-chip { background: #232a35; border-color: #3a4556; color: var(--text); }
+html[data-theme="dark"] .adm-classic .adm-body .panel > h3:first-child, html[data-theme="dark"] .adm-classic .adm-card-head { background: linear-gradient(180deg, #2f5f9c, #1e4577); border-bottom-color: #14335a; }
+html[data-theme="dark"] .adm-classic .adm-link:hover { background: #2a3340; color: #8cc4ff; }
+html[data-theme="dark"] .adm-classic .adm-side-foot { color: #8a96a6; }
+html[data-theme="dark"] .adm-subtab:hover { background: #333e4e; }
+html[data-theme="dark"] .adm-subtab.active { color: #8cc4ff; }
+html[data-theme="dark"] .cl-box legend { color: #8cc4ff; }
+html[data-theme="dark"] .cl-btn:hover { background: linear-gradient(180deg, #415066, #303b4b); border-color: #4a8ad8; }
+html[data-theme="dark"] .cl-btn.red { color: #ff8a8a; border-color: #7a3a3e; }
+html[data-theme="dark"] .cl-btn.red:hover { background: linear-gradient(180deg, #4a2a2e, #3a2023); }
+html[data-theme="dark"] .adm-classic .muted, html[data-theme="dark"] .adm-classic .small.muted { color: #9aa6b5; }
+html[data-theme="dark"] .adm-classic label, html[data-theme="dark"] .adm-classic .field { color: var(--text); }
