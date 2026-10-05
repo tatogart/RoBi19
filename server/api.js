@@ -17,6 +17,7 @@ import { installSocial } from './social.js';
 import { installOverwatch } from './overwatch.js';
 import { installBots } from './bots.js';
 import { installControl } from './control.js';
+import { installAwards } from './awards.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -36,7 +37,7 @@ const ADMIN_ROBITS = 1_000_000;
 export const PERMISSIONS = {
   moderator: 'Moderator: ban, kick and mute players',
   economy: 'Economy: give Robits, items and Builders Club',
-  items: 'Item Creator (BETA): make catalog items',
+  items: 'Item Creator: make hats, hair and pets too, without the upload fee',
   limiteds: 'Limited Creator: make Limited items with a set stock',
   games: 'Game Curator: feature games on the front page',
 };
@@ -61,6 +62,10 @@ export const can = (u, perm) => !!u && (u.isAdmin || (u.perms || []).includes(pe
 // Fine settings for each right (Admin Panel -> Permissions): what exactly a
 // player with the right may do. Unset = the default (everything, like before).
 export const CREATE_TYPES = ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair', 'Pet'];
+// Everyone can make these; uploading costs Robits (like Roblox's upload fee).
+export const PLAYER_TYPES = ['TShirt', 'Shirt', 'Pants', 'Face'];
+export const UPLOAD_FEES = { TShirt: 100, Shirt: 150, Pants: 150, Face: 200, Hat: 300, Hair: 300, Pet: 500 };
+const PLAYER_LIMITS = { minPrice: 1, maxPrice: 10000, maxItems: 50, perDay: 5 };
 export const BAN_STEPS = ['1h', '1d', '3d', '7d', '30d', 'forever'];
 const B = (key, label) => ({ key, label, type: 'bool', default: true });
 export const PERM_OPTIONS = {
@@ -393,6 +398,7 @@ export function createApi(db, manager, opts = {}) {
     hunt: manager.hunt ? manager.hunt.eligible(u.id) : false, // The Hunt event page in the menu (a live event)
     warning: u.pendingWarning || null, // a warning from the staff not seen yet (a popup)
     overwatch: hooks.overwatchAccess(u), // Robis Overwatch in the menu
+    awards: hooks.awardsLive ? hooks.awardsLive() : null, // Robis Awards in the menu (voting or results)
     restrictions: hooks.restriction ? hooks.restriction(u) : { mute: 0, trade: 0 },
   });
 
@@ -1152,8 +1158,9 @@ export function createApi(db, manager, opts = {}) {
     res.json({ item: publicItem(it, req.user) });
   });
 
-  // ------------------------------------------------------------ custom items (BETA)
-  // Players with the "items" right (and admins) make their own catalog items:
+  // ------------------------------------------------------------ player-made items
+  // Every player makes T-shirts, shirts, pants and faces for an upload fee.
+  // Players with the "items" right (and admins) also make, for free:
   // T-shirts and faces from a picture, shirts and pants from a pattern and
   // colours, hats, hair and pets from the classic models in their own colours.
   const HEX6 = /^#[0-9a-f]{6}$/i;
@@ -1182,12 +1189,14 @@ export function createApi(db, manager, opts = {}) {
 
   api.get('/create/options', requireUser, (req, res) => {
     const u = req.user;
-    const normal = can(u, 'items') ? popt(u, 'items', 'types') : [];
+    const normal = can(u, 'items') ? popt(u, 'items', 'types') : PLAYER_TYPES;
     const lim = can(u, 'limiteds') ? popt(u, 'limiteds', 'types') : [];
+    const paying = !u.isAdmin && !can(u, 'items');
     res.json({
       types: CREATE_TYPES.filter((t) => normal.includes(t) || lim.includes(t)), normalTypes: normal, limitedTypes: lim,
-      models: MODELS, patterns: PATTERNS, allowed: !!(normal.length || lim.length), limiteds: can(u, 'limiteds'), onlyLimiteds: !can(u, 'items'),
-      maxPrice: Math.max(can(u, 'items') ? popt(u, 'items', 'maxPrice') : 0, can(u, 'limiteds') ? popt(u, 'limiteds', 'maxPrice') : 0),
+      models: MODELS, patterns: PATTERNS, allowed: true, limiteds: can(u, 'limiteds'), onlyLimiteds: false,
+      fees: paying ? UPLOAD_FEES : {}, robits: u.robits, minPrice: paying ? PLAYER_LIMITS.minPrice : 0,
+      maxPrice: Math.max(can(u, 'items') ? popt(u, 'items', 'maxPrice') : PLAYER_LIMITS.maxPrice, can(u, 'limiteds') ? popt(u, 'limiteds', 'maxPrice') : 0),
       maxStock: can(u, 'limiteds') ? popt(u, 'limiteds', 'maxStock') : 0,
     });
   });
@@ -1199,8 +1208,10 @@ export function createApi(db, manager, opts = {}) {
   api.post('/catalog/create', requireUser, (req, res) => {
     const b = req.body || {};
     const limited = !!b.limited;
-    if (!can(req.user, 'items') && !(limited && can(req.user, 'limiteds'))) return bad(res, 'You don\'t have permission to do that.', 403);
-    if (limited && !can(req.user, 'limiteds')) return bad(res, 'Only players with the Limited Creator right can make Limited items.', 403);
+    // Limiteds are made by the Robis team only (the Limited Creator right)
+    if (limited && !can(req.user, 'limiteds')) return bad(res, 'Only the Robis team makes Limited items.', 403);
+    const creator = can(req.user, 'items') || req.user.isAdmin;
+    const paying = !creator && !limited;
     const stock = stockAmount(b.stock);
     if (limited && !(stock >= 1 && stock <= MAX_STOCK)) return bad(res, `The stock must be between 1 and ${fmtStock(MAX_STOCK)}.`);
     const type = String(b.type || '');
@@ -1210,15 +1221,18 @@ export function createApi(db, manager, opts = {}) {
     if (price < 0 || price > 100000) return bad(res, 'The price must be between 0 and 100,000.');
     // the fine settings of the right used (Item Creator or Limited Creator)
     const right = limited ? 'limiteds' : 'items';
-    if (!popt(req.user, right, 'types').includes(type)) return bad(res, 'You are not allowed to make this type of item.', 403);
-    const maxPrice = popt(req.user, right, 'maxPrice');
+    const types = limited || creator ? popt(req.user, right, 'types') : PLAYER_TYPES;
+    if (!types.includes(type)) return bad(res, paying ? 'Players can make T-shirts, shirts, pants and faces. Hats, hair and pets come from the Robis team.' : 'You are not allowed to make this type of item.', 403);
+    const maxPrice = paying ? PLAYER_LIMITS.maxPrice : popt(req.user, right, 'maxPrice');
     if (price > maxPrice) return bad(res, `Your highest price is R$ ${maxPrice.toLocaleString('en-US')}.`);
     if (limited && stock > popt(req.user, 'limiteds', 'maxStock')) return bad(res, `Your biggest stock is ${fmtStock(popt(req.user, 'limiteds', 'maxStock'))}.`);
-    if (!limited && price === 0 && !popt(req.user, 'items', 'free')) return bad(res, 'You are not allowed to make free items.');
+    if (!limited && price === 0 && (paying || !popt(req.user, 'items', 'free'))) return bad(res, 'Items can\'t be free: set a price of at least R$ 1.');
+    const fee = paying ? UPLOAD_FEES[type] || 100 : 0;
+    if (fee && req.user.robits < fee) return bad(res, `Uploading a ${type === 'TShirt' ? 'T-shirt' : type.toLowerCase()} costs R$ ${fee}. You need ${fee - req.user.robits} more Robits.`);
     const mineList = Object.values(D.items).filter((i) => i.creatorId === req.user.id && i.custom);
     const mine = mineList.length;
-    if (!req.user.isAdmin && mine >= (limited ? 100 : popt(req.user, 'items', 'maxItems'))) return bad(res, 'You have reached the maximum number of items.');
-    const perDay = limited ? 0 : popt(req.user, 'items', 'perDay');
+    if (!req.user.isAdmin && mine >= (limited ? 100 : paying ? PLAYER_LIMITS.maxItems : popt(req.user, 'items', 'maxItems'))) return bad(res, 'You have reached the maximum number of items.');
+    const perDay = limited ? 0 : paying ? PLAYER_LIMITS.perDay : popt(req.user, 'items', 'perDay');
     if (perDay && mineList.filter((i) => i.created > Date.now() - 86400e3).length >= perDay) return bad(res, `You can make ${perDay} item${perDay === 1 ? '' : 's'} a day. Try again tomorrow.`);
     let data;
     try { data = cleanItemData(type, b.data); } catch (e) { return bad(res, e.message); }
@@ -1229,8 +1243,9 @@ export function createApi(db, manager, opts = {}) {
     };
     // The creator keeps a copy of normal items; a Limited's whole stock goes on sale.
     if (!limited) (D.inventory[req.user.id] || (D.inventory[req.user.id] = [])).push(id);
+    if (fee) { req.user.robits -= fee; log(req.user.id, -fee, `Uploaded ${name}`); }
     db.save();
-    res.json({ item: publicItem(D.items[id], req.user) });
+    res.json({ item: publicItem(D.items[id], req.user), fee, robits: req.user.robits });
   });
 
   // The creator can take their item off sale; moderators can remove anything made by players.
@@ -2538,7 +2553,8 @@ export function createApi(db, manager, opts = {}) {
   installAdminPlus(api, { db, manager, requireAdmin, requireStaff, bad, log, presence, isBanned, publicUser, version: opts.version });
   installSocial(api, { db, requireUser, requireAdmin, requireStaff, bad, log, giveSerial, publicUser, publicItem, isBanned, setBan, hooks, banDetails });
   installOverwatch(api, { db, manager, requireUser, requireAdmin, bad, hooks, log });
-  installBots(api, { db, manager, requireAdmin, bad, deleteAccount });
+  installAwards(api, { db, requireUser, requireAdmin, bad, hooks });
+  installBots(api, { db, manager, requireAdmin, bad, deleteAccount, hooks });
   installControl(api, { db, manager, requireAdmin, requireStaff, bad, hooks, publicUser });
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });

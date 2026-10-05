@@ -12,7 +12,7 @@ app.append(el('div', { class: 'dev-banner' },
   el('div', { class: 'row' },
     el('a', { class: 'btn btn-green btn-large', href: '/studio', text: 'Open Robis Studio' }),
     el('button', { class: 'btn btn-large', text: 'Create New Game', onclick: createGame }),
-    el('a', { class: 'btn btn-large', href: '/create', text: 'Create Item (BETA)' }))));
+    el('a', { class: 'btn btn-large', href: '/create', text: 'Create Item' }))));
 const list = el('div', { class: 'panel' }, spinner());
 app.append(el('h2', { text: 'My Games' }), list);
 // Team Create: games other people added you to.

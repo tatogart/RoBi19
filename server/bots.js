@@ -85,7 +85,7 @@ function makeLook(girl, byName) {
   return { bodyColors: { head: skin, leftArm: skin, rightArm: skin, torso: tc, leftLeg: lc, rightLeg: lc }, wearing: wearing.map(id).filter(Boolean) };
 }
 
-export function installBots(api, { db, manager, requireAdmin, bad, deleteAccount }) {
+export function installBots(api, { db, manager, requireAdmin, bad, deleteAccount, hooks }) {
   const D = db.data;
   // on by default (but not in the test suite: tests turn bots on themselves)
   const testing = typeof process !== 'undefined' && process.env && process.env.NODE_TEST_CONTEXT;
@@ -275,6 +275,8 @@ export function installBots(api, { db, manager, requireAdmin, bad, deleteAccount
 
   const tick = () => {
     try { friendsTick(); } catch { /* next time */ }
+    // bots vote in the Robis Awards now and then
+    try { if (hooks && hooks.awardsVote) for (const b of live.values()) if (Math.random() < 0.04) hooks.awardsVote(b.user.id); } catch { /* next time */ }
     try {
       for (const [uid, b] of live) if (b.gone || b.server.closed) live.delete(uid);
       if (!B.enabled) return; // (bots an admin adds by hand still come and go)

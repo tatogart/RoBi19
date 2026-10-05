@@ -129,9 +129,79 @@ export class Viewport {
       const dir = this.pointerRay(e).direction;
       this.camera.position.addScaledVector(dir, -Math.sign(e.deltaY) * (e.shiftKey ? 1 : 5));
     }, { passive: false });
+    this._bindTouch();
     c.addEventListener('keydown', (e) => { if (!e.ctrlKey && !e.metaKey) this.keys.add(e.code); });
     c.addEventListener('keyup', (e) => this.keys.delete(e.code));
     c.addEventListener('blur', () => this.keys.clear());
+  }
+
+  // ------------------------------------------------------------ phones
+  // One finger: look around (drag) or pick (tap); hold: the context menu.
+  // Two fingers: pinch to move closer, drag to pan. The move gizmo still
+  // works with a finger (TransformControls listens to pointer events).
+  _bindTouch() {
+    const c = this.canvas;
+    c.style.touchAction = 'none';
+    // no fake mouse events after a touch (they would pick twice)
+    c.addEventListener('touchstart', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+    const pts = new Map();
+    let one = null, two = null, hold = 0;
+    const mid = () => { const [a, b] = [...pts.values()]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) }; };
+    c.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      c.focus({ preventScroll: true });
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pts.size === 1) {
+        one = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), moved: 0, gizmo: this.gizmo.dragging || this.gizmo.axis !== null };
+        clearTimeout(hold);
+        hold = setTimeout(() => {
+          // long press: pick what's under the finger and open the menu
+          if (!one || one.moved > 8 || one.gizmo || this.gizmo.dragging) return;
+          const ev = { clientX: one.x, clientY: one.y, shiftKey: false, ctrlKey: false, altKey: false };
+          this.pick(ev);
+          this.studio.contextMenu(one.x, one.y, this.studio.selection[0] || null);
+          one.done = true;
+        }, 550);
+      } else if (pts.size === 2) { clearTimeout(hold); one = null; two = mid(); }
+    });
+    c.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'touch' || !pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.gizmo.dragging) return;
+      if (pts.size === 1 && one && !one.gizmo) {
+        const dx = e.clientX - one.lx, dy = e.clientY - one.ly;
+        one.moved += Math.abs(dx) + Math.abs(dy);
+        if (one.moved > 6) {
+          this.yaw -= dx * 0.006;
+          this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch - dy * 0.006));
+        }
+        one.lx = e.clientX; one.ly = e.clientY;
+      } else if (pts.size === 2 && two) {
+        const m = mid();
+        const fwd = new THREE.Vector3(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch));
+        this.camera.position.addScaledVector(fwd, (m.d - two.d) * 0.12);
+        const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+        const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+        this.camera.position.addScaledVector(right, -(m.x - two.x) * 0.06).addScaledVector(up, (m.y - two.y) * 0.06);
+        two = m;
+      }
+    });
+    const end = (e) => {
+      if (e.pointerType !== 'touch' || !pts.has(e.pointerId)) return;
+      pts.delete(e.pointerId);
+      clearTimeout(hold);
+      if (one && pts.size === 0) {
+        // a quick tap picks (unless it was the gizmo)
+        if (!one.done && one.moved <= 8 && !one.gizmo && !this.gizmoWasUsed && performance.now() - one.t < 500) {
+          this.pick({ clientX: one.x, clientY: one.y, shiftKey: false, ctrlKey: false, altKey: false });
+        }
+        this.gizmoWasUsed = false;
+        one = null;
+      }
+      if (pts.size < 2) two = null;
+    };
+    c.addEventListener('pointerup', end);
+    c.addEventListener('pointercancel', end);
   }
 
   pointerRay(e) {

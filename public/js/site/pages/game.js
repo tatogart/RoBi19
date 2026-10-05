@@ -39,9 +39,16 @@ favBtn.onclick = async () => { if (needLogin()) return; ({ game } = await api.po
 renderVotes();
 
 const playBtn = el('button', { class: 'btn btn-green play-btn', onclick: () => { if (!needLogin()) launchGame(id); } }, el('span', { html: iconSvg('play'), style: { width: '34px', height: '34px', display: 'inline-flex' } }));
+// Robis Awards: trophies and nominations under the title
+const awardsRow = el('div', { class: 'award-row' });
+api.get(`/awards/game/${id}`).then(({ awards }) => {
+  awardsRow.replaceChildren(...awards.map((a) => el('a', { class: 'award-chip' + (a.won ? ' won' : ''), href: '/awards', title: a.season },
+    el('span', { text: a.won ? '🏆' : '🎖' }), el('span', { class: 'no-i18n', text: `${a.season} · ` }), el('span', { text: a.category }), a.won ? el('b', { text: ' · Winner' }) : el('span', { class: 'muted', text: a.status === 'voting' ? ' · Nominee (vote now!)' : ' · Nominee' }))));
+}).catch(() => {});
 const details = el('div', { class: 'game-details' },
   el('h1', { text: game.name }),
   el('div', { class: 'muted' }, 'By ', game.creator ? userLink(game.creator) : 'Unknown'),
+  awardsRow,
   !game.isPublic ? el('div', { class: 'pill', style: { marginTop: '8px', background: '#ffe3e3' }, text: 'Private — only you can play this' }) : null,
   el('div', { class: 'spacer' }),
   playBtn,

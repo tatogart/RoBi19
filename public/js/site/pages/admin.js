@@ -123,6 +123,7 @@ const TABS = {
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
   polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
+  awards: { label: 'Robis Awards', group: 'Content', icon: 'star', draw: drawAwards, admin: true },
   servers: { label: 'Servers', group: 'Live', icon: 'server', draw: drawServers },
   abuse: { label: 'Admin Abuse', group: 'Live', icon: 'crown', draw: drawAbuse, admin: true },
   bots: { label: 'Bots', group: 'Live', icon: 'users', draw: drawBots, admin: true },
@@ -2463,4 +2464,48 @@ async function drawNotes() {
         el('button', { class: 'cc-note-btn', title: n.pinned ? 'Unpin' : 'Pin', text: n.pinned ? 'Unpin' : 'Pin', onclick: () => post({ op: 'pin', id: n.id }) }),
         n.by === me.username || me.isAdmin ? el('button', { class: 'cc-note-btn', title: 'Delete', text: '✕', onclick: () => { if (confirm(tr('Delete this note?'))) post({ op: 'delete', id: n.id }); } }) : null))))
       : el('div', { class: 'panel empty', text: 'No notes yet.' }));
+}
+
+// ---------------------------------------------------------------- Robis Awards
+// Prepare a season: categories, nominated games, then open the voting and
+// show the results (players see it on /awards, winners get a trophy).
+async function drawAwards() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/awards'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const post = async (b, msg) => { try { await api.post('/admin/awards', b); if (msg) toast(msg, 'success'); drawAwards(); } catch (e) { toast(e.message, 'error'); } };
+  const title = el('input', { class: 'input', placeholder: `Robis Awards ${new Date().getFullYear()}`, style: { maxWidth: '300px' } });
+  const gameName = (id) => (r.games.find((g) => g.id === id) || {}).name || '#' + id;
+  const STAGE = { draft: '📝 Draft (only admins see it)', voting: '🗳 Voting is open', results: '🏆 Results are out' };
+  const season = (s) => {
+    const cats = s.categories.map((c) => {
+      const pickGame = el('select', { class: 'input', style: { width: 'auto', maxWidth: '240px' } }, el('option', { value: '', text: '+ Nominate a game' }),
+        r.games.filter((g) => !c.nominees.some((n) => n.id === g.id)).map((g) => el('option', { value: g.id, text: g.name })));
+      pickGame.onchange = () => { if (pickGame.value) post({ op: 'nominees', id: s.id, category: c.id, gameIds: [...c.nominees.map((n) => n.id), +pickGame.value] }); };
+      return el('div', { class: 'aw-adm-cat' },
+        el('div', { class: 'row', style: { justifyContent: 'space-between' } },
+          el('div', {}, el('b', { class: 'no-i18n', text: c.name }), el('div', { class: 'small muted no-i18n', text: c.desc })),
+          el('span', { class: 'small muted', text: tr(`${c.votes} votes`) }),
+          el('button', { class: 'btn btn-small', text: '✕', title: 'Remove the category', onclick: () => { if (confirm(tr('Remove this category?'))) post({ op: 'removeCategory', id: s.id, category: c.id }); } })),
+        el('div', { class: 'aw-adm-nom' },
+          c.nominees.map((n) => el('span', { class: 'aw-adm-chip' + (c.winner === n.id ? ' win' : '') },
+            el('span', { class: 'no-i18n', text: (c.winner === n.id ? '🏆 ' : '') + n.name + (s.status !== 'draft' ? ` (${c.tally[n.id] || 0})` : '') }),
+            s.status === 'results' && c.winner !== n.id ? el('button', { title: 'Make this the winner', text: '🏆', onclick: () => post({ op: 'winner', id: s.id, category: c.id, gameId: n.id }, 'Winner changed') }) : null,
+            el('button', { title: 'Take the nomination away', text: '×', onclick: () => post({ op: 'nominees', id: s.id, category: c.id, gameIds: c.nominees.filter((x) => x.id !== n.id).map((x) => x.id) }) }))),
+          c.nominees.length < 8 ? pickGame : null));
+    });
+    const catName = el('input', { class: 'input', placeholder: 'New category, e.g. Best Roleplay', style: { maxWidth: '260px' } });
+    const catDesc = el('input', { class: 'input', placeholder: 'What it is for (optional)', style: { maxWidth: '300px' } });
+    return card(s.title, STAGE[s.status],
+      el('div', { class: 'row wrap' },
+        segBtns([['draft', 'Draft'], ['voting', 'Voting'], ['results', 'Results']], s.status, (v) => post({ op: 'status', id: s.id, status: v }, 'Stage changed')),
+        el('a', { class: 'btn btn-small', href: `/awards?id=${s.id}`, target: '_blank', text: 'Open the page' }),
+        el('button', { class: 'btn btn-small btn-red', text: 'Delete', onclick: () => { if (confirm(tr('Delete this season and its votes?'))) post({ op: 'delete', id: s.id }, 'Deleted'); } })),
+      ...cats,
+      el('div', { class: 'row wrap' }, catName, catDesc, el('button', { class: 'btn btn-small btn-primary', text: 'Add category', onclick: () => post({ op: 'addCategory', id: s.id, name: catName.value, desc: catDesc.value }, 'Category added') })));
+  };
+  body.replaceChildren(
+    el('div', { class: 'adm-hero awards' }, el('div', {}, el('h2', { text: '🏆 Robis Awards' }), el('p', { text: 'Like the Bloxys: make a season, nominate games in each category, open the voting, then show the winners. Winners get a trophy on their game page. Bots vote too.' }))),
+    card('New season', 'Starts as a draft with 6 categories you can change', el('div', { class: 'row wrap' }, title, el('button', { class: 'btn btn-primary', text: '+ Create season', onclick: () => post({ op: 'create', title: title.value }, 'Season created') }))),
+    ...(r.seasons.length ? r.seasons.map(season) : [el('div', { class: 'panel empty', text: 'No seasons yet.' })]));
 }

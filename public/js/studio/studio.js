@@ -860,19 +860,47 @@ class Studio {
     if (k === 'f' && document.activeElement === this.viewport.canvas) { this.viewport.focusSelection(); }
   }
 
-  // Studio needs a mouse, keyboard and a big screen; say so on phones.
+  // Phones and tablets: Studio's phone mode (panels as sheets, touch camera).
   phoneGate() {
-    const small = Math.min(innerWidth, innerHeight) < 600 && matchMedia('(pointer: coarse)').matches;
-    if (!small || sessionStorage.getItem('robis.studioOnPhone')) return Promise.resolve();
-    return new Promise((resolve) => {
-      const gate = h('div', { class: 'phone-gate' },
-        h('img', { src: '/img/icon.svg', alt: '' }),
-        h('h2', { text: 'Robis Studio works best on a computer' }),
-        h('p', { text: 'Building needs a mouse, a keyboard and a big screen. You can still play every game on your phone!' }),
-        h('a', { class: 'sbtn primary', href: '/games', text: 'Play games' }),
-        h('button', { class: 'sbtn', text: 'Open Studio anyway', onclick: () => { try { sessionStorage.setItem('robis.studioOnPhone', '1'); } catch { /* ignore */ } gate.remove(); resolve(); } }));
-      document.body.append(gate);
-    });
+    this.phone = matchMedia('(pointer: coarse)').matches && Math.min(innerWidth, innerHeight) < 820;
+    if (this.phone) document.body.classList.add('studio-phone');
+    return Promise.resolve();
+  }
+
+  // The bar at the bottom on phones: each button slides a panel up as a sheet.
+  phoneMode() {
+    const root = $('studio');
+    const SHEETS = [['toolbox', '🧰', 'Toolbox'], ['explorer', '📁', 'Explorer'], ['properties', '⚙️', 'Properties'], ['output', '📜', 'Output']];
+    for (const id of ['toolbox-panel', 'explorer-panel', 'properties-panel', 'output-panel', 'right-panels']) $(id).classList.remove('hidden');
+    const bar = h('nav', { class: 'phone-bar' });
+    const draw = () => bar.replaceChildren(...SHEETS.map(([k, icon, label]) => h('button', { class: this.sheet === k ? 'on' : '', onclick: () => this.openSheet(this.sheet === k ? null : k) },
+      h('span', { class: 'pb-ic', text: icon }), h('span', { text: label }))),
+    h('button', { class: 'pb-del', onclick: () => this.deleteSelection() }, h('span', { class: 'pb-ic', text: '🗑' }), h('span', { text: 'Delete' })));
+    this.openSheet = (k) => {
+      this.sheet = k;
+      root.dataset.sheet = k || '';
+      if (k === 'toolbox') this.renderToolbox();
+      draw();
+      this.viewport.resize();
+    };
+    draw();
+    root.append(bar);
+    for (const b of document.querySelectorAll('.panel-close')) b.onclick = () => this.openSheet(null);
+    // a pad to fly the camera (like W A S D Q E)
+    const vp = this.viewport;
+    const key = (code, label, cls) => {
+      const b = h('button', { class: 'pad-btn ' + cls, text: label });
+      const on = (e) => { e.preventDefault(); vp.canvas.focus({ preventScroll: true }); vp.keys.add(code); b.classList.add('on'); };
+      const off = () => { vp.keys.delete(code); b.classList.remove('on'); };
+      b.addEventListener('pointerdown', on);
+      for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, off);
+      return b;
+    };
+    $('doc-area').append(h('div', { class: 'cam-pad' },
+      key('KeyW', '▲', 'up'), key('KeyA', '◀', 'left'), key('KeyD', '▶', 'right'), key('KeyS', '▼', 'down')),
+    h('div', { class: 'cam-pad2' }, key('KeyE', '⤒', ''), key('KeyQ', '⤓', '')),
+    h('div', { class: 'phone-hint', text: 'Drag: look around · Two fingers: zoom and pan · Tap: select · Hold: menu' }));
+    setTimeout(() => document.querySelector('.phone-hint')?.classList.add('gone'), 6000);
   }
 
   // ------------------------------------------------------------ boot
@@ -888,6 +916,7 @@ class Studio {
     this.viewport.setGame(this.game);
     this.explorer.setGame(this.game);
     this.buildRibbon();
+    if (this.phone) this.phoneMode();
 
     this.on('selection', () => {
       if (this.playing) return;

@@ -588,7 +588,7 @@ export class Bot {
       if (this._alive(o) && Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z) > 5) goal = posOf(o);
     } else if (task.kind === 'chase') {
       const o = task.who;
-      if (!this._alive(o) || this._hsRole(o) !== 'Hider') this.task.until = t; else goal = { ...posOf(o), near: 1 };
+      if (!this._alive(o) || !['Hider', 'Survivor'].includes(this._hsRole(o))) this.task.until = t; else goal = { ...posOf(o), near: 1 };
     } else if (task.kind === 'hunt' || task.kind === 'shoot') {
       goal = this._fight(task, t);
     }
@@ -707,6 +707,38 @@ export class Bot {
     return !!(bp && bp.FindFirstChild(name));
   }
 
+  // Piggy survivor: run from Piggy, pick up a key, take it to its lock, then
+  // run out of the open door.
+  _survivor(t, others) {
+    const s = this.state;
+    if (this.lastHs !== 'Survivor') { this.lastHs = 'Survivor'; this.nav = null; this.setTask('idle', rnd(0.5, 2)); }
+    const pig = others.find((o) => this._hsRole(o) === 'Piggy');
+    if (pig && pig.state.p[1] < 150) {
+      const d = Math.hypot(pig.state.p[0] - s.x, pig.state.p[2] - s.z);
+      if (d < 26 && this._sees(pig)) { if (this.task.kind !== 'flee') this.setTask('flee', rnd(3, 6), { to: this._awayFrom(pig) }); return true; }
+    }
+    if (this.task.kind === 'flee' || this.task.kind === 'collect') return true;
+    const ws = this.server.game.Workspace;
+    const house = ws.FindFirstChild('House');
+    const v = this.session.player && this.session.player.FindFirstChild('Carrying');
+    const carrying = v ? String(v.Value || '') : '';
+    if (house) {
+      const door = house.FindFirstChild('FrontDoor');
+      const exit = door && door.FindFirstChild('ExitDoor');
+      if (exit && exit._p.CanCollide === false) { const e = house.FindFirstChild('Escape'); if (e) { this.setTask('collect', 30, { part: e }); return true; } }
+      if (carrying && door) {
+        const want = carrying.startsWith('Red') ? 'RedLock' : 'BlueLock';
+        const lock = door.GetChildren().find((x) => x.Name === want && x._p.Transparency < 1);
+        if (lock) { this.setTask('collect', 30, { part: lock }); return true; }
+      }
+      const items = ws.FindFirstChild('Items');
+      const keys = items ? items.GetChildren() : [];
+      if (!carrying && keys.length && chance(0.5)) { this.setTask('collect', 30, { part: pick(keys) }); return true; }
+    }
+    if (!['walk', 'hide', 'idle'].includes(this.task.kind)) this.setTask('walk', rnd(5, 10), { to: this._spot(40) });
+    return true;
+  }
+
   _role() { return this._has('Knife') ? 'murderer' : this._has('Gun') ? 'sheriff' : ''; }
 
   // Hide and Seek: the game puts a "Role" value on the player (It / Hider).
@@ -718,7 +750,10 @@ export class Bot {
   // true when Hide and Seek decided what to do
   _hideAndSeek(t, others) {
     const s = this.state;
-    const hs = this._hsRole();
+    // Piggy plays like IT; survivors fetch keys
+    const raw = this._hsRole();
+    const hs = raw === 'Piggy' ? 'It' : raw;
+    if (raw === 'Survivor') return this._survivor(t, others);
     if (hs !== this.lastHs) {
       this.lastHs = hs;
       this.nav = null;
@@ -727,7 +762,7 @@ export class Bot {
     }
     if (hs === 'It') {
       if (s.y > 150) return true; // still counting in the cage
-      const near = others.filter((o) => this._hsRole(o) === 'Hider').map((o) => [o, Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z)]).filter(([o, d]) => d < 90 && this._sees(o)).sort((a, b) => a[1] - b[1]);
+      const near = others.filter((o) => ['Hider', 'Survivor'].includes(this._hsRole(o))).map((o) => [o, Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z)]).filter(([o, d]) => d < 90 && this._sees(o)).sort((a, b) => a[1] - b[1]);
       if (near.length) {
         if (this.task.kind !== 'chase' || this.task.who !== near[0][0]) this.setTask('chase', rnd(8, 15), { who: near[0][0] });
         if (near[0][1] < 30 && chance(0.01)) this.say('', pick(this.lang === 'ru' ? ['вижу тебя!', 'попался!', 'я тебя нашёл'] : ['i see u!', 'found u', 'gotcha!']));

@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 23); // 22 showcase games + The Hunt hub
+  assert.equal(data.games, 24); // 23 showcase games + The Hunt hub
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -371,18 +371,26 @@ test('admins give players rights in the admin panel', async () => {
   assert.equal((await call('POST', `/games/${gid}/feature`, { featured: true }, mod)).data.game.featured, true);
 });
 
-test('item creators make custom catalog items (BETA)', async () => {
+test('everyone makes clothes for an upload fee; item creators make more', async () => {
   const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
   const maker = (await call('POST', '/auth/signup', { username: 'Maker', password: 'secret123' })).cookie;
   const buyer = (await call('POST', '/auth/signup', { username: 'Buyer', password: 'secret123' })).cookie;
   const makerId = (await call('GET', '/auth/me', null, maker)).data.user.id;
   const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   const tee = { type: 'TShirt', name: 'My Cool Tee', price: 10, data: { image: png } };
-  assert.equal((await call('POST', '/catalog/create', tee, maker)).status, 403); // needs the right
+  // every player: T-shirts and the like, never free, never Limited, for an upload fee
+  assert.equal((await call('POST', '/catalog/create', { type: 'Hat', name: 'My Hat', price: 5, data: { model: 'crown' } }, maker)).status, 403);
+  assert.equal((await call('POST', '/catalog/create', { ...tee, price: 0 }, maker)).status, 400);
+  assert.equal((await call('POST', '/catalog/create', { ...tee, limited: true, stock: 5 }, maker)).status, 403);
+  const paid = await call('POST', '/catalog/create', tee, maker);
+  assert.equal(paid.status, 200, JSON.stringify(paid.data));
+  assert.equal(paid.data.fee, 100);
+  assert.equal(paid.data.robits, 0); // the 100 starting Robits paid the upload
+  assert.equal((await call('POST', '/catalog/create', { ...tee, name: 'Second Tee' }, maker)).status, 400); // no Robits left
+  const made = paid.data.item;
   await call('POST', `/admin/users/${makerId}/perms`, { perms: ['items'] }, admin);
   assert.equal((await call('POST', '/catalog/create', { ...tee, data: { image: 'javascript:alert(1)' } }, maker)).status, 400);
   assert.equal((await call('POST', '/catalog/create', { type: 'Hat', name: 'Bad Hat', data: { model: 'nope' } }, maker)).status, 400);
-  const made = (await call('POST', '/catalog/create', tee, maker)).data.item;
   assert.equal(made.custom, true);
   assert.equal(made.data.image, png);
   const hat = (await call('POST', '/catalog/create', { type: 'Hat', name: 'Green Crown', price: 0, data: { model: 'crown', color: '#00ff00', accent: '#<script>' } }, maker)).data.item;
@@ -394,7 +402,7 @@ test('item creators make custom catalog items (BETA)', async () => {
   // sold in the catalog; the creator gets 70%
   assert.ok((await call('GET', '/catalog?q=Cool')).data.items.some((i) => i.id === made.id));
   assert.equal((await call('POST', `/catalog/${made.id}/buy`, {}, buyer)).status, 200);
-  assert.equal((await call('GET', '/auth/me', null, maker)).data.user.robits, 107);
+  assert.equal((await call('GET', '/auth/me', null, maker)).data.user.robits, 7);
   // others can't delete it; the creator can
   assert.equal((await call('DELETE', `/catalog/${made.id}`, null, buyer)).status, 403);
   assert.equal((await call('DELETE', `/catalog/${made.id}`, null, maker)).status, 200);
@@ -2085,4 +2093,30 @@ test('accessories, and developer items only for people who made a game', async (
   const again = (await call('GET', `/catalog/${hat.id}`, null, p.cookie)).data;
   assert.equal((again.item || again).canGet, true);
   assert.equal((await call('POST', `/catalog/${hat.id}/buy`, {}, p.cookie)).status, 200);
+});
+
+test('Robis Awards: a season, nominees, voting, winners on game pages', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'AwardFan', password: 'secret123' });
+  assert.equal((await call('GET', '/awards', null, p.cookie)).data.season, null);
+  let r = await call('POST', '/admin/awards', { op: 'create', title: 'Robis Awards 2026' }, admin);
+  const id = r.data.id;
+  const games = (await call('GET', '/admin/awards', null, admin)).data.games;
+  const [a, b] = [games.find((g) => g.name === 'Piggy: The House'), games.find((g) => g.name === 'Murder Mystery 2')];
+  assert.ok(a && b);
+  // a draft is hidden; voting needs nominees
+  assert.equal((await call('POST', '/admin/awards', { op: 'status', id, status: 'voting' }, admin)).status, 400);
+  await call('POST', '/admin/awards', { op: 'nominees', id, category: 'scary', gameIds: [a.id, b.id] }, admin);
+  assert.equal((await call('POST', '/admin/awards', { op: 'status', id, status: 'voting' }, admin)).status, 200);
+  const s = (await call('GET', '/awards', null, p.cookie)).data.season;
+  assert.equal(s.status, 'voting');
+  assert.ok((await call('GET', '/auth/me', null, p.cookie)).data.user.awards);
+  assert.equal((await call('POST', '/awards/vote', { category: 'scary', gameId: 999999 }, p.cookie)).status, 400);
+  assert.equal((await call('POST', '/awards/vote', { category: 'scary', gameId: a.id }, p.cookie)).status, 200);
+  await call('POST', '/admin/awards', { op: 'status', id, status: 'results' }, admin);
+  const res = (await call('GET', '/awards', null, p.cookie)).data.season.categories.find((c) => c.id === 'scary');
+  assert.equal(res.winner, a.id);
+  const trophies = (await call('GET', `/awards/game/${a.id}`)).data.awards;
+  assert.ok(trophies.some((t) => t.won && t.category === 'Scariest Game'));
+  await call('POST', '/admin/awards', { op: 'delete', id }, admin);
 });

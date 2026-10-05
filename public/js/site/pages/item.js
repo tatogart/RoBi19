@@ -153,7 +153,7 @@ app.append(el('div', { class: 'panel item-page' }, thumb,
     item.limited ? el('span', { class: 'pill', style: { background: '#02b757', color: '#fff', marginTop: '8px' }, text: item.stock ? 'LIMITED U' : 'LIMITED' }) : null,
     me && (me.perms || []).includes('limiteds')
       ? el('button', { class: 'btn btn-small', style: { marginTop: '10px', marginLeft: '8px' }, text: item.limited ? 'Limited settings' : 'Make Limited', onclick: limitedDialog }) : null,
-    item.custom ? el('span', { class: 'pill', style: { background: '#6b327c', color: '#fff', marginTop: '8px' }, text: 'BETA · made by a player' }) : null,
+    item.custom ? el('span', { class: 'pill', style: { background: '#6b327c', color: '#fff', marginTop: '8px' }, text: 'Made by a player' }) : null,
     item.custom && me && (item.creator?.id === me.id || me.isAdmin || (me.perms || []).includes('moderator'))
       ? el('button', { class: 'btn btn-small btn-red', style: { marginTop: '10px', marginLeft: '8px' }, text: item.creator?.id === me.id ? 'Delete my item' : 'Delete (moderation)', onclick: async () => {
         if (!confirm('Delete this item? Everyone who owns it will lose it.')) return;

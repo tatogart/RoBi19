@@ -8,6 +8,7 @@ import { NOSTALGIA_GAMES } from './places4.js';
 import { NEW_GAMES } from './places6.js';
 import { CLASSIC_GAMES } from './places7.js';
 import { HIDE_GAMES } from './places8.js';
+import { PIGGY_GAMES } from './places9.js';
 
 export const STARTER_ITEMS = ['Bacon Hair', 'Smile', 'Blue Hoodie', 'Jeans', 'Robis Logo T-Shirt', 'Classic Robis Cap', 'Pal Hair', 'Man Face', 'Woman Face'];
 export const STARTER_WEARING = ['Bacon Hair', 'Smile', 'Blue Hoodie', 'Jeans'];
@@ -187,7 +188,7 @@ export function addSeedGames(db) {
     ...g,
     visits: [48213, 125903, 8721, 67390, 3321][i], up: [912, 2210, 144, 1398, 67][i], down: [48, 190, 21, 120, 9][i],
     favorites: [3002, 9120, 311, 5120, 82][i], copyable: g.key !== 'obby', age: 40 - i * 7,
-  })), ...MORE_GAMES.map((g) => ({ ...g, copyable: true, age: 3 })), ...TEAM_GAMES.map((g) => ({ ...g, copyable: true, age: 1 })), ...NOSTALGIA_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...NEW_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...CLASSIC_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...HIDE_GAMES.map((g) => ({ ...g, copyable: true, age: 0 }))];
+  })), ...MORE_GAMES.map((g) => ({ ...g, copyable: true, age: 3 })), ...TEAM_GAMES.map((g) => ({ ...g, copyable: true, age: 1 })), ...NOSTALGIA_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...NEW_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...CLASSIC_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...HIDE_GAMES.map((g) => ({ ...g, copyable: true, age: 0 })), ...PIGGY_GAMES.map((g) => ({ ...g, copyable: true, age: 0 }))];
   // Showcase games that were taken out of Robis (Kart Racing).
   for (const g of Object.values(D.games)) {
     if (!REMOVED_SEEDS.includes(g.seedKey)) continue;

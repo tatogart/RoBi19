@@ -186,6 +186,7 @@ function buildNav(me, active) {
     for (const s of SITE.socials) nav.append(el('a', { href: s.url, target: '_blank', rel: 'noopener', class: 'nav-social' }, el('span', { class: 'social-icon', html: SOCIAL_SVG[s.type] || SOCIAL_SVG.other }), el('span', { class: 'no-i18n', text: s.label })));
   }
   nav.append(el('div', { class: 'section-label', text: 'Events' }));
+  if (me.awards) nav.append(el('a', { href: '/awards', class: 'awards-nav' + (active === 'awards' ? ' active' : '') }, el('span', { class: 'ow-nav-ic', text: '🏆' }), el('span', { text: 'Robis Awards' }), me.awards.status === 'voting' ? el('span', { class: 'count awards-vote', text: 'VOTE' }) : null));
   if (me.overwatch) nav.append(el('a', { href: '/overwatch', class: active === 'overwatch' ? 'active' : '' }, el('span', { class: 'ow-nav-ic', text: '🕵️' }), el('span', { text: 'Overwatch' })));
   if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-dot' }), el('span', { text: 'The Hunt' })));
   nav.append(el('a', { href: '/game?id=2' }, icon('star'), el('span', { text: 'Obby Week!' })));

@@ -1132,6 +1132,85 @@ end)
   } },
 );
 
+// ---------------------------------------------------------------- more models: furniture, nature, city, space
+const M2 = (name, cat, fn) => TOOLBOX.push({ name, cat, build() { const m = model(name.replace(/[^A-Za-z0-9]/g, '')); fn(m); return m; } });
+const box = (m, name, size, pos, color, material = 'SmoothPlastic', o = {}) => part(m, { name, size, pos, color, material, ...o });
+// Furniture
+M2('Sofa', 'Furniture', (m) => { box(m, 'Seat', [8, 1.6, 3.4], [0, 1.2, 0], '#7a2a3a', 'Fabric'); box(m, 'Back', [8, 3, 1], [0, 2.9, 1.2], '#7a2a3a', 'Fabric'); for (const x of [-4.2, 4.2]) box(m, 'Arm', [0.8, 2.4, 3.4], [x, 1.6, 0], '#6a2030', 'Fabric'); for (const x of [-2, 2]) box(m, 'Cushion', [3.6, 0.5, 2.6], [x, 2.2, -0.2], '#8f3a4a', 'Fabric'); });
+M2('Bed', 'Furniture', (m) => { box(m, 'Frame', [6, 1.4, 10], [0, 0.9, 0], '#5a3b1e', 'Wood'); box(m, 'Mattress', [5.6, 1, 9.4], [0, 2.1, 0], '#f2f2f2', 'Fabric'); box(m, 'Blanket', [5.8, 0.4, 6], [0, 2.7, 1.6], '#2d7de0', 'Fabric'); box(m, 'Pillow', [4, 0.8, 1.6], [0, 2.9, -3.6], '#ffffff', 'Fabric'); box(m, 'Headboard', [6, 4, 0.6], [0, 2.2, -5.2], '#5a3b1e', 'Wood'); });
+M2('Dining Table', 'Furniture', (m) => { box(m, 'Top', [8, 0.5, 4.4], [0, 3, 0], '#7a4b2a', 'Wood'); for (const [x, z] of [[-3.6, -1.8], [3.6, -1.8], [-3.6, 1.8], [3.6, 1.8]]) box(m, 'Leg', [0.5, 2.8, 0.5], [x, 1.4, z], '#6b3f22', 'Wood'); for (const x of [-2, 2]) for (const z of [-3.6, 3.6]) { box(m, 'ChairSeat', [2, 0.4, 2], [x, 1.8, z], '#8b5a2b', 'Wood'); box(m, 'ChairBack', [2, 2.4, 0.3], [x, 3.1, z + (z > 0 ? 0.9 : -0.9)], '#8b5a2b', 'Wood'); } });
+M2('Bookshelf', 'Furniture', (m) => { box(m, 'Back', [6, 8, 0.4], [0, 4, 0.8], '#4a2f1a', 'Wood'); for (const x of [-2.9, 2.9]) box(m, 'Side', [0.3, 8, 2], [x, 4, 0], '#4a2f1a', 'Wood'); const cols = ['#c4281c', '#2d7de0', '#4b974b', '#f5cd30', '#7b5cff']; for (let i = 0; i < 4; i++) { box(m, 'Shelf', [5.6, 0.3, 2], [0, 0.2 + i * 2.6, 0], '#4a2f1a', 'Wood'); if (i < 3) for (let b = 0; b < 8; b++) box(m, 'Book', [0.5, 1.8, 1.4], [-2.4 + b * 0.68, 1.3 + i * 2.6, 0], cols[(b + i) % cols.length]); } });
+M2('Computer Desk', 'Furniture', (m) => { box(m, 'Top', [6, 0.4, 3], [0, 3, 0], '#d6c29a', 'Wood'); for (const x of [-2.8, 2.8]) box(m, 'Leg', [0.4, 2.8, 3], [x, 1.4, 0], '#b8a37a', 'Wood'); box(m, 'Monitor', [3, 2, 0.2], [0, 4.5, 0.8], '#1b1b1b'); box(m, 'Screen', [2.7, 1.7, 0.05], [0, 4.5, 0.68], '#00a2ff', 'Neon'); box(m, 'Stand', [0.3, 0.8, 0.3], [0, 3.6, 0.9], '#333333'); box(m, 'Keyboard', [2.4, 0.15, 0.8], [0, 3.28, -0.4], '#2a2a2a'); box(m, 'Chair', [2, 0.4, 2], [0, 1.8, -2.4], '#1b1b1b'); box(m, 'ChairBack', [2, 2.6, 0.3], [0, 3.2, -3.3], '#1b1b1b'); });
+M2('Kitchen Counter', 'Furniture', (m) => { box(m, 'Cabinet', [10, 3.4, 2.6], [0, 1.7, 0], '#f2f2f2'); box(m, 'Top', [10.2, 0.3, 2.8], [0, 3.55, 0], '#6b6b6b', 'Marble'); box(m, 'Sink', [2.4, 0.2, 1.6], [-2, 3.72, 0], '#c0c0c0', 'Metal'); box(m, 'Tap', [0.2, 1, 0.2], [-2, 4.2, 0.9], '#c0c0c0', 'Metal'); for (let i = 0; i < 4; i++) box(m, 'Handle', [0.8, 0.15, 0.1], [-3.75 + i * 2.5, 2.8, -1.35], '#888888', 'Metal'); box(m, 'Stove', [2.4, 0.1, 2], [2.5, 3.72, 0], '#1b1b1b'); });
+M2('Fridge', 'Furniture', (m) => { box(m, 'Body', [3.6, 7.6, 3.2], [0, 3.8, 0], '#f2f2f2', 'Metal'); box(m, 'Line', [3.62, 0.1, 3.22], [0, 5.4, 0], '#bdbdbd'); for (const y of [2.6, 6.4]) box(m, 'Handle', [0.2, 1.4, 0.2], [1.4, y, -1.7], '#9a9a9a', 'Metal'); });
+M2('TV Stand', 'Furniture', (m) => { box(m, 'Stand', [8, 2, 2.4], [0, 1, 0], '#3a2412', 'Wood'); box(m, 'TV', [7, 4, 0.4], [0, 4.2, 0.4], '#111111'); const sc = box(m, 'Screen', [6.6, 3.6, 0.05], [0, 4.2, 0.17], '#1e3a5f', 'Neon'); sign(sc, 'Robis TV'); });
+M2('Round Rug', 'Furniture', (m) => { cyl(m, 'Rug', 8, 0.2, [0, 0.1, 0], '#c4281c', 'Fabric'); cyl(m, 'Ring', 6, 0.22, [0, 0.11, 0], '#f5cd30', 'Fabric'); cyl(m, 'Middle', 3, 0.24, [0, 0.12, 0], '#c4281c', 'Fabric'); });
+// Nature
+M2('Bush', 'Nature', (m) => { for (const [x, y, z, r] of [[0, 1.4, 0, 3], [1.4, 1.1, 0.6, 2.2], [-1.3, 1, -0.5, 2.2], [0.3, 2.2, -0.4, 2]]) part(m, { name: 'Leaves', size: [r, r, r], pos: [x, y, z], color: '#3d8a35', material: 'Grass', shape: 'Ball' }); });
+M2('Big Oak Tree', 'Nature', (m) => { box(m, 'Trunk', [2.4, 12, 2.4], [0, 6, 0], '#6b4a2f', 'Wood'); for (const [x, y, z, r] of [[0, 14, 0, 10], [3.5, 12, 1, 7], [-3.5, 12.5, -1, 7], [0.5, 12, -3.5, 7], [-0.5, 12.5, 3.5, 7]]) part(m, { name: 'Leaves', size: [r, r, r], pos: [x, y, z], color: '#2f6b2a', material: 'Grass', shape: 'Ball' }); });
+M2('Mushroom', 'Nature', (m) => { cyl(m, 'Stem', 1.6, 3, [0, 1.5, 0], '#f2e6d0'); const cap = part(m, { name: 'Cap', size: [5, 5, 5], pos: [0, 3.2, 0], color: '#d0142c', shape: 'Ball' }); cap.Size = new Vector3(5, 2.6, 5); for (const [x, z] of [[1, 0.6], [-1.2, 0.3], [0.2, -1.3], [-0.4, 1.4]]) part(m, { name: 'Dot', size: [0.6, 0.6, 0.6], pos: [x, 4.3, z], color: '#ffffff', shape: 'Ball' }); });
+M2('Cactus', 'Nature', (m) => { box(m, 'Body', [1.6, 8, 1.6], [0, 4, 0], '#3f8f3a', 'Grass'); box(m, 'ArmL', [2, 0.9, 0.9], [-1.6, 4, 0], '#3f8f3a', 'Grass'); box(m, 'ArmLUp', [0.9, 2.4, 0.9], [-2.4, 5.4, 0], '#3f8f3a', 'Grass'); box(m, 'ArmR', [2, 0.9, 0.9], [1.6, 5.4, 0], '#3f8f3a', 'Grass'); box(m, 'ArmRUp', [0.9, 2, 0.9], [2.4, 6.6, 0], '#3f8f3a', 'Grass'); });
+M2('Log Pile', 'Nature', (m) => { for (const [y, z] of [[0.7, -1], [0.7, 0.4], [0.7, 1.8], [1.9, -0.3], [1.9, 1.1], [3.1, 0.4]]) part(m, { name: 'Log', size: [6, 1.4, 1.4], pos: [0, y, z], color: '#7a5230', material: 'Wood', shape: 'Cylinder' }); });
+M2('Waterfall Rock', 'Nature', (m) => { box(m, 'Cliff', [10, 12, 4], [0, 6, 2], '#7a7a7a', 'Slate'); box(m, 'Water', [3, 11, 0.6], [0, 5.5, -0.2], '#04afec', 'Glass', { transparency: 0.3, canCollide: false }); box(m, 'Pool', [8, 0.4, 5], [0, 0.2, -3], '#04afec', 'Glass', { transparency: 0.3 }); for (const [x, z] of [[-4, -4], [4, -4.5], [-3, -6]]) part(m, { name: 'Stone', size: [2, 1.4, 2], pos: [x, 0.7, z], color: '#8a8a8a', material: 'Slate', shape: 'Ball' }); });
+// City
+M2('Traffic Light', 'City', (m) => { box(m, 'Pole', [0.5, 10, 0.5], [0, 5, 0], '#333333', 'Metal'); box(m, 'Box', [1.4, 3.6, 1.2], [0, 10.6, 0], '#1b1b1b'); for (const [y, c] of [[11.8, '#ff3b30'], [10.6, '#ffcc00'], [9.4, '#34c759']]) part(m, { name: 'Light', size: [0.9, 0.9, 0.3], pos: [0, y, -0.6], color: c, material: 'Neon', shape: 'Ball' }); });
+M2('Stop Sign', 'City', (m) => { box(m, 'Pole', [0.3, 7, 0.3], [0, 3.5, 0], '#9a9a9a', 'Metal'); const s2 = part(m, { name: 'Sign', size: [0.2, 2.6, 2.6], pos: [0, 7.4, 0], color: '#d0142c', shape: 'Cylinder', rot: [0, 90, 0] }); sign(s2, 'STOP'); });
+M2('Fire Hydrant', 'City', (m) => { cyl(m, 'Body', 1.4, 2.6, [0, 1.3, 0], '#d0142c', 'Metal'); part(m, { name: 'Top', size: [1.4, 1.4, 1.4], pos: [0, 2.7, 0], color: '#d0142c', material: 'Metal', shape: 'Ball' }); box(m, 'Side', [2.4, 0.6, 0.6], [0, 1.8, 0], '#b0101e', 'Metal'); });
+M2('Bus Stop', 'City', (m) => { box(m, 'Roof', [8, 0.3, 3], [0, 7, 0], '#2d7de0', 'Metal'); for (const x of [-3.8, 3.8]) box(m, 'Post', [0.3, 7, 0.3], [x, 3.5, 1.2], '#9a9a9a', 'Metal'); box(m, 'Glass', [8, 5, 0.2], [0, 3.8, 1.4], '#bfe6ff', 'Glass', { transparency: 0.5 }); box(m, 'Bench', [6, 0.4, 1.2], [0, 1.8, 0.6], '#7a4b2a', 'Wood'); const sg = box(m, 'Sign', [0.2, 1.4, 1.4], [4.2, 6, -1], '#ffffff'); sign(sg, 'BUS'); });
+M2('Mailbox', 'City', (m) => { box(m, 'Post', [0.4, 3, 0.4], [0, 1.5, 0], '#5a3b1e', 'Wood'); box(m, 'Box', [1.2, 1.2, 2], [0, 3.6, 0], '#2d4f8a', 'Metal'); box(m, 'Flag', [0.1, 0.8, 0.3], [0.65, 4, 0.5], '#d0142c'); });
+M2('Trash Can', 'City', (m) => { cyl(m, 'Can', 2, 3, [0, 1.5, 0], '#4b974b', 'Metal'); cyl(m, 'Lid', 2.2, 0.3, [0, 3.15, 0], '#3a7a3a', 'Metal'); });
+M2('Road Piece', 'City', (m) => { box(m, 'Road', [16, 0.4, 24], [0, 0.2, 0], '#2a2a2a', 'Concrete'); for (let i = 0; i < 4; i++) box(m, 'Line', [0.5, 0.05, 3], [0, 0.42, -9 + i * 6], '#f5cd30', 'SmoothPlastic', { canCollide: false }); for (const x of [-8.5, 8.5]) box(m, 'Sidewalk', [3, 0.8, 24], [x + (x < 0 ? -1.5 : 1.5), 0.4, 0], '#a3a2a5', 'Concrete'); });
+M2('Crosswalk', 'City', (m) => { box(m, 'Road', [16, 0.4, 8], [0, 0.2, 0], '#2a2a2a', 'Concrete'); for (let i = 0; i < 7; i++) box(m, 'Stripe', [1.2, 0.05, 6], [-6 + i * 2, 0.42, 0], '#ffffff', 'SmoothPlastic', { canCollide: false }); });
+M2('Phone Booth', 'City', (m) => { box(m, 'Booth', [3, 8, 3], [0, 4, 0], '#c4281c', 'Metal', { transparency: 0 }); box(m, 'Window', [3.05, 5, 2.4], [0, 4, 0], '#bfe6ff', 'Glass', { transparency: 0.5 }); const t = box(m, 'Top', [3.2, 0.8, 3.2], [0, 8.4, 0], '#a01a12', 'Metal'); sign(t, 'PHONE'); });
+// Space
+M2('Rocket Ship', 'Space', (m) => { cyl(m, 'Body', 4, 14, [0, 9, 0], '#f2f2f2', 'Metal'); part(m, { cls: 'WedgePart', name: 'Nose', size: [4, 4, 4], pos: [0, 18, 0], color: '#d0142c' }); cyl(m, 'Window', 1.6, 4.1, [0, 12, 0], '#00a2ff', 'Glass', { rot: [0, 90, 90] }); for (const [x, z] of [[2.4, 0], [-2.4, 0], [0, 2.4], [0, -2.4]]) box(m, 'Fin', [x ? 1.4 : 0.3, 4, z ? 1.4 : 0.3], [x, 2.6, z], '#d0142c', 'Metal'); const f = part(m, { name: 'Flame', size: [2.6, 2.6, 2.6], pos: [0, 1.2, 0], color: '#ff7a1a', material: 'Neon', shape: 'Ball', canCollide: false }); fx(f, 'Fire', {}); });
+M2('Planet', 'Space', (m) => { part(m, { name: 'Planet', size: [12, 12, 12], pos: [0, 8, 0], color: '#e0a46c', material: 'Sand', shape: 'Ball' }); const r = cyl(m, 'Ring', 18, 0.3, [0, 8, 0], '#f5e0b0', 'SmoothPlastic', { transparency: 0.3, canCollide: false }); { const cf = CFrame.fromOrientation(20, 0, 90); cf.y = 8; r.CFrame = cf; } });
+M2('Asteroid', 'Space', (m) => { for (const [x, y, z, r] of [[0, 3, 0, 6], [2, 4, -1, 3.5], [-2, 2.5, 1, 3.5], [0.5, 5, 1.5, 3]]) part(m, { name: 'Rock', size: [r, r, r], pos: [x, y, z], color: '#5a5a5a', material: 'Slate', shape: 'Ball' }); });
+M2('UFO', 'Space', (m) => { cyl(m, 'Disc', 12, 1.4, [0, 10, 0], '#a3a2a5', 'Metal'); cyl(m, 'Rim', 9, 2.2, [0, 10, 0], '#8a8a8a', 'Metal'); part(m, { name: 'Dome', size: [5, 5, 5], pos: [0, 11.4, 0], color: '#8ff0ff', material: 'Glass', shape: 'Ball', transparency: 0.3 }); for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; part(m, { name: 'Light', size: [0.8, 0.8, 0.8], pos: [Math.cos(a) * 5.2, 9.6, Math.sin(a) * 5.2], color: '#3ddc84', material: 'Neon', shape: 'Ball' }); } const beam = cyl(m, 'Beam', 5, 8, [0, 5, 0], '#b8ffb0', 'Neon', { transparency: 0.7, canCollide: false }); { const cf = CFrame.fromOrientation(0, 0, 90); cf.y = 5; beam.CFrame = cf; } });
+// Obby and gameplay extras
+TOOLBOX.push({ name: 'Truss Tower', cat: 'Obby', build() { const m = model('TrussTower'); part(m, { cls: 'TrussPart', name: 'Truss', size: [2, 24, 2], pos: [0, 12, 0], color: '#8a8a8a', material: 'Metal' }); box(m, 'Top', [6, 1, 6], [0, 24.5, -2], '#4b974b'); return m; } });
+TOOLBOX.push({ name: 'Ramp', cat: 'Obby', build() { return part(null, { cls: 'WedgePart', name: 'Ramp', size: [6, 4, 10], pos: [0, 2, 0], color: '#f5cd30' }); } });
+TOOLBOX.push({ name: 'Win Pad', cat: 'Obby', build() {
+  const p = part(null, { name: 'WinPad', size: [10, 1, 10], color: '#ffd400', material: 'Neon' });
+  sign(p, 'FINISH!');
+  script(p, 'Win', `
+-- The end of an obby: a win, a message, and back to the start.
+local Players = game:GetService("Players")
+local done = {}
+script.Parent.Touched:Connect(function(hit)
+	local player = Players:GetPlayerFromCharacter(hit.Parent)
+	if not player or done[player] then return end
+	done[player] = true
+	local ls = player:FindFirstChild("leaderstats")
+	local wins = ls and ls:FindFirstChild("Wins")
+	if wins then wins.Value = wins.Value + 1 end
+	player:ShowMessage("YOU WIN!", 3, Color3.fromRGB(255, 212, 0))
+	wait(3)
+	player.RespawnLocation = nil
+	player:LoadCharacter()
+	done[player] = nil
+end)
+`);
+  return p;
+} });
+TOOLBOX.push({ name: 'Damage Brick', cat: 'Gameplay', build() {
+  const p = part(null, { name: 'DamageBrick', size: [8, 1, 8], color: '#ff8a3d', material: 'Neon' });
+  script(p, 'Damage', `
+-- Hurts 20 health each touch (once a second per player), instead of killing.
+local hurt = {}
+script.Parent.Touched:Connect(function(hit)
+	local h = hit.Parent:FindFirstChild("Humanoid")
+	if not h or hurt[h] then return end
+	hurt[h] = true
+	h:TakeDamage(20)
+	wait(1)
+	hurt[h] = nil
+end)
+`);
+  return p;
+} });
+TOOLBOX.push({ name: 'Spawn Point', cat: 'Gameplay', build() { return part(null, { cls: 'SpawnLocation', name: 'SpawnLocation', size: [8, 1, 8], color: '#a3a2a5' }); } });
+
 // Categories for the Toolbox filter (older entries get theirs here).
 const OLD_CATS = {
   'Kill Brick': 'Obby', Checkpoint: 'Obby', Spinner: 'Obby', 'Moving Platform': 'Obby', 'Disappearing Brick': 'Obby', 'Speed Pad': 'Obby', 'Jump Pad': 'Obby',
@@ -1139,7 +1218,7 @@ const OLD_CATS = {
   'Brick House': 'Buildings', 'Leaderboard Script': 'Scripts', 'Day/Night Script': 'Scripts',
 };
 for (const t of TOOLBOX) if (!t.cat) t.cat = OLD_CATS[t.name] || 'Gameplay';
-export const TOOLBOX_CATEGORIES = ['All', 'Obby', 'Gameplay', 'Weapons', 'Vehicles', 'Buildings', 'Decor', 'Halloween', 'Scripts'];
+export const TOOLBOX_CATEGORIES = ['All', 'Obby', 'Gameplay', 'Weapons', 'Vehicles', 'Buildings', 'Furniture', 'Nature', 'City', 'Space', 'Decor', 'Halloween', 'Scripts'];
 
 let thumbCache = new Map();
 export async function toolboxThumb(entry) {

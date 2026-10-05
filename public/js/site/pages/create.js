@@ -1,5 +1,6 @@
-// Create Item (BETA): players with the Item Creator right design their own
-// catalog items. T-shirts and faces are pictures (draw them in the pixel
+// Create Item: every player designs T-shirts, shirts, pants and faces for an
+// upload fee; the Item Creator right adds hats, hair and pets (no fee).
+// Limiteds come from the Robis team only. T-shirts and faces are pictures (draw them in the pixel
 // editor or upload one), shirts and pants are a pattern with two colours,
 // hats, hair and pets are the classic models in your own colours.
 import { initPage } from '../layout.js';
@@ -10,15 +11,10 @@ import { BODY_COLORS } from '/shared/avatar.js';
 
 const me = await initPage({ active: 'create' });
 const app = document.getElementById('app');
-app.append(el('div', { class: 'row' }, el('h1', { style: { margin: 0 }, text: 'Create Item' }), el('span', { class: 'pill beta-pill', text: 'BETA' })));
+app.append(el('div', { class: 'row' }, el('h1', { style: { margin: 0 }, text: 'Create Item' })));
 
 const opts = await api.get('/create/options');
-if (!opts.allowed) {
-  app.append(el('div', { class: 'panel' },
-    el('h3', { text: 'Item creation is in BETA' }),
-    el('p', { text: 'Right now only players with the Item Creator or Limited Creator right can make items. Ask an admin of this Robis to give it to you in the Admin Panel.' })));
-  await new Promise(() => {});
-}
+const feeOf = (t) => (opts.fees || {})[t] || 0;
 
 const TYPE_NAMES = { TShirt: 'T-Shirt', Shirt: 'Shirt', Pants: 'Pants', Face: 'Face', Hat: 'Hat', Hair: 'Hair', Pet: 'Pet' };
 const PET_NAMES = { dog: 'Puppy', cat: 'Kitty', bunny: 'Bunny', penguin: 'Penguin', robot: 'Robot', ghost: 'Ghost', dragon: 'Dragon' };
@@ -105,7 +101,7 @@ const typeTabs = el('div', { class: 'tabs create-tabs' });
 const editor = el('div', { class: 'panel' });
 const nameIn = el('input', { class: 'input', maxlength: 50, placeholder: 'Item name' });
 const descIn = el('textarea', { class: 'input', rows: 2, maxlength: 500, placeholder: 'Description (optional)' });
-const priceIn = el('input', { class: 'input', type: 'number', min: 0, max: opts.maxPrice || 100000, value: Math.min(10, opts.maxPrice ?? 10) });
+const priceIn = el('input', { class: 'input', type: 'number', min: opts.minPrice || 0, max: opts.maxPrice || 100000, value: Math.min(10, opts.maxPrice ?? 10) });
 const preview = el('div', { class: 'create-preview' }, spinner());
 // Limited Creator right: a fixed stock; when it sells out the item can only be traded.
 const limitedIn = el('input', { type: 'checkbox', checked: !!opts.onlyLimiteds, disabled: !!opts.onlyLimiteds });
@@ -124,7 +120,9 @@ const colorRow = () => el('div', { class: 'row wrap' },
   el('label', { class: 'field' }, 'Second colour', el('input', { type: 'color', value: state.accent, oninput: (e) => { state.accent = e.target.value; changed(); } })));
 
 function drawEditor() {
-  typeTabs.replaceChildren(...typesNow().map((t) => el('button', { class: t === type ? 'active' : '', text: TYPE_NAMES[t], onclick: () => { type = t; if (MODELS()[0] && !MODELS().includes(state.model)) state.model = MODELS()[0]; drawEditor(); changed(); } })));
+  typeTabs.replaceChildren(...typesNow().map((t) => el('button', { class: t === type ? 'active' : '', onclick: () => { type = t; if (MODELS()[0] && !MODELS().includes(state.model)) state.model = MODELS()[0]; drawEditor(); changed(); } },
+    el('span', { text: TYPE_NAMES[t] }), feeOf(t) && !limitedIn.checked ? el('span', { class: 'fee-chip no-i18n', text: 'R$ ' + feeOf(t) }) : null)));
+  syncFee();
   const parts = [];
   if (type === 'TShirt' || type === 'Face') {
     painter.reset(type);
@@ -168,13 +166,24 @@ const create = el('button', { class: 'btn btn-green btn-large', text: 'Create', 
   create.disabled = true;
   try {
     const { item } = await api.post('/catalog/create', { type, name: nameIn.value, description: descIn.value, price: +priceIn.value, data: itemData(), limited: limitedIn.checked, stock: +stockIn.value });
-    toast('Item created!', 'success');
+    toast('Item uploaded!', 'success');
     location.href = `/item?id=${item.id}`;
   } catch (e) { toast(e.message, 'error'); create.disabled = false; }
 } });
 
+// the upload fee for the type picked (the Robis team uploads for free)
+const feeNote = el('div', { class: 'small muted', style: { marginTop: '6px' } });
+function syncFee() {
+  const fee = limitedIn.checked ? 0 : feeOf(type);
+  create.textContent = fee ? `Upload for R$ ${fee}` : 'Create';
+  feeNote.textContent = fee ? (opts.robits >= fee ? `Uploading costs R$ ${fee}. You have R$ ${opts.robits}.` : `Uploading costs R$ ${fee}. You need ${fee - opts.robits} more Robits.`) : '';
+  create.disabled = !!fee && opts.robits < fee;
+}
+
 app.append(
-  el('p', { class: 'muted', text: 'Make your own clothes, faces, hats and pets. They go on sale in the Catalog, and you get 70% of every sale.' }),
+  el('p', { class: 'muted', text: Object.keys(opts.fees || {}).length
+    ? 'Make your own T-shirts, shirts, pants and faces. Uploading an item costs Robits; after that it goes on sale in the Catalog and you get 70% of every sale. Hats, hair, pets and Limiteds come from the Robis team.'
+    : 'Make your own clothes, faces, hats and pets. They go on sale in the Catalog, and you get 70% of every sale.' }),
   typeTabs,
   el('div', { class: 'create-grid' },
     editor,
@@ -185,7 +194,7 @@ app.append(
       el('label', { class: 'field' }, 'Price (R$)', priceIn),
       opts.limiteds ? el('label', { class: 'perm-row limited-row' }, limitedIn, el('span', { class: 'limited-chip', text: 'LIMITED' }), el('span', { text: 'Make it a Limited' })) : null,
       opts.limiteds ? stockField : null,
-      create)));
+      create, feeNote)));
 
 // ---------------------------------------------------------------- my items
 const mine = el('div', { class: 'item-grid' }, spinner());
@@ -199,7 +208,8 @@ changed();
 
 const style = document.createElement('style');
 style.textContent = `
-.beta-pill { background: #6b327c; color: #fff; }
+.fee-chip { margin-left: 6px; font-size: 11px; font-weight: 800; background: rgba(2,183,87,.15); color: #02a34e; border-radius: 8px; padding: 1px 6px; }
+.create-tabs button.active .fee-chip { background: rgba(255,255,255,.25); color: #fff; }
 .create-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 12px 0; }
 .create-tabs button { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 8px 14px; cursor: pointer; font-weight: 600; font-family: inherit; }
 .create-tabs button.active { background: var(--blue); color: #fff; border-color: var(--blue); }

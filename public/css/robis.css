@@ -1381,3 +1381,16 @@ html[data-theme="dark"] .item-card .thumb { background: linear-gradient(#45484b,
 .adm-main { border-radius: 0 8px 8px 0; }
 .adm-hero, .adm-card, .cc-attn-item, .cc-switch, .cc-pinned, .cc-online { border-radius: 8px; }
 @media (max-width: 860px) { .adm-side { border-radius: 8px 8px 0 0; } .adm-main { border-radius: 0 0 8px 8px; } .rbx-content { padding: 12px 10px 70px; } }
+/* Robis Awards: trophies on game pages, the menu link */
+.award-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.award-row:empty { display: none; }
+.award-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; padding: 2px 10px; border-radius: 999px; background: rgba(123,92,255,.1); color: var(--text); }
+.award-chip:hover { text-decoration: none; background: rgba(123,92,255,.18); }
+.award-chip.won { background: linear-gradient(90deg, #ffd75a, #ffb020); color: #3a2400; font-weight: 600; }
+.awards-vote { background: #ffc400 !important; color: #3a2400; font-weight: 800; font-size: 10px !important; }
+.adm-hero.awards { background: radial-gradient(circle at 15% 20%, rgba(255,214,90,.35), transparent 45%), linear-gradient(120deg, #1b1b2f, #3a2b6b 55%, #b8860b); }
+.aw-adm-cat { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.aw-adm-nom { display: flex; flex-wrap: wrap; gap: 6px; }
+.aw-adm-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--gray-bg); border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 13px; }
+.aw-adm-chip.win { background: #ffd75a; color: #3a2400; font-weight: 700; }
+.aw-adm-chip button { border: 0; background: none; cursor: pointer; color: inherit; font-size: 13px; }

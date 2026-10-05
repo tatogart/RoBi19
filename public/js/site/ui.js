@@ -150,9 +150,8 @@ export function itemCard(it, opts = {}) {
   const thumb = el('div', { class: 'thumb' });
   itemThumbnail(it).then((u) => thumb.append(el('img', { src: u, alt: it.name })));
   const card = el(opts.onClick ? 'div' : 'a', { class: 'item-card', href: opts.onClick ? null : `/item?id=${it.id}`, title: it.name, onclick: opts.onClick },
-    it.limited || it.custom || it.devOnly ? el('span', { class: 'card-tags' },
+    it.limited || it.devOnly ? el('span', { class: 'card-tags' },
       it.limited ? el('span', { class: 'limited-tag', text: it.stock ? 'LIMITED U' : 'LIMITED' }) : null,
-      it.custom ? el('span', { class: 'limited-tag beta-tag', text: 'BETA' }) : null,
       it.devOnly ? el('span', { class: 'limited-tag dev-tag', text: 'DEV' }) : null) : null,
     it.owned && !opts.onClick && !it.serial ? el('span', { class: 'owned-tag', text: 'Owned' }) : null,
     it.serial ? el('span', { class: 'serial-tag no-i18n', title: 'Serial number', text: `#${it.serial}` }) : null,

@@ -194,3 +194,44 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .places-row .ic { width: 20px; height: 20px; flex: none; }
 .places-row .ic svg { width: 100%; height: 100%; }
 .places-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ------------------------------------------------------------ phone mode */
+body.studio-phone #studio { height: calc(100dvh - 54px); }
+body.studio-phone .ribbon-tabs { height: 34px; overflow-x: auto; }
+body.studio-phone .studio-user { display: none; }
+body.studio-phone .ribbon { height: 66px; }
+body.studio-phone .rbtn { min-width: 50px; padding: 4px; }
+body.studio-phone .statusbar, body.studio-phone .command-bar, body.studio-phone .splitter { display: none; }
+body.studio-phone .panel-left, body.studio-phone .panel-right, body.studio-phone .bottom { display: none !important; }
+body.studio-phone #studio[data-sheet="toolbox"] .panel-left,
+body.studio-phone #studio[data-sheet="explorer"] .panel-right,
+body.studio-phone #studio[data-sheet="properties"] .panel-right,
+body.studio-phone #studio[data-sheet="output"] .bottom {
+  display: flex !important; position: fixed; left: 0; right: 0; bottom: 54px; top: auto; height: 56dvh; width: auto; z-index: 60;
+  border-radius: 14px 14px 0 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, .25); border: 0; overflow: hidden;
+}
+body.studio-phone #studio[data-sheet="explorer"] .properties-panel { display: none; }
+body.studio-phone #studio[data-sheet="properties"] .explorer-panel { display: none; }
+body.studio-phone #studio[data-sheet="properties"] .properties-panel { height: auto !important; flex: 1; }
+body.studio-phone #studio[data-sheet="explorer"] .explorer-panel { flex: 1; }
+body.studio-phone .panel-title { padding: 10px 12px; font-size: 15px; }
+body.studio-phone .panel-close { font-size: 22px; padding: 0 6px; }
+body.studio-phone .panel-filter { font-size: 16px; padding: 8px 10px; }
+body.studio-phone .enode { min-height: 32px; font-size: 14px; }
+body.studio-phone .toolbox-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+body.studio-phone .menu button { padding: 10px 16px; font-size: 15px; }
+.phone-bar { position: fixed; left: 0; right: 0; bottom: 0; height: 54px; display: flex; background: #fff; border-top: 1px solid var(--s-border); z-index: 70; padding-bottom: env(safe-area-inset-bottom); }
+.phone-bar button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 0; background: none; font-size: 11px; font-weight: 600; color: var(--s-muted); cursor: pointer; }
+.phone-bar button.on { color: var(--s-accent); }
+.phone-bar .pb-ic { font-size: 19px; line-height: 1; }
+.phone-bar .pb-del { color: #c4281c; }
+.cam-pad { position: absolute; left: 12px; bottom: 12px; width: 132px; height: 132px; z-index: 5; }
+.pad-btn { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .38); color: #fff; font-size: 18px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pad-btn.on { background: rgba(0, 162, 255, .75); }
+.cam-pad .up { left: 44px; top: 0; } .cam-pad .down { left: 44px; bottom: 0; }
+.cam-pad .left { left: 0; top: 44px; } .cam-pad .right { right: 0; top: 44px; }
+.cam-pad2 { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+.cam-pad2 .pad-btn { position: static; }
+.phone-hint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(0, 0, 0, .6); color: #fff; padding: 6px 12px; border-radius: 14px; font-size: 12px; z-index: 5; pointer-events: none; transition: opacity .5s; max-width: 90%; text-align: center; }
+.phone-hint.gone { opacity: 0; }
+html[data-theme="dark"] .phone-bar { background: #2b2b2b; border-color: #444; }
