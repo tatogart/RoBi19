@@ -22,11 +22,13 @@ function renderBuy() {
       ? el('div', { class: 'row wrap' }, el('span', { class: 'pill', text: '✓ You own this item' }),
         item.serial ? el('span', { class: 'pill serial-pill no-i18n', text: `#${item.serial}${item.stock ? ' / ' + fmtFull(item.stock) : ''}` }) : null,
         el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
+      : me && me.guest
+        ? el('div', { class: 'dev-lock' }, el('b', { text: 'Guests can\'t buy items' }), el('div', { class: 'small', text: 'Sign up for free to get items and Robits.' }), el('a', { class: 'btn btn-green', href: '/?signup=1', text: 'Sign Up' }))
       : item.devOnly && !item.canGet
         ? el('div', { class: 'dev-lock' }, el('b', { text: '🛠 For developers only' }), el('div', { class: 'small', text: 'Make a game in Create and this item is yours for free.' }), el('a', { class: 'btn btn-primary', href: '/create', text: 'Make a game' }))
         : el('button', { class: 'btn btn-green btn-large', text: item.price ? 'Buy' : 'Get', disabled: item.limited && item.remaining === 0, onclick: buy }),
     item.devOnly ? el('div', { class: 'small muted', style: { marginTop: '6px' }, text: '🛠 Developer item: it can\'t be gifted or bought by players who haven\'t made a game.' }) : null,
-    me && !item.offsale && !item.devOnly && !(item.limited && item.remaining === 0) ? el('div', { class: 'row wrap', style: { marginTop: '10px', gap: '8px' } },
+    me && !me.guest && !item.offsale && !item.devOnly && !(item.limited && item.remaining === 0) ? el('div', { class: 'row wrap', style: { marginTop: '10px', gap: '8px' } },
       item.owned ? null : wishButton(item),
       el('button', { class: 'btn gift-btn', text: '🎁 Gift to a friend', onclick: () => giftDialog(item, me, { onDone: (r) => { setRobits(r.robits); refreshItem(); } }) })) : null,
     item.limited ? el('div', { class: 'small muted', style: { marginTop: '8px' }, text: item.remaining === 0 ? 'Sold out — buy it from a reseller or get it in a trade.' : item.stock ? `${fmtFull(item.remaining)} of ${fmtFull(item.stock)} remaining` : `${fmtFull(item.remaining)} remaining` }) : null,

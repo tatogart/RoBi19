@@ -248,6 +248,7 @@ export function createApi(db, manager, opts = {}) {
     [/^\/account\/(username|password)$/, 'Guests can\'t change their username or password. Sign up to get your own account!'],
     [/^\/friends\/\d+\/(request|accept)$/, 'Guests can\'t add friends. Sign up to make friends!'],
     [/^\/gamepasses\/\d+\/buy$/, 'Guests can\'t buy game passes.'],
+    [/^\/catalog\/\d+\/buy$/, 'Guests can\'t buy items. Sign up to get items!'],
     [/^\/auth\/admin-code$/, 'Guests can\'t do that.'],
     [/^\/(trades|resales|catalog\/\d+\/(gift|resell)|catalog\/create|promocodes\/redeem|economy\/stipend)/, 'Guests can\'t do that. Sign up to get Robits!'],
   ];

@@ -2148,6 +2148,9 @@ test('guests: no password, no Robits, guest look, deleted on logout', async () =
   assert.equal((await call('POST', `/friends/${u.id}/request`, {}, p.cookie)).status, 400);
   const pass = Object.values(srv.db.data.gamepasses)[0];
   if (pass) assert.equal((await call('POST', `/gamepasses/${pass.id}/buy`, {}, g.cookie)).status, 403);
+  const bee = Object.values(srv.db.data.items).find((i) => i.name === 'Busy Bee Buddy');
+  assert.equal((await call('POST', `/catalog/${bee.id}/buy`, {}, g.cookie)).status, 403);
+  assert.ok(!srv.db.data.inventory[u.id].includes(bee.id));
   // can't log in with a password
   assert.equal((await call('POST', '/auth/login', { username: u.username, password: '' })).status, 401);
   // logging out deletes the account
