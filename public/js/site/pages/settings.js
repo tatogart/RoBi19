@@ -61,7 +61,7 @@ app.append(discordPanel);
 const account = me.guest ? document.createElement('div') : app;
 if (me.guest) app.append(el('div', { class: 'panel guest-note' },
   el('h3', { text: 'You are playing as a guest' }),
-  el('p', { text: 'Guests can\'t get Robits, add friends, buy game passes, create groups or change their name. When you log out, this guest account is deleted.' }),
+  el('p', { text: 'Guests can\'t get Robits, add friends, buy items or game passes, make games or groups, or change their name. Promo codes and trading items still work. When you log out, this guest account is deleted.' }),
   el('a', { class: 'btn btn-green', href: '/?signup=1', text: 'Sign up for free' })));
 const nameInput = el('input', { class: 'input', placeholder: 'New username', autocomplete: 'off' });
 const namePass = el('input', { class: 'input', type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });

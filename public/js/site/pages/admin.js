@@ -58,23 +58,25 @@ const nav = el('nav', { class: 'adm-nav' });
 const pageTitle = el('div', { class: 'adm-page-title' });
 const liveBox = el('div', { class: 'adm-live' });
 const body = el('div', { class: 'adm-body' }, spinner());
+const subBar = el('div', { class: 'adm-subtabs' }); // the tabs of the open section (5.0)
 // sections pass `cond ? panel : null`: leave the nulls out (the DOM would print "null")
 body.replaceChildren = (...kids) => Element.prototype.replaceChildren.apply(body, kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
 const searchBtn = el('button', { class: 'adm-search', onclick: () => palette() }, ic('search'), el('span', { class: 'adm-search-text', text: 'Search players, items, sections...' }), el('kbd', { text: 'Ctrl K' }));
-// Control Center 4.0: full width (the site's menu steps aside), a sidebar that
+// Control Center 5.0 Classic: compact, the old admin look; full width (the site's menu steps aside), a sidebar that
 // folds to icons, favourite sections on top, groups that fold away.
 const store = { get: (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } } };
 document.body.classList.add('adm-full');
-const shell = el('div', { class: 'adm' + (store.get('adm.mini', false) ? ' mini' : '') });
+const shell = el('div', { class: 'adm adm-classic' + (store.get('adm.mini', false) ? ' mini' : '') });
 const foldBtn = el('button', { class: 'adm-fold', title: 'Fold the menu', onclick: () => { shell.classList.toggle('mini'); store.set('adm.mini', shell.classList.contains('mini')); } }, ic('sidebar'));
 app.append(shell);
 shell.append(
   el('aside', { class: 'adm-side' },
-    el('div', { class: 'adm-brand' }, el('div', { class: 'adm-logo' }, ic('bolt')), el('div', { class: 'adm-brand-text' }, el('b', {}, el('span', { text: 'Control Center' }), el('span', { class: 'adm-ver', text: '4.0' })), el('div', { class: 'adm-brand-sub', text: me.isAdmin ? 'Administrator' : 'Staff' })), foldBtn),
+    el('div', { class: 'adm-brand' }, el('div', { class: 'adm-logo' }, ic('bolt')), el('div', { class: 'adm-brand-text' }, el('b', {}, el('span', { text: 'Control Center' }), el('span', { class: 'adm-ver', text: '5.0' })), el('div', { class: 'adm-brand-sub', text: me.isAdmin ? 'Administrator' : 'Staff' })), foldBtn),
     nav,
-    el('div', { class: 'adm-side-foot' }, el('span', { class: 'no-i18n', text: me.username }), el('span', { class: 'muted', text: ' · Control Center 4.0' }))),
+    el('div', { class: 'adm-side-foot' }, el('span', { class: 'no-i18n', text: me.username }), el('span', { class: 'muted', text: ' · Control Center 5.0 Classic' }))),
   el('main', { class: 'adm-main' },
     el('div', { class: 'adm-top' }, pageTitle, searchBtn, liveBox, el('a', { class: 'adm-back', href: '/home', title: 'Back to the site' }, ic('home'))),
+    subBar,
     body));
 
 let data;
@@ -130,6 +132,7 @@ const TABS = {
   live: { label: 'Live Events', group: 'Live', icon: 'sparkle', draw: drawLiveEvents, admin: true },
   broadcast: { label: 'Broadcast', group: 'Live', icon: 'megaphone', draw: drawBroadcast, admin: true },
   schedule: { label: 'Scheduler', group: 'Live', icon: 'clock', draw: drawSchedule, admin: true },
+  tools: { label: 'Site Tools', group: 'System', icon: 'bolt', draw: drawSiteTools, admin: true },
   settings: { label: 'Settings', group: 'System', icon: 'gear', draw: drawSettings, admin: true },
   switches: { label: 'Switches', group: 'System', icon: 'toggle', draw: drawSwitches, admin: true },
   console: { label: 'Console', group: 'System', icon: 'terminal', draw: drawConsole, admin: true },
@@ -138,46 +141,41 @@ const TABS = {
 for (const [id, t] of Object.entries(TABS)) if ((t.admin && !me.isAdmin) || (t.perm && !perm(t.perm))) delete TABS[id];
 let current = TABS[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard';
 const navBtns = {};
+// Control Center 5.0: the sidebar has only the big sections (Overview, Players,
+// Economy...), each one a row of classic tabs on top of the page.
+const GROUP_ICONS = { Overview: 'home', People: 'users', Economy: 'coins', Content: 'game', Live: 'server', System: 'gear' };
+const GROUP_NAMES = { People: 'Players' };
 function openTab(id) {
   current = id;
+  store.set('adm.last.' + TABS[id].group, id);
   buildNav();
-  pageTitle.replaceChildren(ic(TABS[id].icon), el('span', { text: TABS[id].label }));
+  pageTitle.replaceChildren(ic(TABS[id].icon), el('span', { text: GROUP_NAMES[TABS[id].group] || TABS[id].group }), el('span', { class: 'adm-crumb', text: '›' }), el('span', { text: TABS[id].label }));
   closeDrawer();
   TABS[id].draw();
 }
 const counts = {}; // tab -> [number, colour]
 function buildNav() {
-  const favs = store.get('adm.favs', []).filter((id) => TABS[id]);
-  const folded = new Set(store.get('adm.folded', []));
-  const link = (id) => {
-    const t = TABS[id];
-    const star = el('span', { class: 'adm-star' + (favs.includes(id) ? ' on' : ''), title: favs.includes(id) ? 'Take out of favourites' : 'Add to favourites', onclick: (e) => {
-      e.stopPropagation();
-      const f = store.get('adm.favs', []);
-      store.set('adm.favs', f.includes(id) ? f.filter((x) => x !== id) : [...f, id]);
-      buildNav();
-    } }, ic('star'));
-    const c = counts[id];
-    const b = el('button', { class: 'adm-link' + (id === current ? ' active' : ''), 'data-tab': id, title: t.label, onclick: () => { history.replaceState(null, '', '#' + id); openTab(id); } },
-      ic(t.icon), el('span', { class: 'adm-link-text', text: t.label }), el('span', { class: 'adm-count' + (c && c[0] ? ' on ' + (c[1] || '') : ''), text: c && c[0] ? String(c[0]) : '' }), star);
-    navBtns[id] = b;
-    return b;
-  };
-  const out = [];
-  if (favs.length) out.push(el('div', { class: 'adm-group fav' }, '★ ', el('span', { text: 'Favourites' })), ...favs.map(link));
   const groups = [...new Set(Object.values(TABS).map((t) => t.group))];
+  const out = [];
   for (const g of groups) {
     const ids = Object.keys(TABS).filter((id) => TABS[id].group === g);
-    const isOpen = !folded.has(g) || ids.includes(current);
-    out.push(el('button', { class: 'adm-group' + (isOpen ? '' : ' folded'), onclick: () => {
-      const f = new Set(store.get('adm.folded', []));
-      if (f.has(g)) f.delete(g); else f.add(g);
-      store.set('adm.folded', [...f]);
-      buildNav();
-    } }, el('span', { text: g }), el('span', { class: 'adm-group-arrow', text: '▾' })));
-    if (isOpen) out.push(...ids.map(link));
+    const n = ids.reduce((a, id) => a + ((counts[id] && counts[id][0]) || 0), 0);
+    const hot = ids.map((id) => counts[id]).find((c) => c && c[0]);
+    const go = () => { const last = store.get('adm.last.' + g, ids[0]); const id = TABS[last] && TABS[last].group === g ? last : ids[0]; history.replaceState(null, '', '#' + id); openTab(id); };
+    const b = el('button', { class: 'adm-link' + (ids.includes(current) ? ' active' : ''), title: GROUP_NAMES[g] || g, onclick: go },
+      ic(GROUP_ICONS[g] || 'box'), el('span', { class: 'adm-link-text', text: GROUP_NAMES[g] || g }), el('span', { class: 'adm-sub-n', text: String(ids.length) }),
+      el('span', { class: 'adm-count' + (n ? ' on ' + (hot[1] || '') : ''), text: n ? String(n) : '' }));
+    navBtns[g] = b;
+    out.push(b);
   }
   nav.replaceChildren(...out);
+  // the tabs of the open section
+  const g = TABS[current].group;
+  subBar.replaceChildren(...Object.keys(TABS).filter((id) => TABS[id].group === g).map((id) => {
+    const c = counts[id];
+    return el('button', { class: 'adm-subtab' + (id === current ? ' active' : ''), onclick: () => { history.replaceState(null, '', '#' + id); openTab(id); } },
+      el('span', { text: TABS[id].label }), c && c[0] ? el('span', { class: 'adm-count on ' + (c[1] || ''), text: String(c[0]) }) : null);
+  }));
 }
 buildNav();
 // what needs a look: open reports, appeals, Overwatch cases, flagged chat
@@ -315,6 +313,7 @@ async function manage(u0, tab = 'overview') {
   const content = el('div', { class: 'adm-dbody' });
   const TABS2 = {
     overview: ['Overview', () => overview()],
+    tools: ['Player Tools', () => tools(), perm('moderator') && !lockedAdmin],
     inventory: ['Inventory', () => inventory()],
     economy: ['Economy', () => economy(), perm('economy')],
     moderation: ['Moderation', () => moderation(), perm('moderator')],
@@ -351,6 +350,49 @@ async function manage(u0, tab = 'overview') {
         : [el('span', { class: 'muted small', text: 'None found.' })]))).catch(() => box.replaceChildren());
       return box;
     })()));
+
+  // Classic player tools: one click each (Control Center 5.0)
+  const tools = () => {
+    const run = async (op, extra = {}, ask = '') => {
+      if (ask && !confirm(tr(ask))) return;
+      try { const r = await api.post(`/admin/users/${u.id}/tool`, { op, ...extra }); if (r.user) replaceUser(r.user); toast(r.message, 'success'); reopen('tools'); } catch (e) { toast(e.message, 'error'); }
+    };
+    const T = (label, op, opts = {}) => (opts.admin && !me.isAdmin) || (opts.notSelf && self) ? null
+      : el('button', { class: 'cl-btn' + (opts.red ? ' red' : ''), text: label, onclick: () => (opts.fn ? opts.fn() : run(op, {}, opts.ask)) });
+    const title = el('input', { class: 'input', maxlength: 30, placeholder: 'Title on the profile (empty = none)', value: u.title || '' });
+    const subj = el('input', { class: 'input', maxlength: 80, placeholder: 'Subject' });
+    const msg = el('textarea', { class: 'input', rows: 2, maxlength: 1000, placeholder: 'Message from the Robis team (goes to their inbox)' });
+    const box = (name, ...kids) => el('fieldset', { class: 'cl-box' }, el('legend', { text: name }), el('div', { class: 'cl-grid' }, ...kids));
+    return el('div', { class: 'cl-tools' },
+      el('table', { class: 'cl-table' }, el('tbody', {},
+        [['User ID', '#' + u.id], ['Username', u.username], ['Created', new Date(u.created).toLocaleString()], ['Last online', u.lastOnline ? timeAgo(u.lastOnline) : '-'],
+          ['Robits', 'R$ ' + fmtFull(u.robits)], ['Membership', u.membership || 'None'], ['Status', u.banned ? 'Banned' : u.guest ? 'Guest' : u.bot ? 'Bot' : 'OK'], ['Username lock', u.nameLocked ? 'Locked' : 'No']]
+          .map(([k, v]) => el('tr', {}, el('th', { text: k }), el('td', { class: 'no-i18n', text: String(v) }))))),
+      box('Account',
+        T('Reset avatar', 'resetAvatar', { admin: true, ask: 'Put the starter look back on?' }),
+        T('Give starter items', 'starterItems', { admin: true }),
+        T('Wipe profile', 'wipeProfile', { ask: 'Clear their About text and status?' }),
+        T(u.nameLocked ? 'Unlock username' : 'Lock username', 'lockName'),
+        T('[ Content Deleted ]', 'contentDeleted', { red: true, notSelf: true, ask: 'Rename to ContentDeleted, wipe the profile and lock the name?' }),
+        T('Copy their look', 'copyLook', { admin: true, notSelf: true })),
+      el('div', { class: 'row', style: { margin: '4px 0 8px' } }, title, el('button', { class: 'cl-btn', text: 'Set title', onclick: () => run('setTitle', { title: title.value }) })),
+      box('Social',
+        T('Clear friends', 'clearFriends', { admin: true, ask: 'Remove all their friends?' }),
+        T('Clear wishlist', 'clearWishlist', { admin: true }),
+        T('Delete outfits', 'clearOutfits', { admin: true }),
+        T('Delete sent messages', 'clearMessages', { red: true, ask: 'Delete every message they sent?' })),
+      box('Moderation',
+        T('Clear warnings', 'clearWarnings', { ask: 'Clear all their warnings?' }),
+        T('Cancel open trades', 'cancelTrades'),
+        u.presence?.status === 'ingame' ? T('Kick from game', 'kickFromGame', { notSelf: true }) : null,
+        T('Reset game badges', 'resetBadges', { admin: true, ask: 'Remove every game badge they earned?' })),
+      box('Economy & content',
+        T('Reset daily stipend', 'resetStipend', { admin: true }),
+        T('Make games private', 'unpublishGames', { admin: true, ask: 'Make all their games private?' }),
+        T('Delete uploaded items', 'deleteItems', { admin: true, red: true, ask: 'Delete every item they uploaded?' })),
+      el('fieldset', { class: 'cl-box' }, el('legend', { text: 'System message' }), subj, msg,
+        el('button', { class: 'cl-btn', style: { marginTop: '6px' }, text: 'Send', onclick: () => run('systemMessage', { subject: subj.value, body: msg.value }) })));
+  };
 
   const inventory = async () => {
     const { items } = await api.get(`/users/${u.id}/inventory`);
@@ -2246,6 +2288,56 @@ async function drawOverwatch() {
         el('span', { class: 'muted', text: ` · really: ${a.kind}` })),
       el('span', { class: 'small ' + (a.correct ? 'ow-right' : 'ow-wrong'), text: a.correct ? '✓ right' : '✗ wrong' }),
       el('span', { class: 'muted small', text: timeAgo(a.t) })))) : el('div', { class: 'muted small', text: 'No answers yet.' })));
+}
+
+// ---------------------------------------------------------------- site tools (5.0)
+async function drawSiteTools() {
+  body.replaceChildren(spinner());
+  let t;
+  try { t = await api.get('/admin/tools'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const run = async (op, extra = {}, ask = '') => {
+    if (ask && !confirm(tr(ask))) return;
+    try { const r = await api.post('/admin/tools', { op, ...extra }); toast(r.message, 'success'); drawSiteTools(); } catch (e) { toast(e.message, 'error'); }
+  };
+  const st = t.stats;
+  const kb = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB';
+  const box = (name, ...kids) => el('fieldset', { class: 'cl-box' }, el('legend', { text: name }), ...kids);
+  const B = (label, fn, red) => el('button', { class: 'cl-btn' + (red ? ' red' : ''), text: label, onclick: fn });
+  const pct = el('input', { class: 'input', type: 'number', value: 10, style: { width: '90px' } });
+  const days = el('input', { class: 'input', type: 'number', value: 90, min: 7, style: { width: '90px' } });
+  const words = el('textarea', { class: 'input', rows: 2, placeholder: 'Words not allowed in usernames, separated by commas', value: t.settings.nameBlacklist.join(', ') });
+  const welcome = el('textarea', { class: 'input', rows: 2, maxlength: 1000, placeholder: 'A message every new player gets in their inbox (empty = off)', value: t.settings.welcome });
+  const reason = el('input', { class: 'input', placeholder: 'Reason shown to players (optional)' });
+  const list = (rows) => el('table', { class: 'cl-table' }, el('tbody', {}, rows.map(([a, b]) => el('tr', {}, el('th', { class: 'no-i18n' }, a), el('td', { class: 'no-i18n', text: b })))));
+  body.replaceChildren(el('div', { class: 'cl-cols' },
+    el('div', {},
+      box('World statistics', list([
+        ['Players', fmtFull(st.players)], ['Guests', fmtFull(st.guests)], ['Bots', fmtFull(st.bots)], ['New today', fmtFull(st.newToday)], ['Online today', fmtFull(st.onlineToday)],
+        ['Items (player-made)', `${fmtFull(st.items)} (${fmtFull(st.playerItems)})`], ['Games (public)', `${fmtFull(st.games)} (${fmtFull(st.publicGames)})`],
+        ['Messages', fmtFull(st.messages)], ['Sessions', fmtFull(st.sessions)], ['Trades', fmtFull(st.trades)], ['Robits owned', 'R$ ' + fmtFull(st.robits)],
+        ['Servers running', fmtFull(st.servers)], ['Database', kb(st.dbSize)]])),
+      box('Richest players', list(t.richest.map((u) => [el('a', { href: '#', text: u.username, onclick: (e) => { e.preventDefault(); manage(u); } }), 'R$ ' + fmtFull(u.robits)]))),
+      box('Newest players', list(t.newest.map((u) => [el('a', { href: '#', text: u.username, onclick: (e) => { e.preventDefault(); manage(u); } }), timeAgo(u.created)])))),
+    el('div', {},
+      box('Guests',
+        el('p', { class: 'small muted', text: `${st.guests} guest account(s) right now.` }),
+        el('div', { class: 'cl-grid' },
+          B(t.settings.guests ? 'Turn guest play off' : 'Turn guest play on', () => run('guests', { on: !t.settings.guests })),
+          B('Delete all guests', () => run('deleteGuests', {}, 'Delete every guest account that is not in a game?'), true))),
+      box('Maintenance',
+        el('div', { class: 'cl-grid' },
+          B('Remove old sessions', () => run('purgeSessions')),
+          B('Clear chat log', () => run('clearChatlog', {}, 'Clear the whole chat log?')),
+          B('Everyone: new stipend', () => run('resetStipends', {}, 'Let everyone claim the daily stipend again?')),
+          B('Remove announcement', () => run('clearAnnouncement')),
+          B('Download players (CSV)', () => { location.href = '/api/admin/tools/users.csv'; })),
+        el('div', { class: 'row', style: { marginTop: '8px' } }, el('span', { text: 'Delete messages older than' }), days, el('span', { text: 'days' }), B('Delete', () => run('purgeMessages', { days: +days.value }, 'Delete old messages for everyone?'), true)),
+        el('div', { class: 'row', style: { marginTop: '8px' } }, reason, B('Shut down all servers', () => run('shutdownAll', { reason: reason.value }, 'Close every game server now?'), true))),
+      box('Catalog prices',
+        el('p', { class: 'small muted', text: 'Changes every official item for sale (not Limiteds, not player items).' }),
+        el('div', { class: 'row' }, pct, el('span', { text: '%' }), B('Change prices', () => run('bulkPrice', { percent: +pct.value }, 'Change the price of every official item?')))),
+      box('Usernames', words, B('Save blocked words', () => run('nameBlacklist', { words: words.value }))),
+      box('Welcome message', welcome, B('Save', () => run('welcome', { text: welcome.value }))))));
 }
 
 // ================================================================ Control Center 4.0

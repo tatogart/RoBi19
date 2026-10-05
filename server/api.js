@@ -4,7 +4,7 @@ import express from 'express';
 import {
   checkPassword, createSession, destroySession, sessionCookie, sessionToken, validUsername, COOKIE, parseCookies, bannedClient, noteClient, isBanned, banDetails,
 } from './auth.js';
-import { createUser, addSeedGames, addCatalogItems, ensureOwner, officialAccount, OWNER_NAME } from './seed/seed.js';
+import { createUser, addSeedGames, addCatalogItems, ensureOwner, officialAccount, OWNER_NAME, STARTER_ITEMS, STARTER_WEARING, STARTER_BODY } from './seed/seed.js';
 import { hashPassword } from './auth.js';
 import { TEMPLATES } from './seed/places.js';
 import { normalizeAvatar, WEAR_LIMITS, ITEM_TYPES, CATALOG } from '../shared/avatar.js';
@@ -18,6 +18,7 @@ import { installOverwatch } from './overwatch.js';
 import { installBots } from './bots.js';
 import { installControl } from './control.js';
 import { installAwards } from './awards.js';
+import { installClassic } from './classic.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -250,7 +251,8 @@ export function createApi(db, manager, opts = {}) {
     [/^\/gamepasses\/\d+\/buy$/, 'Guests can\'t buy game passes.'],
     [/^\/catalog\/\d+\/buy$/, 'Guests can\'t buy items. Sign up to get items!'],
     [/^\/auth\/admin-code$/, 'Guests can\'t do that.'],
-    [/^\/(trades|resales|catalog\/\d+\/(gift|resell)|catalog\/create|promocodes\/redeem|economy\/stipend)/, 'Guests can\'t do that. Sign up to get Robits!'],
+    [/^\/games$|^\/games\/\d+\/(places|passes|private\/buy)$/, 'Guests can\'t create games. Sign up to start making games!'],
+    [/^\/(resales|catalog\/\d+\/(gift|resell)|catalog\/create|economy\/stipend)/, 'Guests can\'t do that. Sign up to get Robits!'],
   ];
   api.use((req, res, next) => {
     if (!req.user || !req.user.guest || req.method !== 'POST') return next();
@@ -391,6 +393,7 @@ export function createApi(db, manager, opts = {}) {
     };
     if (full) {
       out.blurb = u.blurb || '';
+      out.title = u.adminTitle || ''; // a title the staff gave (Control Center: Player tools)
       out.friendCount = (D.friends[u.id] || []).length;
       out.badges = (D.badges[u.id] || []).slice(-50);
       out.placeVisits = Object.values(D.games).filter((g) => g.creatorId === u.id).reduce((a, g) => a + g.visits, 0);
@@ -487,6 +490,7 @@ export function createApi(db, manager, opts = {}) {
     const banned = bannedClient(db, req.client);
     if (banned) return bad(res, `This device is banned from this Robis (account ${banned.username}).${banDetails(banned)}`, 403);
     if (!validUsername(username)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
+    if (hooks.nameBlocked && hooks.nameBlocked(username)) return bad(res, 'That username is not allowed.');
     if (typeof password !== 'string' || password.length < 6) return bad(res, 'Password must be at least 6 characters.');
     if (password.toLowerCase() === username.toLowerCase()) return bad(res, 'Password cannot be your username.');
     // The very first person to sign up on a fresh server becomes its admin.
@@ -502,6 +506,7 @@ export function createApi(db, manager, opts = {}) {
     grantAdminPerks(user);
     if (isFirst) ensureOwner(db);
     noteClient(db, user, req.client);
+    if (hooks.welcome) hooks.welcome(user); // the welcome message (Control Center: Site tools)
     const token = createSession(db, user.id);
     setCookie(res, sessionCookie(token));
     // inside a Discord Activity cookies don't work: the page keeps the session itself
@@ -685,6 +690,8 @@ export function createApi(db, manager, opts = {}) {
       }
       return '';
     };
+    // a guest's Robits are always 0 (Robits sent to one would just vanish)
+    if ((from.guest || to.guest) && (t.giveRobits || t.getRobits)) return 'Guests can\'t trade Robits, only items.';
     return side(from, to, t.give) || side(to, from, t.get)
       || (from.robits < t.giveRobits ? `${from.username} doesn't have enough Robits.` : '')
       || (to.robits < t.getRobits ? `${to.username} doesn't have enough Robits.` : '');
@@ -712,7 +719,6 @@ export function createApi(db, manager, opts = {}) {
     if (hooks.isTradeBanned(from)) return bad(res, hooks.tradeMessage(from), 403);
     const to = D.users[toInt(req.body?.toUserId)];
     if (!to || to.system) return bad(res, 'User not found', 404);
-    if (to.guest) return bad(res, 'Guests can\'t trade.');
     if (to.id === from.id) return bad(res, 'You can\'t trade with yourself.');
     const privacy = to.tradePrivacy || 'everyone';
     if (privacy === 'nobody' || (privacy === 'friends' && !(D.friends[to.id] || []).includes(from.id))) return bad(res, `${to.username} isn't accepting trades from you.`);
@@ -1043,6 +1049,8 @@ export function createApi(db, manager, opts = {}) {
     if (!checkPassword(u, String(req.body?.password || ''))) return bad(res, 'Incorrect password.', 401);
     if (!validUsername(name)) return bad(res, 'Usernames can be 3 to 20 characters long, letters, numbers and at most one underscore.');
     if (name === u.username) return bad(res, 'That is already your username.');
+    if (u.nameLocked) return bad(res, 'The Robis team locked your username.', 403);
+    if (hooks.nameBlocked && hooks.nameBlocked(name)) return bad(res, 'That username is not allowed.');
     if (nameTaken(name, u, u.isAdmin)) return bad(res, 'This username is already in use.');
     const price = u.isAdmin ? 0 : USERNAME_PRICE;
     if (u.robits < price) return bad(res, `You need R$${USERNAME_PRICE} to change your username.`);
@@ -1323,6 +1331,7 @@ export function createApi(db, manager, opts = {}) {
     db.save();
     res.json({ ok: true });
   });
+  hooks.removeItem = (it) => removeItem(it);
   function removeItem(it) {
     delete D.items[it.id];
     delete D.serials[it.id];
@@ -2164,7 +2173,7 @@ export function createApi(db, manager, opts = {}) {
   const adminUser = (u) => ({
     ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, bot: !!u.bot, perms: u.perms || [], permOpts: u.permOpts || {}, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
     items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
-    warnings: (u.warnings || []).length,
+    warnings: (u.warnings || []).length, guest: !!u.guest, nameLocked: !!u.nameLocked, title: u.adminTitle || '',
   });
   const target = (req, res) => {
     const u = D.users[toInt(req.params.id)];
@@ -2205,6 +2214,8 @@ export function createApi(db, manager, opts = {}) {
     overwatch: (b) => `Overwatch: ${b.op || 'settings'}${b.user ? ' ' + String(b.user).slice(0, 30) : ''}`,
     abuse: (b) => `Admin Abuse: ${b.op === 'start' ? `started in ${D.games[toInt(b.gameId)]?.name || '?'}` : b.op === 'effect' ? `${b.effect} ${b.on ? 'on' : 'off'}` : b.op === 'once' ? b.effect : b.op === 'message' ? `message: ${String(b.text || '').slice(0, 80)}` : b.op === 'robits' ? `R$${Math.trunc(+b.amount || 0)} to everyone in the game` : b.op}`,
     polls: (b) => (b.op === 'create' ? `Poll: ${String(b.question || '').slice(0, 100)}` : `Poll #${+b.id}: ${b.op}`),
+    tool: (b) => `Player tool: ${String(b.op || '?').slice(0, 30)}`,
+    tools: (b) => `Site tool: ${String(b.op || '?').slice(0, 30)}`,
     hunt: (b) => (b.action ? `The Hunt: ${b.action}${b.key ? ' ' + b.key : ''}${b.action === 'schedule' ? ' (times)' : ''}` : b.user ? `The Hunt: ${b.take ? 'took' : 'gave'} ${b.all ? 'all tokens' : 'a token'} ${b.take ? 'from' : 'to'} ${String(b.user).slice(0, 30)}` : `The Hunt settings${b.public !== undefined ? (b.public ? ' (open)' : ' (private)') : ''}`),
   };
   api.use('/admin', (req, res, next) => {
@@ -2652,6 +2663,7 @@ export function createApi(db, manager, opts = {}) {
   installControl(api, { db, manager, requireAdmin, requireStaff, bad, hooks, publicUser });
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
+  installClassic(api, { db, manager, requireAdmin, requirePerm, bad, log, hooks, adminUser, deleteAccount, isBanned, STARTER: { items: STARTER_ITEMS, wearing: STARTER_WEARING, body: STARTER_BODY } });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });
 
   api.use((req, res) => bad(res, 'Not found', 404));

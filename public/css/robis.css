@@ -1400,3 +1400,73 @@ html[data-theme="dark"] .item-card .thumb { background: linear-gradient(#45484b,
 .guest-btn:hover { background: #5a5a5a; }
 .guest-signup { margin-right: 8px; align-self: center; }
 .guest-note { border-left: 4px solid #e8413c; }
+.profile-title { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 3px; background: #e8f3ff; color: #0b6ab0; border: 1px solid #9cc8ee; font-size: 12px; font-weight: 700; }
+
+/* ================= Control Center 5.0 "Classic": compact, like the old admin panel ================= */
+.adm.adm-classic { grid-template-columns: 178px 1fr; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.25); border: 1px solid #9aa5b5; font-size: 13px; }
+.adm-classic.mini { grid-template-columns: 52px 1fr; }
+.adm-classic .adm-side { border-radius: 4px 0 0 4px; padding: 0 0 8px; gap: 0; background: linear-gradient(180deg, #e8edf3, #d6dde7); color: #1d2a3a; border-right: 1px solid #9aa5b5; }
+.adm-classic .adm-brand { padding: 8px 10px; margin: 0 0 4px; background: linear-gradient(180deg, #3b7fd4, #1756a8); color: #fff; border-bottom: 1px solid #0d3f80; }
+.adm-classic .adm-brand-sub, .adm-classic .adm-ver { color: #cfe3ff; }
+.adm-classic .adm-logo { background: #fff; color: #1756a8; box-shadow: none; }
+.adm-classic .adm-fold { color: #fff; }
+.adm-classic .adm-link { border-radius: 0; padding: 7px 10px; font-size: 13px; font-weight: 700; color: #1d2a3a; border-bottom: 1px solid #c3ccd8; }
+.adm-classic .adm-link:hover { background: #f5f8fc; color: #1756a8; }
+.adm-classic .adm-link.active { background: #fff; color: #1756a8; box-shadow: inset 4px 0 0 #1f6fd1; }
+.adm-classic .adm-link.active::before { display: none; }
+.adm-classic .adm-sub-n { margin-left: auto; font-size: 10px; color: #6b7a8d; font-weight: 400; }
+.adm-classic .adm-count.on { margin-left: 4px; }
+.adm-classic .adm-side-foot { color: #4b5a6e; font-size: 11px; padding: 8px 10px 0; }
+.adm-classic .adm-main { border-radius: 0 4px 4px 0; background: #fbfcfd; }
+.adm-classic .adm-top { padding: 6px 12px; gap: 8px; background: linear-gradient(180deg, #f4f6f9, #e3e8ef); border-bottom: 1px solid #9aa5b5; }
+.adm-classic .adm-page-title { font-size: 15px; gap: 6px; }
+.adm-classic .adm-crumb { color: #8a96a6; }
+.adm-classic .adm-search { height: 28px; border-radius: 3px; }
+.adm-classic .adm-body { padding: 10px 12px 20px; }
+.adm-classic .adm-body .panel, .adm-classic .adm-card { border-radius: 3px; border: 1px solid #b8c2cf; box-shadow: none; padding: 0 10px 10px; margin-bottom: 10px; background: #fff; }
+.adm-classic .adm-body .panel > h3:first-child, .adm-classic .adm-card-head { margin: 0 -10px 8px; padding: 5px 10px; font-size: 13px; color: #fff; background: linear-gradient(180deg, #4a8ad8, #2263b5); border-bottom: 1px solid #154c92; border-radius: 2px 2px 0 0; }
+.adm-classic .adm-body h3, .adm-classic .adm-body h4 { font-size: 13px; }
+.adm-classic .btn { border-radius: 3px; }
+.adm-classic .btn-small { padding: 3px 9px; font-size: 12px; }
+.adm-classic .input { padding: 5px 8px; border-radius: 2px; }
+/* the classic tabs of a section */
+.adm-subtabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 12px 0; background: #e3e8ef; border-bottom: 1px solid #9aa5b5; }
+.adm-subtabs:empty { display: none; }
+.adm-subtab { border: 1px solid #9aa5b5; border-bottom: 0; background: linear-gradient(180deg, #fdfdfe, #dfe5ec); color: #1d2a3a; font: inherit; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 3px 3px 0 0; cursor: pointer; display: flex; align-items: center; gap: 5px; margin-bottom: -1px; }
+.adm-subtab:hover { background: #fff; }
+.adm-subtab.active { background: #fbfcfd; color: #1756a8; border-bottom: 1px solid #fbfcfd; }
+/* classic tool boxes and tables */
+.cl-box { border: 1px solid #b8c2cf; border-radius: 3px; padding: 6px 10px 10px; margin: 0 0 10px; background: #fff; }
+.cl-box legend { font-weight: 700; font-size: 12px; color: #1756a8; padding: 0 4px; }
+.cl-box .input + .cl-btn, .cl-box textarea + .cl-btn { margin-top: 6px; }
+.cl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 5px; }
+.cl-btn { font: inherit; font-size: 12px; font-weight: 700; padding: 5px 8px; border: 1px solid #8f9bab; border-radius: 3px; background: linear-gradient(180deg, #ffffff, #dde3ea); color: #1d2a3a; cursor: pointer; text-align: center; }
+.cl-btn:hover { background: linear-gradient(180deg, #ffffff, #cfd9e6); border-color: #1f6fd1; }
+.cl-btn:active { background: #cfd9e6; }
+.cl-btn.red { color: #b0141e; border-color: #c98c90; }
+.cl-btn.red:hover { background: linear-gradient(180deg, #fff, #f6d5d7); border-color: #b0141e; }
+.cl-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 10px; }
+.cl-table th, .cl-table td { border: 1px solid #d3dae3; padding: 3px 7px; text-align: left; }
+.cl-table th { background: #eef2f7; width: 42%; font-weight: 700; color: #3d4b5e; }
+.cl-table tr:nth-child(even) td { background: #f8fafc; }
+.cl-cols { display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; align-items: start; }
+@media (max-width: 900px) { .cl-cols { grid-template-columns: 1fr; } .adm.adm-classic { grid-template-columns: 1fr; } }
+/* the player window: a classic window instead of a modern drawer */
+.adm-drawer-panel:has(.cl-tools), .adm-drawer-panel { font-size: 13px; }
+.adm-drawer .adm-dhead { background: linear-gradient(180deg, #4a8ad8, #2263b5); color: #fff; }
+.adm-drawer .adm-dhead .muted, .adm-drawer .adm-dhead a:not(.btn) { color: #dbe9ff; }
+.adm-drawer .adm-dtabs button { border-radius: 3px 3px 0 0; font-size: 12px; padding: 5px 10px; }
+:root[data-theme="dark"] .adm.adm-classic .adm-side { background: linear-gradient(180deg, #232a35, #1b212b); color: #d5deea; border-color: #3a4556; }
+:root[data-theme="dark"] .adm-classic .adm-link { color: #d5deea; border-color: #343e4d; }
+:root[data-theme="dark"] .adm-classic .adm-link.active { background: #2c3644; color: #8cc4ff; }
+:root[data-theme="dark"] .adm-classic .adm-main, :root[data-theme="dark"] .adm-subtab.active { background: #1e242d; border-bottom-color: #1e242d; }
+:root[data-theme="dark"] .adm-classic .adm-top, :root[data-theme="dark"] .adm-subtabs { background: #262e39; border-color: #3a4556; }
+:root[data-theme="dark"] .adm-subtab { background: #2c3644; color: #d5deea; border-color: #3a4556; }
+:root[data-theme="dark"] .cl-box, :root[data-theme="dark"] .adm-classic .adm-body .panel { background: #232a35; border-color: #3a4556; }
+:root[data-theme="dark"] .cl-btn { background: linear-gradient(180deg, #364152, #2a3341); color: #e3eaf3; border-color: #4a5668; }
+:root[data-theme="dark"] .cl-table th { background: #2c3644; color: #c5d0de; }
+:root[data-theme="dark"] .cl-table th, :root[data-theme="dark"] .cl-table td { border-color: #3a4556; }
+:root[data-theme="dark"] .cl-table tr:nth-child(even) td { background: #262e39; }
+.adm-classic .adm-logo { background: rgba(255,255,255,.18) !important; color: #fff !important; border: 1px solid rgba(255,255,255,.4); }
+.adm-classic .adm-hero, .adm-classic .adm-welcome { background: linear-gradient(180deg, #4a8ad8, #1f5fae) !important; border-radius: 3px !important; padding: 12px 14px !important; border: 1px solid #154c92; box-shadow: none !important; }
+.adm-classic .adm-card, .adm-classic .adm-stat, .adm-classic .adm-chip { border-radius: 3px !important; box-shadow: none !important; }

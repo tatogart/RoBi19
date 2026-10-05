@@ -2151,6 +2151,9 @@ test('guests: no password, no Robits, guest look, deleted on logout', async () =
   const bee = Object.values(srv.db.data.items).find((i) => i.name === 'Busy Bee Buddy');
   assert.equal((await call('POST', `/catalog/${bee.id}/buy`, {}, g.cookie)).status, 403);
   assert.ok(!srv.db.data.inventory[u.id].includes(bee.id));
+  assert.equal((await call('POST', '/games', { name: 'Guest Game', template: 'baseplate' }, g.cookie)).status, 403);
+  // softer: promo codes are fine (no Robits though)
+  assert.notEqual((await call('POST', '/promocodes/redeem', { code: 'NOPE-NOPE' }, g.cookie)).status, 403);
   // can't log in with a password
   assert.equal((await call('POST', '/auth/login', { username: u.username, password: '' })).status, 401);
   // logging out deletes the account
@@ -2184,4 +2187,56 @@ test('upload fees are charged for items made before the fee (or the items go)', 
     assert.ok(E.transactions.some((t) => t.userId === poor && t.desc === 'Upload fee: Poor Tee'));
     await s2.close();
   } finally { fs.rmSync(d2, { recursive: true, force: true }); }
+});
+
+test('Control Center 5.0: player tools and site tools', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'ToolTarget1', password: 'secret123' });
+  const id = p.data.user.id;
+  const tool = (op, extra = {}) => call('POST', `/admin/users/${id}/tool`, { op, ...extra }, admin);
+  await call('PATCH', '/users/me', { blurb: 'hello', status: 'hi' }, p.cookie);
+  assert.equal((await tool('wipeProfile')).status, 200);
+  assert.equal(srv.db.data.users[id].blurb, '');
+  assert.equal((await tool('setTitle', { title: 'Tester' })).status, 200);
+  assert.equal((await call('GET', `/users/${id}`)).data.user.title, 'Tester');
+  assert.equal((await tool('lockName')).status, 200);
+  assert.equal((await call('POST', '/account/username', { username: 'ToolTarget2', password: 'secret123' }, p.cookie)).status, 403);
+  assert.equal((await tool('systemMessage', { subject: 'Hi', body: 'From the team' })).status, 200);
+  assert.ok(srv.db.data.messages.some((m) => m.to === id && m.body === 'From the team'));
+  for (const op of ['resetAvatar', 'starterItems', 'clearFriends', 'resetStipend', 'unpublishGames', 'deleteItems', 'clearMessages', 'clearWarnings', 'cancelTrades', 'clearOutfits', 'clearWishlist', 'resetBadges']) {
+    const r = await tool(op);
+    assert.equal(r.status, 200, op + ' ' + JSON.stringify(r.data));
+  }
+  assert.equal((await tool('contentDeleted')).status, 200);
+  assert.equal(srv.db.data.users[id].username, 'ContentDeleted_' + id);
+  assert.equal((await tool('nope')).status, 400);
+  // not for players
+  assert.equal((await call('POST', `/admin/users/${id}/tool`, { op: 'wipeProfile' }, p.cookie)).status, 403);
+  // site tools
+  const t = await call('GET', '/admin/tools', null, admin);
+  assert.equal(t.status, 200);
+  assert.ok(t.data.stats.players > 0 && Array.isArray(t.data.richest));
+  assert.equal((await call('POST', '/admin/tools', { op: 'nameBlacklist', words: 'badword, meanie' }, admin)).status, 200);
+  assert.equal((await call('POST', '/auth/signup', { username: 'Meanie123', password: 'secret123' })).status, 400);
+  assert.equal((await call('POST', '/admin/tools', { op: 'nameBlacklist', words: '' }, admin)).status, 200);
+  assert.equal((await call('POST', '/admin/tools', { op: 'welcome', text: 'Have fun!' }, admin)).status, 200);
+  const n = await call('POST', '/auth/signup', { username: 'Welcomed1', password: 'secret123' });
+  assert.ok(srv.db.data.messages.some((m) => m.to === n.data.user.id && m.body === 'Have fun!'));
+  await call('POST', '/admin/tools', { op: 'welcome', text: '' }, admin);
+  await call('POST', '/auth/guest');
+  assert.equal((await call('POST', '/admin/tools', { op: 'guests', on: false }, admin)).status, 200);
+  assert.equal((await call('POST', '/auth/guest')).status, 403);
+  await call('POST', '/admin/tools', { op: 'guests', on: true }, admin);
+  assert.equal((await call('POST', '/admin/tools', { op: 'deleteGuests' }, admin)).status, 200);
+  assert.ok(!Object.values(srv.db.data.users).some((u) => u.guest));
+  for (const op of ['resetStipends', 'purgeSessions', 'clearChatlog', 'clearAnnouncement']) assert.equal((await call('POST', '/admin/tools', { op }, admin)).status, 200, op);
+  const price = Object.values(srv.db.data.items).find((i) => !i.custom && !i.limited && !i.offsale && i.price >= 10);
+  const before = price.price;
+  await call('POST', '/admin/tools', { op: 'bulkPrice', percent: 100 }, admin);
+  assert.equal(price.price, before * 2);
+  await call('POST', '/admin/tools', { op: 'bulkPrice', percent: -50 }, admin);
+  assert.equal(price.price, before);
+  const csv = await fetch(base + '/api/admin/tools/users.csv', { headers: { cookie: admin } });
+  assert.ok((await csv.text()).startsWith('id,username'));
+  assert.equal((await call('POST', '/admin/tools', { op: 'deleteGuests' }, p.cookie)).status, 403);
 });

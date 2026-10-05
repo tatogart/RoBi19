@@ -13,6 +13,11 @@ app.append(el('div', { class: 'dev-banner' },
     el('a', { class: 'btn btn-green btn-large', href: '/studio', text: 'Open Robis Studio' }),
     el('button', { class: 'btn btn-large', text: 'Create New Game', onclick: createGame }),
     el('a', { class: 'btn btn-large', href: '/create', text: 'Create Item' }))));
+// guests can look around Studio but not make games
+if (me && me.guest) {
+  app.append(el('div', { class: 'panel guest-note' }, el('b', { text: 'Guests can\'t create games. Sign up to start making games!' }), ' ', el('a', { class: 'btn btn-green btn-small', href: '/?signup=1', text: 'Sign Up' })));
+  for (const b of app.querySelectorAll('.dev-banner button, .dev-banner a[href="/create"]')) b.remove();
+}
 const list = el('div', { class: 'panel' }, spinner());
 app.append(el('h2', { text: 'My Games' }), list);
 // Team Create: games other people added you to.
