@@ -79,6 +79,7 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
   }
   if (me) refreshCounts(me);
   if (me && me.warning) showWarning(me.warning);
+  else if (me && me.levelUp) showLevelUp(me.levelUp);
   // Inside a Discord Activity: what the player is doing goes in their Discord status.
   if (site && site.discord && inDiscord()) {
     const where = { home: 'On the home page', games: 'Looking for a game', catalog: 'Shopping in the catalog', avatar: 'Changing their avatar', create: 'Creating', hunt: 'On The Hunt', profile: 'Looking at a profile', trades: 'Trading', groups: 'In groups', admin: 'In the Admin Panel' }[active] || 'Browsing Robis';
@@ -248,6 +249,21 @@ function buildFooter(site) {
 }
 
 export { toast };
+
+// Level up! (server/progress.js): shown once, with confetti.
+function showLevelUp(l) {
+  import('./fun.js').then((f) => f.confetti());
+  modal({
+    title: tr('Level up!'),
+    body: el('div', { class: 'levelup-popup' },
+      el('div', { class: 'lvl-badge big', text: String(l.level) }),
+      el('h3', { text: tr('You reached level') + ' ' + l.level + '!' }),
+      l.robits ? el('p', { text: `+R$ ${l.robits}` }) : null,
+      el('p', { class: 'small muted', text: tr('Play games and finish Daily Quests to level up.') })),
+    buttons: [{ text: tr('Awesome!'), cls: 'btn-green' }],
+    onClose: () => api.post('/quests/levelup/seen').catch(() => {}),
+  });
+}
 
 // A warning from the Robis team: shown once, until the player presses OK.
 function showWarning(w) {

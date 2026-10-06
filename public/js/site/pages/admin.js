@@ -124,6 +124,7 @@ const TABS = {
   spin: { label: 'Daily Spin', group: 'Economy', icon: 'wheel', draw: drawSpin, admin: true },
   sales: { label: 'Sales', group: 'Economy', icon: 'tag', draw: drawSales, admin: true },
   economy: { label: 'Economy', group: 'Economy', icon: 'coins', draw: drawEconomy, admin: true },
+  progress: { label: 'Quests & Levels', group: 'Economy', icon: 'star', draw: drawProgress, admin: true },
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
   polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
@@ -236,7 +237,8 @@ function lazyHead(u) {
 }
 
 function drawPlayers() {
-  body.replaceChildren(el('div', { class: 'row wrap', style: { marginBottom: '12px' } }, search, filter), list);
+  body.replaceChildren(el('div', { class: 'row wrap', style: { marginBottom: '12px' } }, search, filter), bulkBar, list);
+  drawBulk();
   drawList();
 }
 const FILTERS = {
@@ -288,10 +290,44 @@ function pills(u) {
   ];
 }
 
+// ---- many players at once: tick them, then pick an action in the bar
+const picked = new Map(); // id -> user
+const bulkBar = el('div', { class: 'bulk-bar' });
+function drawBulk() {
+  bulkBar.classList.toggle('on', picked.size > 0);
+  if (!picked.size) { bulkBar.replaceChildren(); return; }
+  const B = (t, fn, cls = '') => el('button', { class: 'cl-btn ' + cls, text: t, onclick: fn });
+  bulkBar.replaceChildren(
+    el('b', { class: 'bulk-count', text: `${picked.size} selected` }),
+    perm('moderator') ? B('Warn', () => bulkAsk('Warn the selected players', 'What is the warning for?', (u, v) => api.post(`/admin/users/${u.id}/warn`, { reason: v }))) : null,
+    perm('moderator') ? B('Message', () => bulkAsk('Message the selected players', 'Message from the Robis team', (u, v) => api.post(`/admin/users/${u.id}/tool`, { op: 'systemMessage', body: v }))) : null,
+    perm('economy') ? B('Give Robits', () => bulkAsk('Give Robits to the selected players', 'How many? (minus takes)', (u, v) => api.post(`/admin/users/${u.id}/robits`, { amount: Math.trunc(+v || 0) }), 'number')) : null,
+    me.isAdmin ? B('Give XP', () => bulkAsk('Give XP to the selected players', 'How much XP?', (u, v) => api.post(`/admin/users/${u.id}/xp`, { amount: Math.trunc(+v || 0) }), 'number')) : null,
+    perm('moderator') ? B('Ban 1 day', () => bulkAsk('Ban the selected players for 1 day', 'Reason', (u, v) => api.post(`/admin/users/${u.id}/ban`, { banned: true, duration: '1d', reason: v })), 'red') : null,
+    B('Clear', () => { picked.clear(); drawBulk(); drawList(); }));
+}
+function bulkAsk(title, placeholder, fn, type = 'text') {
+  const input = el(type === 'number' ? 'input' : 'textarea', { class: 'input', placeholder, ...(type === 'number' ? { type: 'number', value: 100 } : { rows: 3, maxlength: 500 }) });
+  const users = [...picked.values()].filter((u) => u.id !== me.id);
+  modal({
+    title, width: 480,
+    body: el('div', {}, el('p', { class: 'small muted no-i18n', text: users.map((u) => u.username).join(', ') }), input),
+    buttons: [{ text: 'Do it', cls: 'btn-primary', onClick: async () => {
+      const v = input.value.trim();
+      if (!v) { toast('Fill it in first.', 'error'); return false; }
+      let ok = 0, failed = 0;
+      for (const u of users) { try { const r = await fn(u, v); if (r && r.user) replaceUser(r.user); ok++; } catch { failed++; } }
+      toast(`Done: ${ok}` + (failed ? ` · failed: ${failed}` : ''), failed ? 'error' : 'success');
+      picked.clear(); drawBulk(); load();
+    } }, { text: 'Cancel' }],
+  });
+}
+
 function row(u) {
   const self = u.id === me.id;
   const st = u.presence?.status || 'offline';
-  return el('div', { class: 'admin-row' + (u.banned ? ' banned' : '') },
+  const tick = self ? el('span', { class: 'bulk-tick' }) : el('input', { type: 'checkbox', class: 'bulk-tick', checked: picked.has(u.id), 'aria-label': 'Select', onchange: (e) => { if (e.target.checked) picked.set(u.id, u); else picked.delete(u.id); drawBulk(); } });
+  return el('div', { class: 'admin-row' + (u.banned ? ' banned' : '') }, tick,
     el('a', { class: 'admin-head', href: `/profile?id=${u.id}` }, lazyHead(u), st !== 'offline' ? el('span', { class: 'presence-dot ' + st }) : null),
     el('div', { class: 'admin-info' },
       el('div', {}, el('a', { href: `/profile?id=${u.id}` }, el('b', { class: 'no-i18n', text: u.username })), nameBadges(u), ...pills(u)),
@@ -462,6 +498,11 @@ async function manage(u0, tab = 'overview') {
           el('button', { class: 'btn btn-small', text: '-1,000', onclick: () => { amount.value = -1000; } })),
         el('div', { class: 'row', style: { marginTop: '8px' } }, amount,
           el('button', { class: 'btn btn-green', text: 'Apply', onclick: () => doAct(`/admin/users/${u.id}/robits`, { amount: +amount.value }, 'Robits updated', 'economy') }))),
+      me.isAdmin ? el('div', { class: 'manage-section' }, el('h4', { text: 'Level' }), (() => {
+        const xp = el('input', { class: 'input', type: 'number', value: 100, step: 50, style: { width: '120px' } });
+        return el('div', { class: 'row wrap' }, el('span', { class: 'lvl-badge', text: String(u.level || 1) }), el('span', { class: 'small muted no-i18n', text: `${fmtFull(u.xp || 0)} XP` }), xp,
+          el('button', { class: 'btn btn-primary', text: 'Give XP', onclick: async () => { try { const r = await api.post(`/admin/users/${u.id}/xp`, { amount: +xp.value }); toast(`Level ${r.level} · ${fmtFull(r.xp)} XP`, 'success'); reopen('economy'); } catch (e) { toast(e.message, 'error'); } } }));
+      })()) : null,
       el('div', { class: 'manage-section' }, el('h4', { text: 'Set the balance to exactly' }),
         el('div', { class: 'row' }, exact, el('button', { class: 'btn btn-primary', text: 'Set', onclick: () => doAct(`/admin/users/${u.id}/robitsset`, { value: +exact.value }, 'Balance set', 'economy') }))),
       el('div', { class: 'manage-section' }, el('h4', { text: 'Builders Club' }),
@@ -2351,6 +2392,44 @@ async function drawOverwatch() {
         el('span', { class: 'muted', text: ` · really: ${a.kind}` })),
       el('span', { class: 'small ' + (a.correct ? 'ow-right' : 'ow-wrong'), text: a.correct ? '✓ right' : '✗ wrong' }),
       el('span', { class: 'muted small', text: timeAgo(a.t) })))) : el('div', { class: 'muted small', text: 'No answers yet.' })));
+}
+
+// ---------------------------------------------------------------- quests & levels
+async function drawProgress() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/progress'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const P = r.settings;
+  const save = async (b, msg = 'Saved') => { try { await api.post('/admin/progress', b); toast(msg, 'success'); drawProgress(); } catch (e) { toast(e.message, 'error'); } };
+  const mult = el('input', { class: 'input', type: 'number', step: 0.5, min: 0, max: 10, value: P.rewardMult ?? 1, style: { width: '90px' } });
+  const lvl = el('input', { class: 'input', type: 'number', min: 0, max: 1000, value: P.levelReward ?? 10, style: { width: '90px' } });
+  const bMult = segBtns([['2', 'x2'], ['3', 'x3'], ['5', 'x5']], '2');
+  const bHours = segBtns([['1', '1 hour'], ['6', '6 hours'], ['24', '1 day'], ['72', '3 days']], '24');
+  const box = (name, ...kids) => el('fieldset', { class: 'cl-box' }, el('legend', { text: name }), ...kids);
+  const boostOn = P.boost && P.boost.until > Date.now();
+  body.replaceChildren(el('div', { class: 'cl-cols' },
+    el('div', {},
+      box('Daily Quests & Levels',
+        el('p', { class: 'small muted', text: 'Players get 3 quests a day and XP for playing (2 XP a minute), for visiting every day and for quests. Every level up gives Robits.' }),
+        el('div', { class: 'cl-grid' }, el('button', { class: 'cl-btn' + (P.on === false ? '' : ' red'), text: P.on === false ? 'Turn quests on' : 'Turn quests off', onclick: () => save({ on: P.on === false }) }))),
+      box('Rewards',
+        el('div', { class: 'row', style: { marginBottom: '6px' } }, el('span', { text: 'Quest rewards ×' }), mult),
+        el('div', { class: 'row', style: { marginBottom: '6px' } }, el('span', { text: 'Robits per level (× the level)' }), lvl),
+        el('button', { class: 'cl-btn', text: 'Save', onclick: () => save({ rewardMult: +mult.value, levelReward: +lvl.value }) })),
+      box('XP event',
+        boostOn ? el('p', { class: 'small', text: `🔥 x${P.boost.mult} XP until ${new Date(P.boost.until).toLocaleString()}` }) : el('p', { class: 'small muted', text: 'No XP event right now.' }),
+        bMult, el('div', { style: { height: '6px' } }), bHours,
+        el('div', { class: 'cl-grid', style: { marginTop: '8px' } },
+          el('button', { class: 'cl-btn', text: 'Start the XP event', onclick: () => save({ boost: { mult: +bMult.value, hours: +bHours.value } }, 'XP event started') }),
+          boostOn ? el('button', { class: 'cl-btn red', text: 'Stop it', onclick: () => save({ boost: { hours: 0 } }, 'XP event stopped') }) : null)),
+      box('All quests', el('table', { class: 'cl-table' }, el('tbody', {}, r.quests.map((q) => el('tr', {}, el('th', { text: q.text }), el('td', { class: 'no-i18n', text: `R$ ${q.robits} · ${q.xp} XP` }))))))),
+    el('div', {},
+      box('Statistics', el('table', { class: 'cl-table' }, el('tbody', {},
+        [['Players with a level', fmtFull(r.stats.withLevel)], ['Quests done today', fmtFull(r.stats.questsToday)], ['Quests done in all', fmtFull(r.stats.questsAll)]]
+          .map(([k, v]) => el('tr', {}, el('th', { text: k }), el('td', { text: v })))))),
+      box('Highest levels', el('table', { class: 'cl-table' }, el('tbody', {}, r.stats.top.map((u, i) => el('tr', {},
+        el('th', {}, el('span', { text: `${i + 1}. ` }), el('a', { href: '#', class: 'no-i18n', text: u.username, onclick: (e) => { e.preventDefault(); manage(u); } })),
+        el('td', { class: 'no-i18n', text: `Lv ${u.level} · ${fmtFull(u.xp)} XP` })))))))));
 }
 
 // ---------------------------------------------------------------- alt accounts

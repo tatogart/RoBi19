@@ -10,6 +10,7 @@ export function handleConnection(ws, user, { db, manager }) {
   }
   let session = null;
   let gameServer = null;
+  let playStart = 0; // when a real game started (for the XP of the minutes played)
   let team = null; // Team Create room membership
   ws.on('message', (raw) => {
     let msg;
@@ -47,6 +48,9 @@ export function handleConnection(ws, user, { db, manager }) {
           countPlay(db.data, user.id);
           user.recentGames = [gameId, ...(user.recentGames || []).filter((g) => g !== gameId)].slice(0, 20);
           db.save();
+          // Daily Quests and XP (server/progress.js)
+          if (manager.progress) { manager.progress(user.id, 'play'); manager.progress(user.id, 'game', 1, { gameId }); }
+          playStart = Date.now();
         }
         session = gameServer.join(ws, user, avatar);
       } catch (e) {
@@ -59,6 +63,7 @@ export function handleConnection(ws, user, { db, manager }) {
     try { gameServer.handle(session, msg); } catch (e) { gameServer.log('error', 'Internal: ' + e.message); }
   });
   ws.on('close', () => {
+    if (playStart && manager.playMinutes && session) manager.playMinutes(session.user ? session.user.id : 0, (Date.now() - playStart) / 60000);
     if (team) leaveTeam(team);
     if (session && gameServer && !gameServer.closed) gameServer.leave(session);
   });

@@ -2322,3 +2322,49 @@ test('alt accounts: grouped by a shared device', async () => {
   assert.equal(g.shared[0].kind, 'device');
   assert.equal((await call('GET', '/admin/alts', null, a.cookie)).status, 403);
 });
+
+test('levels and Daily Quests: XP for playing, quests count, rewards', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'Quester1', password: 'secret123' });
+  const id = p.data.user.id;
+  // the first visit of the day gives XP
+  await call('GET', '/auth/me', null, p.cookie);
+  let q = (await call('GET', '/quests', null, p.cookie)).data;
+  assert.equal(q.level, 1);
+  assert.equal(q.xp, 20);
+  assert.equal(q.quests.length, 3);
+  // force known quests, then do them
+  const u = srv.db.data.users[id];
+  u.quests.list = [{ id: 'fav', progress: 0, claimed: false }, { id: 'vote', progress: 0, claimed: false }, { id: 'play3', progress: 0, claimed: false }];
+  const game = (await call('GET', '/games?sort=popular')).data.games[0];
+  assert.equal((await call('POST', '/quests/fav/claim', {}, p.cookie)).status, 400); // not done yet
+  await call('POST', `/games/${game.id}/favorite`, {}, p.cookie);
+  await call('POST', `/games/${game.id}/vote`, { vote: 1 }, p.cookie);
+  q = (await call('GET', '/quests', null, p.cookie)).data;
+  assert.ok(q.quests.find((x) => x.id === 'fav').done && q.quests.find((x) => x.id === 'vote').done);
+  const before = u.robits;
+  const c = await call('POST', '/quests/fav/claim', {}, p.cookie);
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  assert.equal(c.data.robits, before + 10);
+  assert.equal(c.data.xp, 45);
+  assert.equal((await call('POST', '/quests/fav/claim', {}, p.cookie)).status, 400); // once
+  // playing a game counts too
+  const ws = await join(p.cookie, { placeId: game.id });
+  await ws.wait((m) => m.t === 'welcome');
+  assert.equal(srv.db.data.users[id].quests.list.find((x) => x.id === 'play3').progress, 1);
+  ws.ws.close();
+  // levels: admin XP, level up gives Robits and a popup
+  const r = await call('POST', `/admin/users/${id}/xp`, { amount: 300 }, admin);
+  assert.equal(r.data.level, 3);
+  const me2 = (await call('GET', '/auth/me', null, p.cookie)).data.user;
+  assert.equal(me2.levelUp.level, 3);
+  assert.equal((await call('GET', `/users/${id}`)).data.user.level, 3);
+  await call('POST', '/quests/levelup/seen', {}, p.cookie);
+  assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.levelUp, null);
+  assert.ok((await call('GET', '/leaderboard/levels')).data.players.some((x) => x.id === id));
+  // admin settings
+  assert.equal((await call('POST', '/admin/progress', { boost: { mult: 2, hours: 1 } }, admin)).status, 200);
+  assert.ok((await call('GET', '/quests', null, p.cookie)).data.boost);
+  await call('POST', '/admin/progress', { boost: { hours: 0 } }, admin);
+  assert.equal((await call('GET', '/admin/progress', null, p.cookie)).status, 403);
+});

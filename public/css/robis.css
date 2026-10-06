@@ -1509,3 +1509,48 @@ html[data-theme="dark"] .adm-classic label, html[data-theme="dark"] .adm-classic
   .modal-foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
   .modal-foot .btn { flex: 1 1 auto; }
 }
+
+/* ================= Big update: levels, Daily Quests, the new home ================= */
+.greet-card { display: flex; gap: 18px; align-items: center; padding: 16px 18px; border-radius: 10px; background: linear-gradient(135deg, rgba(0,162,255,.10), rgba(2,183,87,.08)), var(--panel); box-shadow: var(--shadow); }
+.greet-card .greet-head { width: 112px; height: 112px; border-radius: 50%; overflow: hidden; background: #d4d4d4; flex: none; box-shadow: 0 0 0 4px var(--panel), 0 0 0 6px rgba(0,162,255,.35); }
+.greet-card .greet-head img { width: 100%; height: 100%; object-fit: cover; }
+.greet-main { flex: 1; min-width: 0; }
+.greet-level { margin-top: 10px; max-width: 460px; }
+.lvl-row { display: flex; align-items: center; gap: 10px; }
+.lvl-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 9px; font-weight: 900; font-size: 14px; color: #fff; background: linear-gradient(135deg, #ffb300, #ff6d00); box-shadow: inset 0 -2px 0 rgba(0,0,0,.18); vertical-align: middle; margin-left: 4px; }
+.lvl-badge::before { content: 'Lv'; font-size: 9px; font-weight: 800; margin-right: 2px; opacity: .85; }
+.lvl-badge.small { min-width: 24px; height: 22px; font-size: 12px; border-radius: 7px; }
+.lvl-badge.big { min-width: 74px; height: 74px; font-size: 34px; border-radius: 20px; margin: 0 auto 6px; display: flex; }
+.lvl-bar { flex: 1; height: 10px; border-radius: 6px; background: var(--gray-bg); overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,.12); }
+.lvl-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffb300, #ff6d00); border-radius: 6px; transition: width .4s; }
+.lvl-boost { color: #e8590c; font-weight: 700; margin-top: 4px; }
+.today-grid { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; }
+.today-card { background: var(--panel); border-radius: 10px; box-shadow: var(--shadow); padding: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.today-card .btn { margin-top: auto; }
+.today-card.done { opacity: .75; }
+.today-ic { font-size: 30px; line-height: 1; }
+.today-card .spin-mini { width: 32px; height: 32px; }
+.quests-card { gap: 8px; }
+.quest { width: 100%; padding: 6px 8px; border-radius: 8px; background: var(--gray-bg); }
+.quest.done { background: rgba(2,183,87,.12); }
+.quest.claimed { opacity: .55; }
+.quest-text { font-size: 14px; font-weight: 600; }
+.quest-bar { height: 6px; border-radius: 4px; background: rgba(0,0,0,.08); overflow: hidden; margin: 4px 0; }
+.quest-bar i { display: block; height: 100%; background: #02b757; }
+.quest-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 22px; }
+.top-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; padding: 10px; }
+.top-level { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; color: inherit; text-decoration: none; }
+.top-level:hover { background: var(--gray-bg); }
+.top-rank { width: 26px; text-align: center; font-weight: 800; }
+.top-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.levelup-popup { text-align: center; }
+.levelup-popup h3 { margin: 6px 0; }
+@media (max-width: 800px) { .today-grid { grid-template-columns: 1fr 1fr; } .quests-card { grid-column: 1 / -1; } }
+@media (max-width: 600px) { .greet-card { padding: 12px; gap: 12px; } .greet-card .greet-head { width: 76px; height: 76px; } .greet-card h1 { font-size: 22px; } }
+html[data-theme="dark"] .quest-bar { background: rgba(255,255,255,.1); }
+/* admin: many players at once */
+.bulk-bar { display: none; position: sticky; top: 0; z-index: 4; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; margin-bottom: 8px; border-radius: 6px; background: #fff8d6; border: 1px solid #e8c54a; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.bulk-bar.on { display: flex; }
+.bulk-count { margin-right: 6px; }
+.bulk-tick { width: 18px; height: 18px; flex: none; margin-right: 8px; accent-color: #1f6fd1; }
+html[data-theme="dark"] .bulk-bar { background: #3a3220; border-color: #6b5a24; }

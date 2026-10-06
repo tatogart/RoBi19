@@ -61,6 +61,7 @@ const header = el('div', { class: 'panel profile-header' },
     user.presence.status !== 'offline' ? el('span', { class: 'presence-dot ' + user.presence.status, style: { width: '26px', height: '26px', right: '10px', bottom: '10px' } }) : null),
   el('div', { class: 'profile-main' },
     el('div', { class: 'row' }, el('h1', { class: 'no-i18n', style: { margin: 0 }, text: user.username }), nameBadges(user) ? el('span', { class: 'name-badges big' }, ...nameBadges(user).childNodes) : null,
+      user.level ? el('span', { class: 'lvl-badge', title: `Level ${user.level} · ${fmtFull(user.xp || 0)} XP`, text: String(user.level) }) : null,
       user.title ? el('span', { class: 'profile-title no-i18n', text: user.title }) : null,
       MEMBERSHIP[user.membership] ? el('span', { class: 'pill', title: MEMBERSHIP[user.membership].name, style: { background: MEMBERSHIP[user.membership].color, color: '#fff' }, text: MEMBERSHIP[user.membership].short }) : null,
       null),
@@ -68,7 +69,9 @@ const header = el('div', { class: 'panel profile-header' },
     el('div', { class: 'muted small', text: presenceText(user.presence) }),
     el('div', { class: 'profile-counts' },
       el('a', { href: `/friends?id=${uid}` }, el('b', { text: fmtFull(user.friendCount) }), ' Friends'),
-      el('span', {}, el('b', { text: fmtFull(user.placeVisits) }), ' Place Visits')),
+      el('span', {}, el('b', { text: fmtFull(user.placeVisits) }), ' Place Visits'),
+      user.level ? el('span', {}, el('b', { text: 'Lv ' + user.level }), ' · ', el('span', { text: fmtFull(user.xp || 0) + ' XP' })) : null,
+      user.questsDone ? el('span', {}, el('b', { text: fmtFull(user.questsDone) }), ' Quests') : null),
     actions));
 app.append(header);
 

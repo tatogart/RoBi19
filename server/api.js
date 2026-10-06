@@ -19,6 +19,7 @@ import { installBots } from './bots.js';
 import { installControl } from './control.js';
 import { installAwards } from './awards.js';
 import { installClassic } from './classic.js';
+import { installProgress, levelOf } from './progress.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -246,6 +247,8 @@ export function createApi(db, manager, opts = {}) {
   // Filled in by server/social.js (sales, mutes, trade bans, appeals).
   // Control Center switches (server/control.js) can turn features off
   api.use((req, res, next) => (hooks.featureGate ? hooks.featureGate(req, res, next) : next()));
+  // Daily Quests count some requests (server/progress.js)
+  api.use((req, res, next) => { if (hooks.track) hooks.track(req, res); next(); });
   // What guests can't do (see /auth/guest): they try Robis out, nothing more.
   const GUEST_BLOCKS = [
     [/^\/groups$/, 'Guests can\'t create groups.'],
@@ -397,6 +400,7 @@ export function createApi(db, manager, opts = {}) {
     if (full) {
       out.blurb = u.blurb || '';
       out.title = u.adminTitle || ''; // a title the staff gave (Control Center: Player tools)
+      out.level = levelOf(u.xp || 0); out.xp = u.xp || 0; out.questsDone = u.questsDone || 0;
       out.friendCount = (D.friends[u.id] || []).length;
       out.badges = (D.badges[u.id] || []).slice(-50);
       out.placeVisits = Object.values(D.games).filter((g) => g.creatorId === u.id).reduce((a, g) => a + g.visits, 0);
@@ -422,6 +426,7 @@ export function createApi(db, manager, opts = {}) {
     overwatch: hooks.overwatchAccess(u), // Robis Overwatch in the menu
     awards: hooks.awardsLive ? hooks.awardsLive() : null, // Robis Awards in the menu (voting or results)
     guest: !!u.guest, // a guest account (see /auth/guest)
+    levelUp: u.levelUp || null, // a level-up popup not seen yet (server/progress.js)
     restrictions: hooks.restriction ? hooks.restriction(u) : { mute: 0, trade: 0 },
   });
 
@@ -2181,6 +2186,7 @@ export function createApi(db, manager, opts = {}) {
     items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
     warnings: (u.warnings || []).length, guest: !!u.guest, nameLocked: !!u.nameLocked, title: u.adminTitle || '',
     restrictions: hooks.restriction ? hooks.restriction(u) : {},
+    level: levelOf(u.xp || 0), xp: u.xp || 0,
   });
   const target = (req, res) => {
     const u = D.users[toInt(req.params.id)];
@@ -2221,6 +2227,8 @@ export function createApi(db, manager, opts = {}) {
     overwatch: (b) => `Overwatch: ${b.op || 'settings'}${b.user ? ' ' + String(b.user).slice(0, 30) : ''}`,
     abuse: (b) => `Admin Abuse: ${b.op === 'start' ? `started in ${D.games[toInt(b.gameId)]?.name || '?'}` : b.op === 'effect' ? `${b.effect} ${b.on ? 'on' : 'off'}` : b.op === 'once' ? b.effect : b.op === 'message' ? `message: ${String(b.text || '').slice(0, 80)}` : b.op === 'robits' ? `R$${Math.trunc(+b.amount || 0)} to everyone in the game` : b.op}`,
     polls: (b) => (b.op === 'create' ? `Poll: ${String(b.question || '').slice(0, 100)}` : `Poll #${+b.id}: ${b.op}`),
+    xp: (b) => `XP ${+b.amount > 0 ? '+' : ''}${Math.trunc(+b.amount || 0)}`,
+    progress: (b) => `Levels & quests: ${b.on === false ? 'off' : b.boost ? (b.boost.hours ? `XP x${b.boost.mult} for ${b.boost.hours}h` : 'boost off') : 'settings'}`,
     tool: (b) => `Player tool: ${String(b.op || '?').slice(0, 30)}`,
     tools: (b) => `Site tool: ${String(b.op || '?').slice(0, 30)}`,
     hunt: (b) => (b.action ? `The Hunt: ${b.action}${b.key ? ' ' + b.key : ''}${b.action === 'schedule' ? ' (times)' : ''}` : b.user ? `The Hunt: ${b.take ? 'took' : 'gave'} ${b.all ? 'all tokens' : 'a token'} ${b.take ? 'from' : 'to'} ${String(b.user).slice(0, 30)}` : `The Hunt settings${b.public !== undefined ? (b.public ? ' (open)' : ' (private)') : ''}`),
@@ -2670,6 +2678,7 @@ export function createApi(db, manager, opts = {}) {
   installControl(api, { db, manager, requireAdmin, requireStaff, bad, hooks, publicUser });
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
+  installProgress(api, { db, manager, requireUser, requireAdmin, bad, log, hooks });
   installClassic(api, { db, manager, requireAdmin, requirePerm, bad, log, hooks, adminUser, deleteAccount, isBanned, STARTER: { items: STARTER_ITEMS, wearing: STARTER_WEARING, body: STARTER_BODY } });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS, hooks });
 
