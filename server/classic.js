@@ -125,6 +125,53 @@ export function installClassic(api, ctx) {
     res.json({ ok: true, message: msg, user: adminUser(u) });
   });
 
+  // ---------------------------------------------------------------- alt accounts
+  // Groups of accounts that were used on the same device and/or IP
+  // (?by=device|ip|both, ?q=name to find one player's group). An IP that
+  // dozens of accounts share is a school or a phone network: left out.
+  const mask = (ip) => { const p = String(ip).split('.'); return p.length === 4 ? `${p[0]}.${p[1]}.*.*` : String(ip).slice(0, 9) + '…'; };
+  api.get('/admin/alts', requirePerm('moderator'), (req, res) => {
+    const by = ['device', 'ip', 'both'].includes(req.query.by) ? req.query.by : 'both';
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const list = Object.values(D.users).filter((u) => !u.system && !u.bot);
+    const keyUsers = new Map(); // "d:..." / "i:..." -> users
+    for (const u of list) {
+      if (by !== 'ip') for (const d of u.devices || []) { const k = 'd:' + d; if (!keyUsers.has(k)) keyUsers.set(k, []); keyUsers.get(k).push(u); }
+      if (by !== 'device') for (const i of u.ips || []) { if (i === '127.0.0.1' || i === '::1') continue; const k = 'i:' + i; if (!keyUsers.has(k)) keyUsers.set(k, []); keyUsers.get(k).push(u); }
+    }
+    // union-find: accounts linked by any shared key end up in one group
+    const parent = new Map();
+    const find = (x) => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+    for (const u of list) parent.set(u.id, u.id);
+    let bigNetworks = 0;
+    for (const [k, us] of keyUsers) {
+      if (us.length < 2) continue;
+      if (k.startsWith('i:') && us.length > 15) { bigNetworks++; continue; }
+      for (let i = 1; i < us.length; i++) { const a = find(us[0].id), b = find(us[i].id); if (a !== b) parent.set(a, b); }
+    }
+    const groups = new Map();
+    for (const u of list) { const r = find(u.id); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(u); }
+    const out = [];
+    for (const members of groups.values()) {
+      if (members.length < 2) continue;
+      if (q && !members.some((u) => u.username.toLowerCase().includes(q))) continue;
+      const ids = new Set(members.map((u) => u.id));
+      const shared = [];
+      for (const [k, us] of keyUsers) {
+        const inGroup = us.filter((u) => ids.has(u.id));
+        if (inGroup.length < 2 || (k.startsWith('i:') && us.length > 15)) continue;
+        shared.push({ kind: k[0] === 'd' ? 'device' : 'ip', label: k[0] === 'd' ? 'Device ' + k.slice(2, 8) : 'IP ' + mask(k.slice(2)), users: inGroup.map((u) => u.username) });
+      }
+      out.push({
+        size: members.length, banned: members.filter((u) => ctx.isBanned(u)).length,
+        members: members.sort((a, b) => a.created - b.created).map((u) => ({ id: u.id, username: u.username, created: u.created, lastOnline: u.lastOnline || 0, banned: ctx.isBanned(u), guest: !!u.guest, isAdmin: !!u.isAdmin, robits: u.robits || 0 })),
+        shared: shared.slice(0, 12),
+      });
+    }
+    out.sort((a, b) => b.banned - a.banned || b.size - a.size);
+    res.json({ groups: out.slice(0, 100), total: out.length, bigNetworks });
+  });
+
   // ---------------------------------------------------------------- the whole site
   const accounts = () => Object.values(D.users).filter((u) => !u.system);
   api.get('/admin/tools', requireAdmin, (req, res) => {

@@ -62,8 +62,12 @@ export class Viewport {
     this.hud.className = 'view-hud';
     el.append(this.hud);
     this._bind();
-    this.ro = new ResizeObserver(() => this.resize());
-    this.ro.observe(el);
+    // phones turning (Safari reports the new size late): check a few times
+    const settle = () => { this.resize(); for (const ms of [120, 350, 800]) setTimeout(() => this.resize(), ms); };
+    this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => this.resize()) : null;
+    if (this.ro) this.ro.observe(el);
+    addEventListener('orientationchange', settle);
+    if (window.visualViewport) visualViewport.addEventListener('resize', settle);
     this.last = performance.now();
     requestAnimationFrame((t) => this.frame(t));
   }

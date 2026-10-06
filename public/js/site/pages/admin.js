@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import { tr } from '../../i18n.js';
 import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner, nameBadges, itemCard, presenceText } from '../ui.js';
 import { BADGE_SVG, BADGE_TITLE } from '../../badges.js';
+import { avatarHeadshot } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'admin' });
 const app = document.getElementById('app');
@@ -111,6 +112,7 @@ const TABS = {
   notes: { label: 'Staff Notes', group: 'Overview', icon: 'note', draw: drawNotes },
   activity: { label: 'Activity', group: 'Overview', icon: 'pulse', draw: drawActivity },
   players: { label: 'Players', group: 'People', icon: 'users', draw: drawPlayers },
+  alts: { label: 'Alt Accounts', group: 'People', icon: 'eye', draw: drawAlts, perm: 'moderator' },
   reports: { label: 'Reports', group: 'People', icon: 'flag', draw: drawReports, perm: 'moderator' },
   appeals: { label: 'Appeals', group: 'People', icon: 'scale', draw: drawAppeals, perm: 'moderator' },
   chat: { label: 'Chat Log', group: 'People', icon: 'chat', draw: drawChatLog, perm: 'moderator' },
@@ -208,10 +210,30 @@ setInterval(pollLive, 15000);
 // ---------------------------------------------------------------- players
 const search = el('input', { class: 'input', placeholder: 'Search players' });
 const filter = el('select', { class: 'input', style: { width: 'auto', flex: 'none', minWidth: 0 } },
-  [['all', 'Everyone'], ['people', 'Without bots'], ['bots', '🤖 Bots'], ['online', 'Online'], ['banned', 'Banned'], ['warned', 'With warnings'], ['staff', 'Staff'], ['badges', 'With badges'], ['new', 'New today'], ['rich', 'Richest first']].map(([v, t]) => el('option', { value: v, text: t })));
+  [['all', 'Everyone'], ['players', 'Players (no bots, no guests)'], ['people', 'Without bots'], ['bots', '🤖 Bots'], ['guests', '👤 Guests'], ['online', 'Online'], ['banned', 'Banned'], ['warned', 'With warnings'], ['staff', 'Staff'], ['badges', 'With badges'], ['new', 'New today'], ['rich', 'Richest first']].map(([v, t]) => el('option', { value: v, text: t })));
 const list = el('div');
-search.addEventListener('input', () => drawList());
-filter.addEventListener('change', () => drawList());
+// a phone can't draw hundreds of avatars at once: wait for the typing to stop,
+// show the list a page at a time and draw a head only when it scrolls into view
+let searchTimer = 0;
+search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { shown = PAGE; drawList(); }, 250); });
+filter.addEventListener('change', () => { shown = PAGE; drawList(); });
+const PAGE = 30;
+var shown = PAGE;
+const headQueue = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    headQueue.unobserve(e.target);
+    const u = e.target._user;
+    avatarHeadshot(u.avatar, 96).then((url) => { e.target.src = url; }).catch(() => {});
+  }
+}, { rootMargin: '200px' }) : null;
+function lazyHead(u) {
+  if (!headQueue) return headshotImg(u, 96);
+  const img = el('img', { alt: u.username, class: 'lazy-head' });
+  img._user = u;
+  headQueue.observe(img);
+  return img;
+}
 
 function drawPlayers() {
   body.replaceChildren(el('div', { class: 'row wrap', style: { marginBottom: '12px' } }, search, filter), list);
@@ -220,6 +242,8 @@ function drawPlayers() {
 const FILTERS = {
   all: () => true,
   people: (u) => !u.bot,
+  players: (u) => !u.bot && !u.guest,
+  guests: (u) => !!u.guest,
   bots: (u) => !!u.bot,
   online: (u) => u.presence && u.presence.status !== 'offline',
   banned: (u) => u.banned,
@@ -233,7 +257,8 @@ function drawList() {
   const q = search.value.trim().toLowerCase();
   const users = data.users.filter((u) => (!q || u.username.toLowerCase().includes(q) || String(u.id) === q) && FILTERS[filter.value](u));
   if (filter.value === 'rich') users.sort((a, b) => b.robits - a.robits);
-  list.replaceChildren(...(users.length ? users.slice(0, 200).map(row) : [el('div', { class: 'empty', text: 'No players found.' })]));
+  const more = users.length > shown ? el('button', { class: 'btn btn-block', style: { marginTop: '8px' }, text: `Show more (${users.length - shown} left)`, onclick: () => { shown += PAGE * 2; drawList(); } }) : null;
+  list.replaceChildren(...(users.length ? [el('div', { class: 'small muted', style: { marginBottom: '6px' }, text: `${users.length} found` }), ...users.slice(0, shown).map(row)] : [el('div', { class: 'empty', text: 'No players found.' })]), ...(more ? [more] : []));
 }
 
 function replaceUser(u) {
@@ -257,6 +282,7 @@ function pills(u) {
   return [
     u.isAdmin ? el('span', { class: 'pill admin-pill', text: 'Admin' }) : null,
     u.bot ? el('span', { class: 'pill', text: '🤖 Bot' }) : null,
+    u.guest ? el('span', { class: 'pill', text: '👤 Guest' }) : null,
     ...(u.perms || []).map((p) => el('span', { class: 'pill perm-pill', text: PERM_NAMES[p] || p })),
     u.banned ? el('span', { class: 'pill ban-pill', text: (u.deviceBan ? 'Device ban' : 'Banned') + (u.banUntil ? ' until ' + new Date(u.banUntil).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') }) : null,
   ];
@@ -266,7 +292,7 @@ function row(u) {
   const self = u.id === me.id;
   const st = u.presence?.status || 'offline';
   return el('div', { class: 'admin-row' + (u.banned ? ' banned' : '') },
-    el('a', { class: 'admin-head', href: `/profile?id=${u.id}` }, headshotImg(u, 96), st !== 'offline' ? el('span', { class: 'presence-dot ' + st }) : null),
+    el('a', { class: 'admin-head', href: `/profile?id=${u.id}` }, lazyHead(u), st !== 'offline' ? el('span', { class: 'presence-dot ' + st }) : null),
     el('div', { class: 'admin-info' },
       el('div', {}, el('a', { href: `/profile?id=${u.id}` }, el('b', { class: 'no-i18n', text: u.username })), nameBadges(u), ...pills(u)),
       el('div', { class: 'small muted', text: `R$ ${fmtFull(u.robits)} · ${u.items} items · ${u.games} games · joined ${timeAgo(u.created)}` }),
@@ -446,14 +472,18 @@ async function manage(u0, tab = 'overview') {
   const moderation = () => {
     const reason = el('input', { class: 'input', maxlength: 300, placeholder: 'What is the warning for?' });
     const quick = ['Bad words in chat', 'Being mean to other players', 'Spamming', 'Scamming in trades', 'Exploiting a bug'];
+    const upBan = segBtns([['', 'No'], ['7d', '7 days'], ['30d', '30 days'], ['forever', 'Forever']], '');
     return el('div', {},
       canMod ? el('div', { class: 'manage-section' }, el('h4', { text: 'Warn' }),
         el('p', { class: 'small muted', text: 'The player sees a popup (on the site or in their game) and gets a message.' }),
         el('div', { class: 'promo-chosen', style: { marginBottom: '6px' } }, quick.map((t) => el('button', { class: 'holder-chip', text: t, onclick: () => { reason.value = t; } }))),
         el('div', { class: 'row' }, reason, el('button', { class: 'btn btn-orange', text: 'Warn', onclick: async () => {
           if (!reason.value.trim()) return toast('Write what the warning is for.', 'error');
-          await doAct(`/admin/users/${u.id}/warn`, { reason: reason.value }, `${u.username} was warned`, 'moderation');
-        } }))) : null,
+          await doAct(`/admin/users/${u.id}/warn`, { reason: reason.value, uploadBan: upBan.value }, upBan.value ? `${u.username} was warned and can't upload items` : `${u.username} was warned`, 'moderation');
+        } })),
+        el('div', { class: 'small muted', style: { margin: '8px 0 4px' }, text: 'Also block item uploads (Create):' }), upBan,
+        u.restrictions && u.restrictions.upload ? el('div', { class: 'small', style: { marginTop: '6px' } }, '🚫 ', el('span', { text: 'Uploads blocked until' }), ' ' + new Date(u.restrictions.upload).toLocaleString(),
+          ' ', el('button', { class: 'btn btn-small', text: 'Unblock uploads', onclick: () => doAct(`/admin/users/${u.id}/restrict`, { clear: true }, 'Restrictions lifted', 'moderation') })) : null) : null,
       el('div', { class: 'manage-section' }, el('h4', { text: 'Account' }), el('div', { class: 'row wrap' },
         canMod ? el('button', { class: 'btn btn-small' + (u.banned ? '' : ' btn-red'), text: u.banned ? 'Unban' : 'Ban', onclick: () => ban(u) }) : null,
         canMod && !u.banned ? el('button', { class: 'btn btn-small', text: 'Mute / No trades', onclick: () => restrictDialog(u) }) : null,
@@ -1667,8 +1697,8 @@ function unbanDialog(u, after) {
 }
 // A mute or a trade ban without a ban.
 function restrictDialog(u) {
-  const kind = segBtns([['mute', 'Mute (no chat)'], ['trade', 'No trades'], ['both', 'Both']], 'mute');
-  const time = segBtns([['1h', '1 hour'], ...RESTRICT_TIMES], '1d');
+  const kind = segBtns([['mute', 'Mute (no chat)'], ['trade', 'No trades'], ['both', 'Both'], ['upload', 'No uploads']], 'mute');
+  const time = segBtns([['1h', '1 hour'], ...RESTRICT_TIMES, ['forever', 'Forever']], '1d');
   const reason = el('input', { class: 'input', maxlength: 200, placeholder: 'Reason (the player sees it)' });
   modal({
     title: `Restrict ${u.username}`,
@@ -2321,6 +2351,32 @@ async function drawOverwatch() {
         el('span', { class: 'muted', text: ` · really: ${a.kind}` })),
       el('span', { class: 'small ' + (a.correct ? 'ow-right' : 'ow-wrong'), text: a.correct ? '✓ right' : '✗ wrong' }),
       el('span', { class: 'muted small', text: timeAgo(a.t) })))) : el('div', { class: 'muted small', text: 'No answers yet.' })));
+}
+
+// ---------------------------------------------------------------- alt accounts
+// Groups of accounts that shared a device or an IP: banned ones first.
+var altBy = 'both';
+async function drawAlts(q = '') {
+  const qIn = el('input', { class: 'input', placeholder: 'Find a player\'s alts (name)', value: q });
+  const by = segBtns([['both', 'Device or IP'], ['device', 'Same device'], ['ip', 'Same IP']], altBy, (v) => { altBy = v; drawAlts(qIn.value.trim()); });
+  qIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') drawAlts(qIn.value.trim()); });
+  const out = el('div', {}, spinner());
+  body.replaceChildren(el('div', { class: 'row wrap', style: { gap: '8px', marginBottom: '10px' } }, qIn, el('button', { class: 'btn btn-primary', text: 'Find', onclick: () => drawAlts(qIn.value.trim()) }), by), out);
+  let r;
+  try { r = await api.get(`/admin/alts?by=${altBy}&q=${encodeURIComponent(q)}`); } catch (e) { out.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const fmt = (t) => (t ? new Date(t).toLocaleDateString() : '-');
+  out.replaceChildren(
+    el('div', { class: 'small muted', style: { marginBottom: '8px' }, text: `${r.total} group(s) of alt accounts` + (r.bigNetworks ? ` · ${r.bigNetworks} shared network(s) (schools, phone networks) left out` : '') }),
+    ...(r.groups.length ? r.groups.map((g) => el('fieldset', { class: 'cl-box' },
+      el('legend', { text: `${g.size} accounts` + (g.banned ? ` · ${g.banned} banned` : '') }),
+      el('table', { class: 'cl-table alt-table' }, el('tbody', {}, g.members.map((m) => el('tr', { class: m.banned ? 'alt-banned' : '' },
+        el('td', {}, el('a', { href: '#', class: 'no-i18n', text: m.username, onclick: (e) => { e.preventDefault(); manage(m); } }),
+          m.banned ? el('span', { class: 'pill ban-pill', text: 'Banned' }) : null, m.guest ? el('span', { class: 'pill', text: '👤 Guest' }) : null, m.isAdmin ? el('span', { class: 'pill admin-pill', text: 'Admin' }) : null),
+        el('td', { class: 'small', text: `joined ${fmt(m.created)}` }),
+        el('td', { class: 'small', text: m.lastOnline ? `seen ${timeAgo(m.lastOnline)}` : '' }),
+        el('td', { class: 'small no-i18n', text: 'R$ ' + fmtFull(m.robits) }))))),
+      g.shared.length ? el('div', { class: 'promo-chosen', style: { marginTop: '6px' } }, g.shared.map((x) => el('span', { class: 'holder-chip', title: x.users.join(', ') }, el('span', { text: x.kind === 'device' ? '📱 ' : '🌐 ' }), el('span', { class: 'no-i18n', text: `${x.label} · ${x.users.length}` })))) : null))
+      : [el('div', { class: 'empty', text: q ? 'No alts found for this name.' : 'No alt accounts found.' })]));
 }
 
 // ---------------------------------------------------------------- site tools (5.0)

@@ -66,8 +66,15 @@ export class GameClient {
     this.lastSend = 0;
     this.raycaster = new THREE.Raycaster();
     this._resize = () => this.resize();
-    this.ro = new ResizeObserver(this._resize);
-    this.ro.observe(this.root);
+    // iPhones (Safari) report the new size late after the phone turns, or
+    // not at all to a ResizeObserver (older ones don't have it): check again
+    // a few times after every rotation / resize.
+    this._settle = () => { this.resize(); for (const ms of [120, 350, 800]) setTimeout(this._resize, ms); };
+    this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(this._resize) : null;
+    if (this.ro) this.ro.observe(this.root);
+    addEventListener('orientationchange', this._settle);
+    addEventListener('resize', this._settle);
+    if (window.visualViewport) visualViewport.addEventListener('resize', this._settle);
     this.frames = 0;
     this.fpsTime = 0;
   }
@@ -126,7 +133,10 @@ export class GameClient {
     try { this.ws && this.ws.close(); } catch { /* ignore */ }
     if (document.pointerLockElement) document.exitPointerLock();
     this.input.dispose();
-    this.ro.disconnect();
+    if (this.ro) this.ro.disconnect();
+    removeEventListener('orientationchange', this._settle);
+    removeEventListener('resize', this._settle);
+    if (window.visualViewport) visualViewport.removeEventListener('resize', this._settle);
     for (const v of this.views.values()) v.dispose();
     if (this.sync) this.sync.dispose();
     if (this.world) this.world.dispose();
@@ -173,6 +183,8 @@ export class GameClient {
   resize() {
     const w = this.root.clientWidth, h = this.root.clientHeight;
     if (!w || !h) return;
+    if (w === this._w && h === this._h) return;
+    this._w = w; this._h = h;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();

@@ -165,15 +165,20 @@ export function installSocial(api, ctx) {
   // can't trade, until a time.
   const restriction = (u) => {
     const t = now();
-    return { mute: u.muteUntil > t ? u.muteUntil : 0, trade: u.tradeBanUntil > t ? u.tradeBanUntil : 0 };
+    return { mute: u.muteUntil > t ? u.muteUntil : 0, trade: u.tradeBanUntil > t ? u.tradeBanUntil : 0, upload: u.uploadBanUntil > t ? u.uploadBanUntil : 0 };
   };
   hooks.isMuted = (u) => !!u && u.muteUntil > now();
   hooks.isTradeBanned = (u) => !!u && u.tradeBanUntil > now();
   hooks.restriction = restriction;
+  hooks.isUploadBanned = (u) => !!u && u.uploadBanUntil > now();
   const fmtLeft = (t) => { const h = Math.ceil((t - now()) / 3600e3); return h > 48 ? `${Math.ceil(h / 24)} days` : `${h} hour${h === 1 ? '' : 's'}`; };
   hooks.muteMessage = (u) => `You are muted for ${fmtLeft(u.muteUntil)}${u.muteReason ? ': ' + u.muteReason : ''}.`;
+  hooks.uploadMessage = (u) => `You can't upload items ${u.uploadBanUntil - now() > 50 * 365 * 86400e3 ? 'any more' : 'for ' + fmtLeft(u.uploadBanUntil)}${u.uploadBanReason ? ': ' + u.uploadBanReason : ''}.`;
   hooks.tradeMessage = (u) => `Trading is blocked for your account for ${fmtLeft(u.tradeBanUntil)}${u.tradeBanReason ? ': ' + u.tradeBanReason : ''}.`;
-  const DAYS = { '1h': 3600e3, '1d': 86400e3, '3d': 3 * 86400e3, '7d': 7 * 86400e3, '30d': 30 * 86400e3, '365d': 365 * 86400e3 };
+  const DAYS = { '1h': 3600e3, '1d': 86400e3, '3d': 3 * 86400e3, '7d': 7 * 86400e3, '30d': 30 * 86400e3, '365d': 365 * 86400e3, forever: 100 * 365 * 86400e3 };
+  // no more item uploads (Create): { time, reason }
+  const banUploads = (u, time, reason) => { u.uploadBanUntil = now() + (DAYS[time] || DAYS['7d']); u.uploadBanReason = clean(reason, 200); };
+  hooks.banUploads = banUploads;
   // Replaces a ban (or adds a restriction): { kind: 'unban' | 'mute' | 'trade' | 'both', time: '7d', reason }
   const softenBan = (u, b, by) => {
     const kind = ['unban', 'mute', 'trade', 'both'].includes(b.kind) ? b.kind : 'unban';
@@ -199,7 +204,8 @@ export function installSocial(api, ctx) {
     const u = D.users[+req.params.id];
     if (!u || u.system) return bad(res, 'User not found', 404);
     const b = req.body || {};
-    if (b.clear) { u.muteUntil = 0; u.tradeBanUntil = 0; db.save(); return res.json({ ok: true, restriction: restriction(u) }); }
+    if (b.clear) { u.muteUntil = 0; u.tradeBanUntil = 0; u.uploadBanUntil = 0; db.save(); return res.json({ ok: true, restriction: restriction(u) }); }
+    if (b.kind === 'upload') { banUploads(u, b.time || '7d', b.reason); db.save(); return res.json({ ok: true, restriction: restriction(u) }); }
     const ms = DAYS[b.time] || DAYS['1d'];
     if (b.kind === 'mute' || b.kind === 'both') { u.muteUntil = now() + ms; u.muteReason = clean(b.reason, 200); }
     if (b.kind === 'trade' || b.kind === 'both') { u.tradeBanUntil = now() + ms; u.tradeBanReason = clean(b.reason, 200); }

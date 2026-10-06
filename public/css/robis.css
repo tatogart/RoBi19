@@ -1494,3 +1494,18 @@ html[data-theme="dark"] .cl-btn.red { color: #ff8a8a; border-color: #7a3a3e; }
 html[data-theme="dark"] .cl-btn.red:hover { background: linear-gradient(180deg, #4a2a2e, #3a2023); }
 html[data-theme="dark"] .adm-classic .muted, html[data-theme="dark"] .adm-classic .small.muted { color: #9aa6b5; }
 html[data-theme="dark"] .adm-classic label, html[data-theme="dark"] .adm-classic .field { color: var(--text); }
+.alt-table td { width: auto; }
+.alt-table tr.alt-banned td { background: rgba(232,65,60,.08) !important; }
+.lazy-head { background: rgba(0,0,0,.06); min-height: 1px; }
+/* Tall dialogs (ban, appeals...) on phones: the title and the buttons stay
+   on screen and the middle scrolls (before, the bottom was cut off). */
+.modal { display: flex; flex-direction: column; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); }
+.modal-head, .modal-foot { flex: none; }
+.modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.modal-foot { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .modal-backdrop { align-items: flex-end; padding: 8px 0 0; }
+  .modal { max-height: calc(100vh - 8px); max-height: calc(100dvh - 8px); overflow: hidden; }
+  .modal-foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .modal-foot .btn { flex: 1 1 auto; }
+}

@@ -382,10 +382,12 @@ test('everyone makes clothes for an upload fee; item creators make more', async 
   assert.equal((await call('POST', '/catalog/create', { type: 'Hat', name: 'My Hat', price: 5, data: { model: 'crown' } }, maker)).status, 403);
   assert.equal((await call('POST', '/catalog/create', { ...tee, price: 0 }, maker)).status, 400);
   assert.equal((await call('POST', '/catalog/create', { ...tee, limited: true, stock: 5 }, maker)).status, 403);
-  const paid = await call('POST', '/catalog/create', tee, maker);
+  // the higher the price, the more the upload costs: R$ 100 + 10% of R$ 500
+  srv.db.data.users[makerId].robits = 151;
+  const paid = await call('POST', '/catalog/create', { ...tee, price: 500 }, maker);
   assert.equal(paid.status, 200, JSON.stringify(paid.data));
-  assert.equal(paid.data.fee, 100);
-  assert.equal(paid.data.robits, 0); // the 100 starting Robits paid the upload
+  assert.equal(paid.data.fee, 150);
+  assert.equal(paid.data.robits, 1);
   assert.equal((await call('POST', '/catalog/create', { ...tee, name: 'Second Tee' }, maker)).status, 400); // no Robits left
   const made = paid.data.item;
   await call('POST', `/admin/users/${makerId}/perms`, { perms: ['items'] }, admin);
@@ -401,8 +403,9 @@ test('everyone makes clothes for an upload fee; item creators make more', async 
   assert.equal((await call('POST', '/catalog/create', { type: 'Pet', name: 'Bad Pet', data: { model: 'crown' } }, maker)).status, 400);
   // sold in the catalog; the creator gets 70%
   assert.ok((await call('GET', '/catalog?q=Cool')).data.items.some((i) => i.id === made.id));
+  srv.db.data.users[(await call('GET', '/auth/me', null, buyer)).data.user.id].robits = 1000;
   assert.equal((await call('POST', `/catalog/${made.id}/buy`, {}, buyer)).status, 200);
-  assert.equal((await call('GET', '/auth/me', null, maker)).data.user.robits, 7);
+  assert.equal((await call('GET', '/auth/me', null, maker)).data.user.robits, 1 + 350);
   // others can't delete it; the creator can
   assert.equal((await call('DELETE', `/catalog/${made.id}`, null, buyer)).status, 403);
   assert.equal((await call('DELETE', `/catalog/${made.id}`, null, maker)).status, 200);
@@ -2281,4 +2284,41 @@ test('appeal chat: the team asks for proof, the banned player answers', async ()
   // decided: the chat closes
   await call('POST', `/admin/appeals/${sent.id}`, { decision: 'unban' }, admin);
   assert.equal((await call('POST', `/admin/appeals/${sent.id}/chat`, { text: 'more?' }, admin)).status, 400);
+});
+
+test('warning with an upload ban: no more items from Create', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'BadUploader', password: 'secret123' });
+  const id = p.data.user.id;
+  srv.db.data.users[id].robits = 5000;
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const w = await call('POST', `/admin/users/${id}/warn`, { reason: 'Rude T-shirt', uploadBan: '30d' }, admin);
+  assert.equal(w.status, 200);
+  const r = await call('POST', '/catalog/create', { type: 'TShirt', name: 'Another One', price: 5, data: { image: png } }, p.cookie);
+  assert.equal(r.status, 403);
+  assert.match(r.data.error, /upload/i);
+  assert.ok((await call('GET', '/create/options', null, p.cookie)).data.uploadBan);
+  assert.ok((await call('GET', `/admin/users/${id}`, null, admin)).data.user.restrictions.upload > Date.now());
+  // lifted
+  await call('POST', `/admin/users/${id}/restrict`, { clear: true }, admin);
+  assert.equal((await call('POST', '/catalog/create', { type: 'TShirt', name: 'Another One', price: 5, data: { image: png } }, p.cookie)).status, 200);
+  // a restriction on its own, forever
+  await call('POST', `/admin/users/${id}/restrict`, { kind: 'upload', time: 'forever', reason: 'Stolen art' }, admin);
+  const again = await call('POST', '/catalog/create', { type: 'TShirt', name: 'Third One', price: 5, data: { image: png } }, p.cookie);
+  assert.equal(again.status, 403);
+  assert.match(again.data.error, /any more/);
+});
+
+test('alt accounts: grouped by a shared device', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const a = await call('POST', '/auth/signup', { username: 'MainAcc77', password: 'secret123' });
+  const b = await call('POST', '/auth/signup', { username: 'TwinAcc77', password: 'secret123' });
+  srv.db.data.users[a.data.user.id].devices = ['dev-alt-test-1'];
+  srv.db.data.users[b.data.user.id].devices = ['dev-alt-test-1'];
+  const r = await call('GET', '/admin/alts?by=device&q=twinacc77', null, admin);
+  assert.equal(r.status, 200);
+  const g = r.data.groups[0];
+  assert.ok(g && g.members.some((m) => m.username === 'MainAcc77') && g.members.some((m) => m.username === 'TwinAcc77'));
+  assert.equal(g.shared[0].kind, 'device');
+  assert.equal((await call('GET', '/admin/alts', null, a.cookie)).status, 403);
 });

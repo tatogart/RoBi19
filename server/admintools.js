@@ -135,7 +135,9 @@ export function installAdminTools(api, ctx) {
     if (!reason) return bad(res, 'Write what the warning is for.');
     u.warnings = u.warnings || [];
     u.warnings.push({ reason, by: req.user.id, byName: req.user.username, time: Date.now() });
-    inbox(u.id, 'A warning from the Robis team', `You got a warning: ${reason}\n\nPlease follow the rules. More warnings can lead to a ban.`);
+    // a warning with an upload ban at once (Create: no more items)
+    if (req.body?.uploadBan && ctx.hooks && ctx.hooks.banUploads) ctx.hooks.banUploads(u, req.body.uploadBan, reason);
+    inbox(u.id, 'A warning from the Robis team', `You got a warning: ${reason}\n\nPlease follow the rules. More warnings can lead to a ban.${u.uploadBanUntil > Date.now() ? '\n\nYou also can\'t upload items for now.' : ''}`);
     // in a game: a popup there; otherwise the next page they open shows it
     if (live(u.id, { t: 'warning', reason, count: u.warnings.length })) delete u.pendingWarning;
     else u.pendingWarning = { reason, time: Date.now(), count: u.warnings.length };

@@ -14,7 +14,14 @@ const app = document.getElementById('app');
 app.append(el('div', { class: 'row' }, el('h1', { style: { margin: 0 }, text: 'Create Item' })));
 
 const opts = await api.get('/create/options');
+// the Robis team blocked this player's uploads
+if (opts.uploadBan) {
+  document.getElementById('app').append(el('div', { class: 'panel empty', style: { borderLeft: '4px solid #e8413c' } }, el('h3', { text: '🚫 Uploads blocked' }), el('p', { text: opts.uploadBan })));
+  await new Promise(() => {});
+}
+// the base fee of a type, plus a share of the price (the higher the price, the more it costs)
 const feeOf = (t) => (opts.fees || {})[t] || 0;
+const feeFor = (t) => (feeOf(t) ? feeOf(t) + Math.ceil(Math.max(0, +priceIn.value || 0) * (opts.feeRate || 0)) : 0);
 
 const TYPE_NAMES = { TShirt: 'T-Shirt', Shirt: 'Shirt', Pants: 'Pants', Face: 'Face', Hat: 'Hat', Hair: 'Hair', Pet: 'Pet' };
 const PET_NAMES = { dog: 'Puppy', cat: 'Kitty', bunny: 'Bunny', penguin: 'Penguin', robot: 'Robot', ghost: 'Ghost', dragon: 'Dragon' };
@@ -121,7 +128,7 @@ const colorRow = () => el('div', { class: 'row wrap' },
 
 function drawEditor() {
   typeTabs.replaceChildren(...typesNow().map((t) => el('button', { class: t === type ? 'active' : '', onclick: () => { type = t; if (MODELS()[0] && !MODELS().includes(state.model)) state.model = MODELS()[0]; drawEditor(); changed(); } },
-    el('span', { text: TYPE_NAMES[t] }), feeOf(t) && !limitedIn.checked ? el('span', { class: 'fee-chip no-i18n', text: 'R$ ' + feeOf(t) }) : null)));
+    el('span', { text: TYPE_NAMES[t] }), feeOf(t) && !limitedIn.checked ? el('span', { class: 'fee-chip no-i18n', text: 'R$ ' + feeOf(t) + (opts.feeRate ? '+' : '') }) : null)));
   syncFee();
   const parts = [];
   if (type === 'TShirt' || type === 'Face') {
@@ -173,10 +180,11 @@ const create = el('button', { class: 'btn btn-green btn-large', text: 'Create', 
 
 // the upload fee for the type picked (the Robis team uploads for free)
 const feeNote = el('div', { class: 'small muted', style: { marginTop: '6px' } });
+priceIn.addEventListener('input', () => syncFee());
 function syncFee() {
-  const fee = limitedIn.checked ? 0 : feeOf(type);
+  const fee = limitedIn.checked ? 0 : feeFor(type);
   create.textContent = fee ? `Upload for R$ ${fee}` : 'Create';
-  feeNote.textContent = fee ? (opts.robits >= fee ? `Uploading costs R$ ${fee}. You have R$ ${opts.robits}.` : `Uploading costs R$ ${fee}. You need ${fee - opts.robits} more Robits.`) : '';
+  feeNote.textContent = fee ? (opts.robits >= fee ? `Uploading costs R$ ${fee}. You have R$ ${opts.robits}.` : `Uploading costs R$ ${fee}. You need ${fee - opts.robits} more Robits.`) + (opts.feeRate ? ' ' + `R$ ${feeOf(type)} + ${Math.round(opts.feeRate * 100)}% of the price.` : '') : '';
   create.disabled = !!fee && opts.robits < fee;
 }
 

@@ -66,6 +66,9 @@ export const CREATE_TYPES = ['TShirt', 'Shirt', 'Pants', 'Face', 'Hat', 'Hair', 
 // Everyone can make these; uploading costs Robits (like Roblox's upload fee).
 export const PLAYER_TYPES = ['TShirt', 'Shirt', 'Pants', 'Face'];
 export const UPLOAD_FEES = { TShirt: 100, Shirt: 150, Pants: 150, Face: 200, Hat: 300, Hair: 300, Pet: 500 };
+// ...plus a share of the price: an item for R$ 1,000 costs R$ 100 more to upload
+export const PRICE_FEE = 0.1;
+export const uploadFee = (type, price) => (UPLOAD_FEES[type] || 100) + Math.ceil(Math.max(0, +price || 0) * PRICE_FEE);
 const PLAYER_LIMITS = { minPrice: 1, maxPrice: 10000, maxItems: 50, perDay: 5 };
 export const BAN_STEPS = ['1h', '1d', '3d', '7d', '30d', 'forever'];
 const B = (key, label) => ({ key, label, type: 'bool', default: true });
@@ -1267,7 +1270,8 @@ export function createApi(db, manager, opts = {}) {
     res.json({
       types: CREATE_TYPES.filter((t) => normal.includes(t) || lim.includes(t)), normalTypes: normal, limitedTypes: lim,
       models: MODELS, patterns: PATTERNS, allowed: true, limiteds: can(u, 'limiteds'), onlyLimiteds: false,
-      fees: paying ? UPLOAD_FEES : {}, robits: u.robits, minPrice: paying ? PLAYER_LIMITS.minPrice : 0,
+      uploadBan: hooks.isUploadBanned && hooks.isUploadBanned(u) ? hooks.uploadMessage(u) : '',
+      fees: paying ? UPLOAD_FEES : {}, feeRate: paying ? PRICE_FEE : 0, robits: u.robits, minPrice: paying ? PLAYER_LIMITS.minPrice : 0,
       maxPrice: Math.max(can(u, 'items') ? popt(u, 'items', 'maxPrice') : PLAYER_LIMITS.maxPrice, can(u, 'limiteds') ? popt(u, 'limiteds', 'maxPrice') : 0),
       maxStock: can(u, 'limiteds') ? popt(u, 'limiteds', 'maxStock') : 0,
     });
@@ -1282,6 +1286,7 @@ export function createApi(db, manager, opts = {}) {
     const limited = !!b.limited;
     // Limiteds are made by the Robis team only (the Limited Creator right)
     if (limited && !can(req.user, 'limiteds')) return bad(res, 'Only the Robis team makes Limited items.', 403);
+    if (hooks.isUploadBanned && hooks.isUploadBanned(req.user)) return bad(res, hooks.uploadMessage(req.user), 403);
     const creator = can(req.user, 'items') || req.user.isAdmin;
     const paying = !creator && !limited;
     const stock = stockAmount(b.stock);
@@ -1299,7 +1304,8 @@ export function createApi(db, manager, opts = {}) {
     if (price > maxPrice) return bad(res, `Your highest price is R$ ${maxPrice.toLocaleString('en-US')}.`);
     if (limited && stock > popt(req.user, 'limiteds', 'maxStock')) return bad(res, `Your biggest stock is ${fmtStock(popt(req.user, 'limiteds', 'maxStock'))}.`);
     if (!limited && price === 0 && (paying || !popt(req.user, 'items', 'free'))) return bad(res, 'Items can\'t be free: set a price of at least R$ 1.');
-    const fee = paying ? UPLOAD_FEES[type] || 100 : 0;
+    // the higher the price, the more the upload costs (the base fee + 10% of the price)
+    const fee = paying ? uploadFee(type, price) : 0;
     if (fee && req.user.robits < fee) return bad(res, `Uploading a ${type === 'TShirt' ? 'T-shirt' : type.toLowerCase()} costs R$ ${fee}. You need ${fee - req.user.robits} more Robits.`);
     const mineList = Object.values(D.items).filter((i) => i.creatorId === req.user.id && i.custom);
     const mine = mineList.length;
@@ -2174,6 +2180,7 @@ export function createApi(db, manager, opts = {}) {
     ...publicUser(u), robits: u.robits, isAdmin: !!u.isAdmin, bot: !!u.bot, perms: u.perms || [], permOpts: u.permOpts || {}, banned: isBanned(u), banReason: u.banReason || '', banUntil: u.banUntil || 0, deviceBan: !!(u.bannedDevices?.length || u.bannedIps?.length),
     items: (D.inventory[u.id] || []).length, games: Object.values(D.games).filter((g) => g.creatorId === u.id).length,
     warnings: (u.warnings || []).length, guest: !!u.guest, nameLocked: !!u.nameLocked, title: u.adminTitle || '',
+    restrictions: hooks.restriction ? hooks.restriction(u) : {},
   });
   const target = (req, res) => {
     const u = D.users[toInt(req.params.id)];
@@ -2188,7 +2195,7 @@ export function createApi(db, manager, opts = {}) {
     membership: (b) => `Membership: ${MEMBERSHIPS[b.tier]?.name || b.tier}${+b.days ? ` for ${Math.trunc(+b.days)} days` : ''}`,
     give: (b) => `Gave ${(b.itemIds || []).length} item(s): ${(b.itemIds || []).slice(0, 5).map((id) => D.items[toInt(id)]?.name || '?').join(', ')}`,
     robitsset: (b) => `Robits set to ${Math.trunc(+b.value || 0)}`,
-    warn: (b) => `Warning: ${String(b.reason || '').slice(0, 120)}`,
+    warn: (b) => `Warning${b.uploadBan ? ` + no uploads (${b.uploadBan})` : ''}: ${String(b.reason || '').slice(0, 120)}`,
     notes: (b) => (b.remove ? 'Deleted a staff note' : 'Added a staff note'),
     items: (b) => (b.all ? 'Gave all items' : `Gave item: ${D.items[toInt(b.itemId)]?.name || '?'}`),
     remove: (b) => (b.all ? 'Took all items' : `Took item: ${D.items[toInt(b.itemId)]?.name || '?'}`),
@@ -2208,7 +2215,7 @@ export function createApi(db, manager, opts = {}) {
     spin: (b) => `Daily Spin: ${{ save: 'changed the wheel', toggle: b.on ? 'turned on' : 'turned off', boost: +b.mult > 1 && +b.hours ? `x${+b.mult} boost for ${+b.hours}h` : 'boost off', give: `+${Math.trunc(+b.count || 1)} free spin(s) to ${String(b.target || '').slice(0, 30)}`, reset: `new spin for ${String(b.target || '').slice(0, 30)}`, rig: `next prize for ${String(b.target || '').slice(0, 30)}` }[b.op] || b.op}`,
     fun: (b) => (b.op === 'rain' ? `Robits rain: R$${Math.trunc(+b.amount || 0)} to ${b.target === 'all' ? 'everyone' : 'everyone online'}` : b.op === 'party' ? `Party: ${String(b.text || '').slice(0, 80)}` : `Decorations: ${b.decor}${+b.hours ? ` for ${+b.hours}h` : ''}`),
     soften: (b) => `Ban removed${b.kind && b.kind !== 'unban' ? ` (now ${b.kind === 'both' ? 'muted + no trades' : b.kind === 'mute' ? 'muted' : 'no trades'} for ${b.time || '7d'})` : ''}`,
-    restrict: (b) => (b.clear ? 'Restrictions lifted' : `${b.kind === 'both' ? 'Muted + no trades' : b.kind === 'mute' ? 'Muted' : 'No trades'} for ${b.time || '1d'}${b.reason ? ': ' + String(b.reason).slice(0, 80) : ''}`),
+    restrict: (b) => (b.clear ? 'Restrictions lifted' : `${b.kind === 'both' ? 'Muted + no trades' : b.kind === 'mute' ? 'Muted' : b.kind === 'upload' ? 'No uploads' : 'No trades'} for ${b.time || '1d'}${b.reason ? ': ' + String(b.reason).slice(0, 80) : ''}`),
     sales: (b) => (b.op ? `Sale #${+b.id}: ${b.op}` : `Sale: ${String(b.name || 'Black Friday').slice(0, 40)} -${Math.trunc(+b.percent || 0)}% (${b.scope || 'all'})`),
     bots: (b) => `Bots: ${b.op === 'spawn' ? `added to ${D.games[toInt(b.gameId)]?.name || '?'}${b.cheat ? ' (cheater)' : ''}` : b.op === 'settings' ? (b.enabled === false ? 'turned off' : b.enabled ? 'turned on' : 'settings') : b.op || '?'}`,
     overwatch: (b) => `Overwatch: ${b.op || 'settings'}${b.user ? ' ' + String(b.user).slice(0, 30) : ''}`,
@@ -2664,7 +2671,7 @@ export function createApi(db, manager, opts = {}) {
   installFun(api, { db, manager, requireUser, requireAdmin, bad, log, giveSerial, publicUser, presence });
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installClassic(api, { db, manager, requireAdmin, requirePerm, bad, log, hooks, adminUser, deleteAccount, isBanned, STARTER: { items: STARTER_ITEMS, wearing: STARTER_WEARING, body: STARTER_BODY } });
-  installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS });
+  installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS, hooks });
 
   api.use((req, res) => bad(res, 'Not found', 404));
   return api;
