@@ -2502,6 +2502,14 @@ async function drawSiteTools() {
           B('Download players (CSV)', () => { location.href = '/api/admin/tools/users.csv'; })),
         el('div', { class: 'row', style: { marginTop: '8px' } }, el('span', { text: 'Delete messages older than' }), days, el('span', { text: 'days' }), B('Delete', () => run('purgeMessages', { days: +days.value }, 'Delete old messages for everyone?'), true)),
         el('div', { class: 'row', style: { marginTop: '8px' } }, reason, B('Shut down all servers', () => run('shutdownAll', { reason: reason.value }, 'Close every game server now?'), true))),
+      (() => {
+        const gameSel = el('select', { class: 'input' }, t.games.map((g) => el('option', { value: g.id, text: `${g.name} (${g.botMode})` })));
+        const mode = segBtns([['auto', 'Auto'], ['battle', '⚔ Fight'], ['normal', 'Normal']], 'auto');
+        return box('Bots in a game',
+          el('p', { class: 'small muted', text: 'Fight: bots battle everyone with the game\'s weapons and hide when hurt. Auto: fight when the name sounds like a battle (Battle, PvP, Sword, Arena...).' }),
+          gameSel, el('div', { style: { height: '6px' } }), mode,
+          B('Save', () => run('botMode', { gameId: +gameSel.value, mode: mode.value })));
+      })(),
       box('Catalog prices',
         el('p', { class: 'small muted', text: 'Changes every official item for sale (not Limiteds, not player items).' }),
         el('div', { class: 'row' }, pct, el('span', { text: '%' }), B('Change prices', () => run('bulkPrice', { percent: +pct.value }, 'Change the price of every official item?')))),

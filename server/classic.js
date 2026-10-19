@@ -191,11 +191,20 @@ export function installClassic(api, ctx) {
       },
       richest: people.slice().sort((a, b) => (b.robits || 0) - (a.robits || 0)).slice(0, 10).map((u) => ({ id: u.id, username: u.username, robits: u.robits || 0 })),
       newest: people.slice().sort((a, b) => b.created - a.created).slice(0, 10).map((u) => ({ id: u.id, username: u.username, created: u.created })),
+      games: Object.values(D.games).filter((g) => g.isPublic).sort((a, b) => (b.visits || 0) - (a.visits || 0)).slice(0, 200).map((g) => ({ id: g.id, name: g.name, botMode: g.botMode || 'auto' })),
       settings: { ads: S.ads !== false, guests: S.guests !== false, nameBlacklist: S.nameBlacklist, welcome: S.welcome },
     });
   });
   const SITE_OPS = {
     deleteGuests() { const g = accounts().filter((u) => u.guest && !manager.findUser(u.id)); for (const u of g) deleteAccount(u); return `${g.length} guest account(s) deleted`; },
+    // how bots play a game: 'battle' (fight everyone, hide when hurt),
+    // 'normal', or 'auto' (battle when the name sounds like a fight)
+    botMode(b) {
+      const g = D.games[+b.gameId];
+      if (!g) throw new Error('Game not found');
+      if (b.mode === 'battle' || b.mode === 'normal') g.botMode = b.mode; else delete g.botMode;
+      return `Bots in ${g.name}: ${b.mode === 'battle' ? 'fight' : b.mode === 'normal' ? 'normal' : 'auto'} (new bots)`;
+    },
     ads(b) { S.ads = !!b.on; return b.on ? 'Ads are on' : 'Ads are off'; },
     guests(b) { S.guests = !!b.on; return b.on ? 'Guest play is on' : 'Guest play is off'; },
     resetStipends() { for (const u of accounts()) u.lastStipend = 0; return 'Everyone can claim the stipend again'; },

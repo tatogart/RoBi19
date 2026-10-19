@@ -7,6 +7,8 @@
 import { BasePart } from '../../shared/engine/instances.js';
 import { partBox, boxAABB, SpatialGrid, rayVsBox, sphereVsBox, stepCharacter } from '../../shared/engine/physics.js';
 
+// games where bots fight everyone (unless the admins set the bots to normal)
+const BATTLE_NAME = /battle|бит(в|ва)|бой|сраж|fight|pvp|combat|\bwar\b|sword|arena|арена|deathmatch/i;
 const SEND_HZ = 15;
 const DANGER = /lava|kill|death|acid|toxic|void|spike|laser|zap/i;
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -302,6 +304,10 @@ export class Bot {
     this.onGone = onGone || (() => {});
     this.gone = false;
     this.world = worldOf(server);
+    // a fighting game (every one for themselves): set in Control Center ->
+    // Site Tools, or found from the name (Battle ground, PvP, Sword fight...)
+    const g = server.manager && server.manager.db && server.manager.db.data.games[server.gameId];
+    this.battle = !!g && (g.botMode === 'battle' || (g.botMode !== 'normal' && BATTLE_NAME.test(g.name || '')));
     // a little personality: how much they move, chat, idle, hide
     this.p = {
       active: rnd(0.5, 1), chatty: rnd(0, 1), afky: rnd(0, 1), hider: rnd(0, 1), jumpy: rnd(0, 1), social: rnd(0, 1),
@@ -591,6 +597,10 @@ export class Bot {
       if (!this._alive(o) || !['Hider', 'Survivor'].includes(this._hsRole(o))) this.task.until = t; else goal = { ...posOf(o), near: 1 };
     } else if (task.kind === 'hunt' || task.kind === 'shoot') {
       goal = this._fight(task, t);
+    } else if (task.kind === 'brawl') {
+      goal = this._brawl(task, t);
+      // people jump around in a fight
+      if (goal && goal.close && s.grounded && chance(dt * 1.2)) jump = true;
     }
     if (task.kind === 'jump' && s.grounded && chance(dt * 4)) jump = true;
     let mx = 0, mz = 0;
@@ -821,6 +831,7 @@ export class Bot {
     const busy = ['hunt', 'shoot', 'leaving'].includes(this.task.kind);
     const others = this.others().filter((o) => this._alive(o));
     if (this._hideAndSeek(t, others)) return;
+    if (this.battle && this._battle(t, others)) return;
     if (role !== 'murderer') {
       // someone with a knife out, close and in sight
       const killer = others.find((o) => this._holds(o, 'Knife') && Math.hypot(o.state.p[0] - s.x, o.state.p[2] - s.z) < (role ? 80 : 40) && this._sees(o));
@@ -856,6 +867,79 @@ export class Bot {
       const near = picks.filter((p) => !/gundrop/i.test(p.Name) && !p._botSkip).map((p) => [p, Math.hypot(p._p.CFrame.x - s.x, p._p.CFrame.z - s.z) + Math.abs(p._p.CFrame.y - s.y) * 3]).filter((x) => x[1] < 70).sort((a, b) => a[1] - b[1]);
       if (near.length) this.setTask('collect', 12, { part: pick(near.slice(0, 3))[0] });
     }
+  }
+
+  // ------------------------------------------------------------ battle (free for all)
+  // Fight the nearest enemy with whatever weapon the game gives; hide behind
+  // something when hurt; some bots wait in ambush and jump out.
+  _hp(sess = this.session) {
+    const h = sess && sess.character && sess.character.FindFirstChildOfClass('Humanoid');
+    return h ? h.Health / (h.MaxHealth || 100) : 1;
+  }
+  _weapon() {
+    const ch = this.session.character;
+    const held = ch && ch.GetChildren().find((x) => x.ClassName === 'Tool');
+    return held || this._tools()[0] || null;
+  }
+  _battle(t, others) {
+    const s = this.state;
+    const k = this.task.kind;
+    if (k === 'leaving' || k === 'afk') return k === 'afk';
+    const enemies = others.map((o) => [o, Math.hypot(o.state.p[0] - s.x, o.state.p[1] - s.y, o.state.p[2] - s.z)]).filter((x) => x[1] < 140).sort((a, b) => a[1] - b[1]);
+    const hp = this._hp();
+    // hurt: run and hide (and maybe come back healed)
+    if (hp < 0.35 && enemies.length && enemies[0][1] < 45 && k !== 'hide') {
+      const spot = this._hideSpot() || this._awayFrom(enemies[0][0]);
+      if (spot) { this.server.handle(this.session, { t: 'equip', id: null }); this.setTask('hide', rnd(8, 14), { to: spot, wait: rnd(6, 12) }); if (chance(0.2)) this.say('', pick(['nooo', 'brb', 'help', 'aaa'])); return true; }
+    }
+    if (k === 'brawl' || (k === 'hide' && hp < 0.6)) return true;
+    const weapon = this._weapon();
+    if (!weapon) return false; // no weapon (yet): walk around like everyone
+    // the ambush: a hider-type bot waits in cover until someone comes close
+    if (this.p.hider > 0.65 && k !== 'hide' && k !== 'idle' && chance(0.08)) {
+      const spot = this._hideSpot();
+      if (spot) { this.setTask('hide', rnd(10, 18), { to: spot, wait: rnd(8, 20) }); return true; }
+    }
+    if (!enemies.length) return false;
+    const [foe, d] = enemies.find(([o, dd]) => dd < 25 || this._sees(o)) || enemies[0];
+    const range = k === 'idle' && this.p.hider > 0.65 ? 30 : 110; // waiting in ambush: only close ones
+    if (d > range) return false;
+    // sometimes go for the weakest one in sight instead
+    const weak = enemies.filter(([o, dd]) => dd < 60 && this._hp(o) < 0.4)[0];
+    this.setTask('brawl', rnd(10, 25), { who: weak && chance(0.5) ? weak[0] : foe, tool: weapon, strafe: chance(0.5) ? 1 : -1 });
+    if (chance(0.12 * (0.4 + this.p.chatty))) this.later(rnd(0.3, 1.5), () => this.say('', pick(['1v1', 'come here', 'ez', 'gg', 'lol', 'get rekt', 'fight me'])));
+    return true;
+  }
+  _brawl(task, t) {
+    const s = this.state;
+    const o = task.who;
+    if (!this._alive(o) || !task.tool || task.tool._destroyed) { this.task.until = t; return null; }
+    const ch = this.session.character;
+    if (task.tool.Parent !== ch) { if (t >= (task.equipAt || 0)) { task.equipAt = t + 0.6; this.server.handle(this.session, { t: 'equip', id: task.tool.id }); } }
+    const [ox, oy, oz] = o.state.p;
+    const d = Math.hypot(ox - s.x, oz - s.z);
+    const ranged = /gun|bow|blast|rocket|sling|launch|pistol|rifle|laser|shoot|bomb|throw|snow|paintball/i.test(task.tool.Name);
+    const sees = this._sees(o);
+    // swing / fire like a person: not every frame, not always on target
+    if (t >= (task.nextHit || 0) && sees && d < (ranged ? 70 : 7)) {
+      task.nextHit = t + (ranged ? rnd(0.7, 1.4) : rnd(0.35, 0.8));
+      const miss = ranged ? (chance(0.25 + d / 150) ? rnd(1.5, 4) : rnd(-0.6, 0.6)) : rnd(-0.4, 0.4);
+      this.server.handle(this.session, { t: 'activate', id: task.tool.id, p: [ox + miss, oy + rnd(-0.4, 0.6), oz - miss * 0.5] });
+    }
+    if (d > 160) { this.task.until = t; return null; }
+    if (ranged) {
+      // keep a distance; circle the enemy when close enough
+      if (d > 35 || !sees) return { x: ox, y: oy, z: oz, moving: true, near: 25 };
+      if (d < 12) { const a = this._awayFrom(o); return { ...a, direct: true }; }
+      const ang = Math.atan2(s.x - ox, s.z - oz) + task.strafe * 0.6;
+      return { x: ox + Math.sin(ang) * d, y: s.y, z: oz + Math.cos(ang) * d, direct: true, close: true };
+    }
+    // melee: straight at them, a little to the side when very close
+    if (d < 4) {
+      const ang = Math.atan2(s.x - ox, s.z - oz) + task.strafe * 1.1;
+      return { x: ox + Math.sin(ang) * 3, y: oy, z: oz + Math.cos(ang) * 3, direct: true, close: true };
+    }
+    return { x: ox, y: oy, z: oz, moving: true, near: 2.5, close: d < 15 };
   }
 
   // somewhere far from someone

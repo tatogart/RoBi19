@@ -2368,3 +2368,25 @@ test('levels and Daily Quests: XP for playing, quests count, rewards', async () 
   await call('POST', '/admin/progress', { boost: { hours: 0 } }, admin);
   assert.equal((await call('GET', '/admin/progress', null, p.cookie)).status, 403);
 });
+
+test('battle games: bots fight each other (free for all)', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const g = (await call('GET', '/games?q=Brick%20Battle')).data.games.find((x) => x.name === 'Brick Battle');
+  assert.ok(g);
+  let r = await call('POST', '/admin/bots', { op: 'spawn', gameId: g.id, cheat: '' }, admin);
+  r = await call('POST', '/admin/bots', { op: 'spawn', gameId: g.id, cheat: '' }, admin);
+  const bots = r.data.bots.filter((b) => b.gameId === g.id || true).slice(-2).map((b) => srv.manager.bots.live.get(b.uid)).filter(Boolean);
+  assert.ok(bots.length >= 2);
+  assert.ok(bots.every((b) => b.battle), 'Brick Battle is a battle game for bots');
+  let fought = false;
+  for (let i = 0; i < 40 && !fought; i++) {
+    await new Promise((res) => setTimeout(res, 500));
+    fought = bots.some((b) => b.task.kind === 'brawl' || (b.task.kind === 'hide' && b.battle));
+  }
+  assert.ok(fought, 'a bot started a fight: ' + bots.map((b) => b.task.kind).join(','));
+  // the admins can set a game's bots to normal
+  assert.equal((await call('POST', '/admin/tools', { op: 'botMode', gameId: g.id, mode: 'normal' }, admin)).status, 200);
+  assert.equal(srv.db.data.games[g.id].botMode, 'normal');
+  await call('POST', '/admin/tools', { op: 'botMode', gameId: g.id, mode: 'auto' }, admin);
+  for (const b of bots) b.leave();
+});
