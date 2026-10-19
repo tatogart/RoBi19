@@ -441,7 +441,8 @@ test('players trade items and Robits', async () => {
   const b = (await call('POST', '/auth/signup', { username: 'TraderB', password: 'secret123' })).cookie;
   const aid = (await call('GET', '/auth/me', null, a)).data.user.id;
   const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
-  const paid = (await call('GET', '/catalog')).data.items.filter((i) => i.price > 0);
+  // not a starter item (every new player owns those): the catalog order is random
+  const paid = (await call('GET', '/catalog', null, a)).data.items.filter((i) => i.price > 0 && !i.owned && !i.limited);
   const [hat, shirt, free] = [paid[0], paid[1], (await call('GET', '/catalog')).data.items.find((i) => !i.price && !i.limited)];
   await call('POST', `/admin/users/${aid}/items`, { itemId: hat.id }, admin);
   await call('POST', `/admin/users/${bid}/items`, { itemId: shirt.id }, admin);
@@ -529,7 +530,7 @@ test('Limited copies have serial numbers that move with trades', async () => {
   const b = (await call('POST', '/auth/signup', { username: 'SerialB', password: 'secret123' })).cookie;
   const aid = (await call('GET', '/auth/me', null, a)).data.user.id;
   const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
-  const it = (await call('GET', '/catalog')).data.items.find((i) => !i.limited && i.price > 0 && i.price < 500);
+  const it = (await call('GET', '/catalog', null, a)).data.items.find((i) => !i.limited && !i.owned && i.price > 0 && i.price < 500);
   await call('POST', `/catalog/${it.id}/limited`, { stock: 10 }, admin);
   for (const c of [a, b]) {
     await call('POST', `/admin/users/${c === a ? aid : bid}/robits`, { amount: 1000 }, admin);
@@ -586,7 +587,7 @@ test('players resell Limited copies', async () => {
   const sid = (await call('GET', '/auth/me', null, s)).data.user.id;
   const bid = (await call('GET', '/auth/me', null, b)).data.user.id;
   const lim = (await call('GET', '/catalog?type=Collectibles')).data.items[0];
-  const normal = (await call('GET', '/catalog')).data.items.find((i) => !i.limited && i.price > 0);
+  const normal = (await call('GET', '/catalog', null, s)).data.items.find((i) => !i.limited && !i.owned && i.price > 0);
   await call('POST', `/admin/users/${sid}/items`, { itemId: lim.id }, admin);
   await call('POST', `/admin/users/${sid}/items`, { itemId: normal.id }, admin);
   await call('POST', `/admin/users/${bid}/robits`, { amount: 1000 }, admin);
@@ -869,7 +870,7 @@ test('promo codes for Builders Club and donate prices', async () => {
   await call('POST', '/admin/promocodes', { membership: 'TurboBuildersClub', membershipDays: 3, code: 'TBC3' }, admin);
   const r = await call('POST', '/promocodes/redeem', { code: 'tbc7' }, kid);
   assert.equal(r.status, 200, JSON.stringify(r.data));
-  assert.equal(r.data.membership.name, 'Turbo Builders Club');
+  assert.equal(r.data.membership.name, 'Premium 1000');
   let u = await me();
   assert.equal(u.membership, 'TurboBuildersClub');
   const week = u.membershipUntil - Date.now();
@@ -2389,4 +2390,31 @@ test('battle games: bots fight each other (free for all)', async () => {
   assert.equal(srv.db.data.games[g.id].botMode, 'normal');
   await call('POST', '/admin/tools', { op: 'botMode', gameId: g.id, mode: 'auto' }, admin);
   for (const b of bots) b.leave();
+});
+
+test('IGA 26: The Great Merge is a prepared event with its hub', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const ev = srv.db.data.huntCustom.prep_github;
+  assert.ok(ev, 'the prepared IGA 26 event exists');
+  assert.equal(ev.name, 'IGA 26: The Great Merge');
+  assert.equal(ev.hub, 'github');
+  assert.equal(ev.prizes.length, 5);
+  const r = await call('POST', '/admin/hunt/control', { action: 'launch', key: 'prep_github', public: true }, admin);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const H = srv.db.data.hunt;
+  assert.equal(H.current, 'prep_github');
+  const hub = srv.db.data.games[H.hubId];
+  assert.ok(hub && hub.name.includes('Great Merge'));
+  // the hub is a real place: the contribution graph, the MERGE button, 6 stars
+  const place = JSON.stringify(srv.db.readPlace(hub.id));
+  for (const name of ['ContributionGraph', 'MergeButton', 'StarFragments', 'Portals']) assert.ok(place.includes(name), name);
+  // and it runs: a player joins and gets the welcome
+  const p = await call('POST', '/auth/signup', { username: 'Merger1', password: 'secret123' });
+  const c = await join(p.cookie, { placeId: hub.id });
+  const w = await c.wait((m) => m.t === 'welcome', 8000);
+  assert.ok(w);
+  await new Promise((res) => setTimeout(res, 800));
+  const errors = c.inbox.filter((m) => m.t === 'log' && m.level === 'error');
+  assert.equal(errors.length, 0, JSON.stringify(errors.slice(0, 3)));
+  c.ws.close();
 });

@@ -99,3 +99,72 @@ export function coin() {
     osc.start(t + i * 0.09); osc.stop(t + i * 0.09 + 0.3);
   });
 }
+
+// ---- 2020 sounds: footsteps, landing, equip, menus, chat
+let noiseBuf = null;
+function noise(c) {
+  if (!noiseBuf) {
+    noiseBuf = c.createBuffer(1, c.sampleRate * 0.3, c.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const s = c.createBufferSource();
+  s.buffer = noiseBuf;
+  return s;
+}
+// a soft step; `mat` changes the tone (grass is dull, metal rings)
+const STEP_TONE = { Grass: 500, Sand: 380, Wood: 900, WoodPlanks: 900, Metal: 2600, DiamondPlate: 2400, Concrete: 1400, Slate: 1300, Brick: 1200, Ice: 3000, Glass: 3200, Plastic: 1100, SmoothPlastic: 1100 };
+let stepAlt = false;
+export function step(mat = 'Plastic', loud = 1) {
+  const c = ac(); if (!c) return;
+  const t = c.currentTime;
+  const src = noise(c);
+  const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = (STEP_TONE[mat] || 1100) * (stepAlt ? 1.08 : 0.94); bp.Q.value = 1.4;
+  stepAlt = !stepAlt;
+  const g = c.createGain(); env(g, t, 0.004, 0.09 * loud, 0.07);
+  src.connect(bp); bp.connect(g); g.connect(master);
+  src.start(t); src.stop(t + 0.12);
+}
+// landing after a fall: a low thump
+export function land(force = 1) {
+  const c = ac(); if (!c) return;
+  const t = c.currentTime;
+  const osc = c.createOscillator(); osc.type = 'sine';
+  osc.frequency.setValueAtTime(140, t); osc.frequency.exponentialRampToValueAtTime(55, t + 0.15);
+  const g = c.createGain(); env(g, t, 0.005, Math.min(0.5, 0.2 * force), 0.16);
+  osc.connect(g); g.connect(master);
+  osc.start(t); osc.stop(t + 0.22);
+  step('Concrete', Math.min(2, force));
+}
+// pulling a tool out: a quick swish
+export function equip() {
+  const c = ac(); if (!c) return;
+  const t = c.currentTime;
+  const src = noise(c);
+  const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2;
+  bp.frequency.setValueAtTime(800, t); bp.frequency.exponentialRampToValueAtTime(3200, t + 0.12);
+  const g = c.createGain(); env(g, t, 0.01, 0.12, 0.1);
+  src.connect(bp); bp.connect(g); g.connect(master);
+  src.start(t); src.stop(t + 0.18);
+}
+// a menu opens / closes: two short soft notes
+export function menu(open = true) {
+  const c = ac(); if (!c) return;
+  const t = c.currentTime;
+  (open ? [660, 880] : [880, 660]).forEach((f, i) => {
+    const osc = c.createOscillator(); osc.type = 'sine'; osc.frequency.value = f;
+    const g = c.createGain(); env(g, t + i * 0.05, 0.004, 0.07, 0.07);
+    osc.connect(g); g.connect(master);
+    osc.start(t + i * 0.05); osc.stop(t + i * 0.05 + 0.12);
+  });
+}
+// a new chat message: a tiny pop
+export function pop() {
+  const c = ac(); if (!c) return;
+  const t = c.currentTime;
+  const osc = c.createOscillator(); osc.type = 'sine';
+  osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(1800, t + 0.05);
+  const g = c.createGain(); env(g, t, 0.003, 0.05, 0.05);
+  osc.connect(g); g.connect(master);
+  osc.start(t); osc.stop(t + 0.1);
+}

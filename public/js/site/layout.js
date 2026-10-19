@@ -141,7 +141,7 @@ function buildHeader(me, active) {
         el('a', { href: '/profile', text: 'My Profile' }),
         el('a', { href: '/develop', text: 'Create / Develop' }),
         el('a', { href: '/studio', text: 'Robis Studio' }),
-        el('a', { href: '/robits', text: 'Robits & Builders Club' }),
+        el('a', { href: '/robits', text: 'Robits & Premium' }),
         isStaff(me) ? el('a', { href: '/admin', text: 'Admin Panel' }) : null,
         me.isAdmin || me.guest ? null : el('button', { text: 'Enter Admin Code', onclick: adminCodeDialog }),
         window.ROBIS_STANDALONE ? el('button', { text: 'Join a friend', onclick: joinFriendDialog }) : null,
@@ -261,7 +261,7 @@ function buildFooter(site) {
       el('a', { href: '/help', text: 'About Us' }), el('a', { href: '/help', text: 'Help' }),
       el('a', { href: '/develop', text: 'Create' }), el('a', { href: '/blog', text: 'Blog' }),
       el('a', { href: '/help#parents', text: 'Parents' }), el('a', { href: '/help#privacy', text: 'Privacy' })),
-    el('div', { text: '©2019 Robis. An open-source fan tribute to the 2019 era of user-generated game platforms. Not affiliated with Roblox Corporation.' }));
+    el('div', { text: '©2020 Robis. An open-source fan tribute to the 2019-2020 era of user-generated game platforms. Not affiliated with Roblox Corporation.' }));
 }
 
 export { toast };

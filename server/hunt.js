@@ -141,7 +141,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const pr = HUNT_PRESETS[key];
     try {
       D.huntCustom['prep_' + key] = {
-        name: 'The Hunt: ' + pr.title, description: pr.story, kind: 'quests', hub: key, robits: 25, teamGoal: 30,
+        name: key === 'github' ? pr.title : 'The Hunt: ' + pr.title, description: pr.story, kind: 'quests', hub: key, robits: 25, teamGoal: 30,
         prizes: pr.prizes.map((r, i) => ({ ...cleanPrize(r), id: i + 1 })), teamPrize: cleanPrize(pr.team, false), hubPrize: cleanPrize(pr.hub, false), quests: {}, prepared: true,
       };
       D.huntPrepared.push(key);
@@ -421,6 +421,14 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
       try { launch(n.key, { public: n.public, testers: n.testers }); } catch { /* unknown event */ }
     }
   };
+  // IGA 26: The Great Merge starts once by itself, open to everyone for 3
+  // weeks (not in the tests, which check the events on their own)
+  const testing = typeof process !== 'undefined' && process.env && process.env.NODE_TEST_CONTEXT;
+  if (!H.igaLaunched && !testing && D.huntCustom.prep_github) {
+    H.igaLaunched = true;
+    try { launch('prep_github', { public: true, endsAt: Date.now() + 21 * 86400e3 }); } catch (e) { console.warn('IGA 26 did not start:', e.message); }
+    db.save();
+  }
   tick();
   syncHub();
   const timer = setInterval(() => { try { tick(); syncHub(); } catch { /* try again */ } }, 20e3);

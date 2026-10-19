@@ -505,7 +505,7 @@ async function manage(u0, tab = 'overview') {
       })()) : null,
       el('div', { class: 'manage-section' }, el('h4', { text: 'Set the balance to exactly' }),
         el('div', { class: 'row' }, exact, el('button', { class: 'btn btn-primary', text: 'Set', onclick: () => doAct(`/admin/users/${u.id}/robitsset`, { value: +exact.value }, 'Balance set', 'economy') }))),
-      el('div', { class: 'manage-section' }, el('h4', { text: 'Builders Club' }),
+      el('div', { class: 'manage-section' }, el('h4', { text: 'Premium' }),
         el('div', { class: 'row wrap' }, tier, el('span', { text: 'for' }), days, el('span', { class: 'muted small', text: 'days (0 = forever)' }),
           el('button', { class: 'btn btn-primary', text: 'Apply', onclick: () => doAct(`/admin/users/${u.id}/membership`, { tier: tier.value, days: +days.value }, 'Membership updated', 'economy') }))));
   };
@@ -789,10 +789,10 @@ async function drawPromo() {
   body.replaceChildren(
     el('div', { class: 'badge-give' },
       el('h3', { text: 'Make promo codes' }),
-      el('p', { class: 'small muted', text: 'Players type codes on the Promo Codes page. Each player can use a code once. A Builders Club code gives the plan for the set days, then the player goes back to their old plan.' }),
+      el('p', { class: 'small muted', text: 'Players type codes on the Promo Codes page. Each player can use a code once. A Premium code gives the plan for the set days, then the player goes back to their old plan.' }),
       el('div', { class: 'promo-form' },
         el('label', { class: 'field' }, 'Robits', num('robits', { min: 0, max: 1000000 })),
-        el('label', { class: 'field' }, 'Builders Club', tierSel),
+        el('label', { class: 'field' }, 'Premium', tierSel),
         daysField,
         countField,
         el('label', { class: 'field' }, 'Uses per code (0 = no limit)', num('uses', { min: 0 })),
@@ -1371,7 +1371,7 @@ function drawGifts() {
   const names = el('textarea', { class: 'input', rows: 2, placeholder: 'Player names, separated by commas or spaces' });
   const preview = el('div', { class: 'small muted' });
   const robits = el('input', { class: 'input', type: 'number', min: 0, max: 1000000, value: 0 });
-  const tier = el('select', { class: 'input' }, [el('option', { value: '', text: 'No Builders Club' }), ...data.memberships.filter((t) => t.id !== 'None').map((t) => el('option', { value: t.id, text: t.name }))]);
+  const tier = el('select', { class: 'input' }, [el('option', { value: '', text: 'No Premium' }), ...data.memberships.filter((t) => t.id !== 'None').map((t) => el('option', { value: t.id, text: t.name }))]);
   const days = el('input', { class: 'input', type: 'number', min: 0, max: 3650, value: 30 });
   const message = el('textarea', { class: 'input', rows: 2, maxlength: 500, placeholder: 'A message with the gift (optional), e.g. "Thanks for playing!"' });
   const chosen = el('div', { class: 'adm-pick-chosen' });
@@ -1392,7 +1392,7 @@ function drawGifts() {
   names.addEventListener('input', refresh);
   const send = async () => {
     const what = [...[...items.values()].map((i) => i.name), +robits.value ? `R$ ${robits.value}` : '', tier.value ? `${tier.selectedOptions[0].text}${+days.value ? ` (${days.value} days)` : ''}` : ''].filter(Boolean);
-    if (!what.length) return toast('Add items, Robits or Builders Club.', 'error');
+    if (!what.length) return toast('Add items, Robits or Premium.', 'error');
     if (!confirm(`Send ${what.join(', ')} to ${preview.querySelector('b')?.textContent || 'them'}?`)) return;
     try {
       const r = await api.post('/admin/gift', { to: to.value, names: names.value, itemIds: [...items.keys()], robits: +robits.value, membership: tier.value, days: +days.value, message: message.value });
@@ -1401,13 +1401,13 @@ function drawGifts() {
     } catch (e) { toast(e.message, 'error'); }
   };
   body.replaceChildren(el('div', { class: 'adm-gift' },
-    el('div', { class: 'adm-gift-hero' }, ic('gift', 'adm-gift-ic'), el('div', {}, el('h3', { text: 'Gift Center' }), el('p', { class: 'muted', text: 'Give items, Robits or Builders Club to everyone, to who is online, or to a list of players. Each of them gets a message with the gift.' }))),
+    el('div', { class: 'adm-gift-hero' }, ic('gift', 'adm-gift-ic'), el('div', {}, el('h3', { text: 'Gift Center' }), el('p', { class: 'muted', text: 'Give items, Robits or Premium to everyone, to who is online, or to a list of players. Each of them gets a message with the gift.' }))),
     el('div', { class: 'adm-gift-grid' },
       el('div', { class: 'adm-card' }, el('h4', { text: '1. Who gets it' }), to, names, preview),
       el('div', { class: 'adm-card' }, el('h4', { text: '2. What they get' }),
         el('label', { class: 'field' }, 'Items', chosen, el('button', { class: 'btn btn-small', text: '+ Add items', onclick: () => itemPicker({ title: 'Items for the gift', button: 'Add', onPick: (list) => { for (const it of list) items.set(it.id, it); drawItems2(); } }) })),
         el('label', { class: 'field' }, 'Robits', robits),
-        el('div', { class: 'row wrap' }, el('label', { class: 'field' }, 'Builders Club', tier), el('label', { class: 'field' }, 'Days (0 = forever)', days))),
+        el('div', { class: 'row wrap' }, el('label', { class: 'field' }, 'Premium', tier), el('label', { class: 'field' }, 'Days (0 = forever)', days))),
       el('div', { class: 'adm-card' }, el('h4', { text: '3. Message' }), message,
         el('button', { class: 'btn btn-green btn-large', style: { marginTop: '10px', width: '100%' }, text: 'Send the gift', onclick: send })))));
   drawItems2();

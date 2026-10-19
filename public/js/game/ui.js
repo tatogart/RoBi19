@@ -95,6 +95,17 @@ export class HUD {
     this.hotbar = h('div', 'hotbar');
     this.el.append(this.hotbar);
     this._toolsKey = '';
+    // 2020: the backpack (` key) with every tool, and the emote menu (. key)
+    this.bagBtn = h('button', 'hud-round bag-btn', '🎒');
+    this.bagBtn.title = 'Backpack (`)';
+    this.bagBtn.onclick = (e) => { e.stopPropagation(); this.toggleBackpack(); };
+    this.emoteBtn = h('button', 'hud-round emote-btn', '😀');
+    this.emoteBtn.title = 'Emotes (.)';
+    this.emoteBtn.onclick = (e) => { e.stopPropagation(); this.toggleEmotes(); };
+    this.el.append(this.bagBtn, this.emoteBtn);
+    this.bag = null;
+    this.emotes = null;
+    this._allTools = [];
 
     // mobile
     this.stick = h('div', 'touch-stick', '<div class="knob"></div>');
@@ -142,6 +153,9 @@ export class HUD {
 
   // ------------------------------------------------------------ tools
   setTools(tools, equipped) {
+    this._allTools = tools;
+    this._equipped = equipped;
+    if (this.bag) this._drawBag();
     const key = tools.map((t) => t.id + t._p.Name).join(',') + '|' + (equipped ? equipped.id : '');
     if (key === this._toolsKey) return;
     this._toolsKey = key;
@@ -156,6 +170,55 @@ export class HUD {
       b.addEventListener('touchend', (e) => { e.preventDefault(); e.stopPropagation(); this.client.equipSlot(i); });
       return b;
     }));
+  }
+
+  // ------------------------------------------------------------ backpack & emotes (2020)
+  toggleBackpack(force) {
+    const open = force !== undefined ? force : !this.bag;
+    if (!open) { if (this.bag) { this.bag.remove(); this.bag = null; } return; }
+    if (this.emotes) this.toggleEmotes(false);
+    this.bag = h('div', 'backpack', `<div class="bp-head"><b>Backpack</b><input class="bp-search" placeholder="Search"><button class="bp-x" aria-label="Close">✕</button></div><div class="bp-grid"></div>`);
+    this.bag.querySelector('.bp-x').onclick = () => this.toggleBackpack(false);
+    const q = this.bag.querySelector('.bp-search');
+    q.oninput = () => this._drawBag();
+    q.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Escape') this.toggleBackpack(false); };
+    this.bag.addEventListener('mousedown', (e) => e.stopPropagation());
+    this.el.append(this.bag);
+    this._drawBag();
+  }
+  _drawBag() {
+    const grid = this.bag.querySelector('.bp-grid');
+    const f = this.bag.querySelector('.bp-search').value.trim().toLowerCase();
+    const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨', saber: '⚔️', torch: '🔥' };
+    const items = this._allTools.map((t, i) => [t, i]).filter(([t]) => !f || t._p.Name.toLowerCase().includes(f));
+    grid.replaceChildren(...(items.length ? items.map(([t, i]) => {
+      const b = h('button', 'bp-slot' + (this._equipped && this._equipped.id === t.id ? ' on' : ''), `${i < 9 ? `<span class="num">${i + 1}</span>` : ''}<span class="ico">${ICONS[t._p.ToolModel] || '🧰'}</span><span class="nm">${esc(t._p.Name)}</span>`);
+      b.title = t._p.ToolTip || t._p.Name;
+      b.onclick = (e) => { e.stopPropagation(); this.client.equipSlot(i); };
+      return b;
+    }) : [h('div', 'bp-empty', this._allTools.length ? 'Nothing found.' : 'Your backpack is empty.')]));
+  }
+  toggleEmotes(force) {
+    const open = force !== undefined ? force : !this.emotes;
+    if (!open) { if (this.emotes) { this.emotes.remove(); this.emotes = null; } return; }
+    if (this.bag) this.toggleBackpack(false);
+    const LIST = [['dance', '💃', 'Dance'], ['dance2', '🕺', 'Dance 2'], ['dance3', '🤸', 'Dance 3'], ['wave', '👋', 'Wave'], ['point', '👉', 'Point'], ['cheer', '🙌', 'Cheer'], ['laugh', '😂', 'Laugh']];
+    this.emotes = h('div', 'emote-wheel');
+    const n = LIST.length;
+    LIST.forEach(([id, ico, name], i) => {
+      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const b = h('button', 'ew-item', `<span class="ico">${ico}</span><span class="nm">${name}</span>`);
+      b.style.left = `calc(50% + ${Math.cos(a) * 110}px)`;
+      b.style.top = `calc(50% + ${Math.sin(a) * 110}px)`;
+      b.title = `${name} (${i + 1})`;
+      b.onclick = (e) => { e.stopPropagation(); this.client.sendChat('/e ' + id); this.toggleEmotes(false); };
+      this.emotes.append(b);
+    });
+    const mid = h('div', 'ew-mid', 'Emotes');
+    this.emotes.append(mid);
+    this.emotes.addEventListener('mousedown', (e) => { if (e.target === this.emotes) this.toggleEmotes(false); e.stopPropagation(); });
+    this.emotes._list = LIST;
+    this.el.append(this.emotes);
   }
 
   // ------------------------------------------------------------ loading
@@ -544,6 +607,8 @@ export class HUD {
         <tr><td>Zoom</td><td>Mouse wheel, I / O</td></tr>
         <tr><td>Shift Lock</td><td>Shift</td></tr>
         <tr><td>Chat</td><td>/ &nbsp; (emotes: /e dance, /e dance2, /e dance3, /e wave, /e point, /e cheer, /e laugh)</td></tr>
+        <tr><td>Backpack</td><td>&#96; &nbsp; (every tool, with a search)</td></tr>
+        <tr><td>Emotes</td><td>. &nbsp; (then a number or a click)</td></tr>
         <tr><td>Player list</td><td>Tab</td></tr>
         <tr><td>Developer console</td><td>F9</td></tr>
       </table>`;

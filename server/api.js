@@ -30,15 +30,16 @@ const STIPEND_MS = 24 * 3600 * 1000;
 // (then for a number of days: u.membershipUntil; u.membershipAfter is the plan to go back to).
 export const MEMBERSHIPS = {
   None: { name: 'Classic', stipend: 25 },
-  BuildersClub: { name: 'Builders Club', short: 'BC', stipend: 40 },
-  TurboBuildersClub: { name: 'Turbo Builders Club', short: 'TBC', stipend: 60 },
-  OutrageousBuildersClub: { name: 'Outrageous Builders Club', short: 'OBC', stipend: 85 },
+  // 2020: Builders Club became Robis Premium (the ids stay, saved data keeps working)
+  BuildersClub: { name: 'Premium 450', short: 'P450', stipend: 40 },
+  TurboBuildersClub: { name: 'Premium 1000', short: 'P1000', stipend: 60 },
+  OutrageousBuildersClub: { name: 'Premium 2200', short: 'P2200', stipend: 85 },
 };
 const ADMIN_ROBITS = 1_000_000;
 // Rights an admin can give other players in the Admin Panel. Admins have all.
 export const PERMISSIONS = {
   moderator: 'Moderator: ban, kick and mute players',
-  economy: 'Economy: give Robits, items and Builders Club',
+  economy: 'Economy: give Robits, items and Premium',
   items: 'Item Creator: make hats, hair and pets too, without the upload fee',
   limiteds: 'Limited Creator: make Limited items with a set stock',
   games: 'Game Curator: feature games on the front page',
@@ -83,7 +84,7 @@ export const PERM_OPTIONS = {
   economy: [
     B('robits', 'Give and take Robits'),
     { key: 'maxRobits', label: 'Most Robits at once', type: 'number', min: 1, max: 1e9, default: 1e9 },
-    B('membership', 'Give Builders Club'), B('giveItems', 'Give items'), B('takeItems', 'Take items away'),
+    B('membership', 'Give Premium'), B('giveItems', 'Give items'), B('takeItems', 'Take items away'),
     B('promocodes', 'Make promo codes'), B('donate', 'Change donate prices'),
   ],
   items: [

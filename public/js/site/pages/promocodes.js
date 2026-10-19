@@ -41,7 +41,7 @@ app.append(
   el('div', { class: 'panel promo-panel' },
     el('div', { class: 'promo-art', text: '🎁' }),
     el('div', { class: 'promo-main' },
-      el('p', { text: 'Got a code from the admins, an event or a video? Type it here to get Robits, Builders Club and free items.' }),
+      el('p', { text: 'Got a code from the admins, an event or a video? Type it here to get Robits, Premium and free items.' }),
       el('div', { class: 'row wrap' }, input, btn),
       result,
       el('div', { class: 'small muted', style: { marginTop: '10px' }, text: 'Each code works once per player. Codes don\'t care about upper or lower case.' }))));

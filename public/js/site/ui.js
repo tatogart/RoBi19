@@ -10,13 +10,28 @@ export function scamNote(text) {
 import { BADGE_SVG, BADGE_TITLE, sortBadges } from '../badges.js';
 import { avatarHeadshot, gameThumbnail, itemThumbnail } from '../render/thumbs.js';
 
+// Never print "null" / "undefined": DOM inserts skip empty values everywhere
+// (`cond ? node : null` passed straight to append / replaceChildren used to
+// show the word "null"), and a missing value inside a text becomes nothing.
+for (const m of ['append', 'prepend', 'replaceChildren', 'before', 'after', 'replaceWith']) {
+  for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+    const orig = proto[m];
+    if (!orig || orig._clean) continue;
+    const fixed = function (...nodes) { return orig.apply(this, nodes.filter((n) => n !== null && n !== undefined && n !== false)); };
+    fixed._clean = true;
+    proto[m] = fixed;
+  }
+}
+const EMPTY_WORDS = /(^|[\s(·:,])(?:undefined|null|NaN)(?=$|[\s)·:,.!?])/g;
+const cleanText = (v) => String(v).replace(EMPTY_WORDS, '$1').replace(/\s{2,}/g, ' ').trim();
+
 export function el(tag, attrs = {}, ...children) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === undefined || v === null || v === false) continue;
     if (k === 'class') e.className = v;
     else if (k === 'html') e.innerHTML = v;
-    else if (k === 'text') e.textContent = v;
+    else if (k === 'text') e.textContent = String(attrs.class || '').includes('no-i18n') ? v : cleanText(v);
     else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2).toLowerCase(), v);
     else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
     else e.setAttribute(k, v === true ? '' : v);
@@ -227,9 +242,9 @@ export function joinFriendDialog() {
   setTimeout(() => input.focus(), 50);
 }
 
-// Builders Club tier names (2019 style).
+// Premium tier names (2020: Builders Club became Premium).
 export const MEMBERSHIP = {
-  BuildersClub: { name: 'Builders Club', short: 'BC', color: '#f68802' },
-  TurboBuildersClub: { name: 'Turbo Builders Club', short: 'TBC', color: '#d0021b' },
-  OutrageousBuildersClub: { name: 'Outrageous Builders Club', short: 'OBC', color: '#393b3d' },
+  BuildersClub: { name: 'Premium 450', short: '◈ PREMIUM', color: '#393b3d' },
+  TurboBuildersClub: { name: 'Premium 1000', short: '◈ PREMIUM', color: '#393b3d' },
+  OutrageousBuildersClub: { name: 'Premium 2200', short: '◈ PREMIUM', color: '#393b3d' },
 };

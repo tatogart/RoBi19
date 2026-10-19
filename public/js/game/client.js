@@ -207,6 +207,7 @@ export class GameClient {
       }
       case 'chat': {
         this.hud.addChat(m.name, m.text, { flags: this.playerInfos.get(m.userId)?.flags });
+        if (m.userId !== this.userId) sound.pop();
         const v = this.views.get(m.userId);
         if (v) v.bubble(m.text);
         return;
@@ -418,7 +419,10 @@ export class GameClient {
   // ------------------------------------------------------------ input
   onKey(e) {
     const hud = this.hud;
-    if (e.code === 'Escape') { hud.toggleMenu(); return false; }
+    if (e.code === 'Escape') {
+      if (hud.bag || hud.emotes) { hud.toggleBackpack(false); hud.toggleEmotes(false); return false; }
+      sound.menu(!hud.menuOpen); hud.toggleMenu(); return false;
+    }
     if (hud.menuOpen) {
       if (e.code === 'KeyR') { hud.confirmReset(); return false; }
       if (e.code === 'KeyL') { hud.confirmLeave(); return false; }
@@ -429,7 +433,11 @@ export class GameClient {
     if (e.code === 'Tab') { hud.toggleBoard(); return false; }
     if (e.code === 'F9') { hud.toggleConsole(); return false; }
     if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) { this.toggleShiftLock(); return true; }
+    // 2020: ` opens the backpack, . the emote menu (number keys pick an emote)
+    if (e.code === 'Backquote' && !e.repeat) { hud.toggleBackpack(); sound.menu(!!hud.bag); return false; }
+    if (e.code === 'Period' && !e.repeat) { hud.toggleEmotes(); sound.menu(!!hud.emotes); return false; }
     const digit = /^Digit([1-9])$/.exec(e.code);
+    if (digit && !e.repeat && hud.emotes) { const em = hud.emotes._list[+digit[1] - 1]; if (em) { this.sendChat('/e ' + em[0]); hud.toggleEmotes(false); } return false; }
     if (digit && !e.repeat) { this.equipSlot(+digit[1] - 1); return false; }
     sound.unlock();
     return true;
@@ -548,7 +556,7 @@ export class GameClient {
     const id = eq && eq.id === t.id ? null : t.id;
     this._pendingEquip = { id, at: performance.now() };
     this.send({ t: 'equip', id });
-    sound.click();
+    if (id) sound.equip(); else sound.click();
     this.refreshTools(true);
   }
   // The hotbar and the tools in the characters' hands: redrawn as soon as
@@ -647,9 +655,24 @@ export class GameClient {
       s.jumped = true; // no snapping to the ground while hovering
       stepCharacter(s, { mx, mz, jump: false }, dt, { query: (a, b, c, d) => this.world.query(a, b, c, d), gravity: 0 }, { ...humP, WalkSpeed: speed, JumpPower: 0 });
     } else {
+      // 2020 movement: a jump still works for a moment after walking off an
+      // edge ("coyote time"), so jumps at the very end of a platform count
+      const now = performance.now();
+      if (wasGrounded) this._groundAt = now;
+      const fallVy = s.vy;
+      if (!wasGrounded && !s.jumped && this.input.wantsJump() && now - (this._groundAt || 0) < 130 && humP.JumpPower > 0 && s.vy <= 0) {
+        s.vy = humP.JumpPower; s.jumped = true; this._groundAt = 0; sound.jump();
+      }
       stepCharacter(s, { mx, mz, jump: this.input.wantsJump() }, dt, { query: (a, b, c, d) => this.world.query(a, b, c, d), gravity: this.game.GetService('Workspace')._p.Gravity }, humP);
+      // landing after a real fall: a thump
+      if (s.grounded && !wasGrounded && fallVy < -45) sound.land(Math.min(3, -fallVy / 60));
     }
     if (s.jumped && wasGrounded) sound.jump();
+    // footsteps, by what you walk on
+    if (s.grounded && !humP.Flying) {
+      this._stepDist = (this._stepDist || 0) + Math.hypot(s.vx, s.vz) * dt;
+      if (this._stepDist > 5.2) { this._stepDist = 0; if (this.settings.footsteps !== false) sound.step(s.groundPart && s.groundPart._p ? s.groundPart._p.Material : 'Plastic'); }
+    } else this._stepDist = 3;
     s.groundCF = s.groundPart ? s.groundPart._p.CFrame : null;
 
     const hspeed = Math.hypot(s.vx, s.vz);

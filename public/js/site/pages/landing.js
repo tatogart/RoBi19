@@ -57,7 +57,7 @@ if (window.ROBIS_ONLINE_URL) {
     el('p', { class: 'online-note', text: 'This app keeps a private world on your phone. Tap above to join the shared online server where your friends are.' }));
 }
 
-document.querySelector('.footer').innerHTML = '©2019 Robis — an open-source fan tribute to 2019-era game platforms. Not affiliated with Roblox Corporation.';
+document.querySelector('.footer').innerHTML = '©2020 Robis — an open-source fan tribute to 2019-2020 era game platforms. Not affiliated with Roblox Corporation.';
 // Social links (Admin Panel → Settings) under the sign-up box.
 api.get('/site').then((site) => { const l = socialLinks(site, 'social-links landing-socials'); if (l) document.querySelector('.footer').before(l); }).catch(() => {});
 

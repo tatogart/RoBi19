@@ -56,22 +56,22 @@ const giftBox = el('div', { class: 'gift-grid' }, donate.giftcards.map((g) => el
   el('div', { class: 'gift-card', style: { background: `linear-gradient(135deg, ${g.color}, #1b1b1b 160%)` } },
     el('div', { class: 'gift-logo', text: 'ROBIS' }),
     el('div', { class: 'gift-chip' }),
-    el('div', { class: 'gift-amount', text: g.membership ? 'BC' : fmtFull(g.robits) }),
-    el('div', { class: 'gift-label', text: g.membership ? 'Builders Club · 30 days' : 'Robits' }),
+    el('div', { class: 'gift-amount', text: g.membership ? '◈' : fmtFull(g.robits) }),
+    el('div', { class: 'gift-label', text: g.membership ? 'Premium · 30 days' : 'Robits' }),
     el('div', { class: 'gift-ribbon', text: 'GIFT CARD' })),
   el('div', { class: 'gift-buy' },
     g.price ? el('div', { class: 'donate-price', style: { textAlign: 'center' }, text: g.price }) : null,
     el('button', { class: 'btn btn-green', text: 'Buy in Telegram', onclick: () => buy(`a gift card: ${g.name}`) })))));
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Gift Cards' }),
-  el('p', { class: 'muted small', text: 'Give Robits or Builders Club to a friend. Gift cards are sold in Telegram: you get a code, your friend redeems it on the Promo Codes page.' }),
+  el('p', { class: 'muted small', text: 'Give Robits or Premium to a friend. Gift cards are sold in Telegram: you get a code, your friend redeems it on the Promo Codes page.' }),
   giftBox);
 
-// ---------------------------------------------------------------- Builders Club
+// ---------------------------------------------------------------- Premium
 const PERKS = {
   None: ['Play every game', 'Daily R$25', 'Build in Robis Studio'],
-  BuildersClub: ['Daily R$40', 'BC hard hat badge', 'Everything in Classic'],
-  TurboBuildersClub: ['Daily R$60', 'TBC badge', 'Everything in BC'],
-  OutrageousBuildersClub: ['Daily R$85', 'OBC badge', 'Everything in TBC'],
+  BuildersClub: ['Daily R$40', 'Premium badge', 'Trade and sell Limiteds', 'Everything in Classic'],
+  TurboBuildersClub: ['Daily R$60', 'Premium badge', 'Everything in Premium 450'],
+  OutrageousBuildersClub: ['Daily R$85', 'Premium badge', 'Everything in Premium 1000'],
 };
 const plans = el('div', { class: 'plans' }, store.memberships.map((m) => {
   const current = (me.membership || 'None') === m.id;
@@ -81,14 +81,14 @@ const plans = el('div', { class: 'plans' }, store.memberships.map((m) => {
     current ? el('div', { class: 'plan-tag', text: me.membershipUntil ? `Your plan until ${new Date(me.membershipUntil).toLocaleDateString()}` : 'Your plan' }) : null,
     m.id !== 'None' ? planBuy(m, current) : null);
 }));
-// Builders Club: bought in Telegram.
+// Premium: bought in Telegram.
 function planBuy(m, current) {
   const d = donate.memberships.find((x) => x.id === m.id) || {};
   return el('div', { class: 'plan-buy' },
     el('button', { class: 'btn btn-small btn-green', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(current ? `${m.name} (extend)` : m.name) }));
 }
-app.append(el('h2', { style: { marginTop: '28px' }, text: 'Builders Club' }),
-  el('p', { class: 'muted small', text: 'Buy a membership in Telegram or get one from a promo code.' }), plans);
+app.append(el('h2', { style: { marginTop: '28px' }, text: 'Premium' }),
+  el('p', { class: 'muted small', text: 'Premium replaced Builders Club in 2020. Buy it in Telegram or get it from a promo code.' }), plans);
 
 // ---------------------------------------------------------------- transactions
 const tx = el('div', { class: 'panel' });

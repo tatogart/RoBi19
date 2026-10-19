@@ -41,6 +41,7 @@ if (!h.visible) {
     winter: { icon: '🎁', what: 'Presents', where: 'Hidden around the snowy plaza and on the ice ledges', hub: 'A giant Christmas tree • snowmen • ice ledges • jump pads • LET IT SNOW button' },
     spooky: { icon: '🎃', what: 'Pumpkins', where: 'Hidden in the graveyard and on the ledges', hub: 'A haunted tower • graves and dead trees • jump pads • SPOOK button' },
     candy: { icon: '🍬', what: 'Candies', where: 'Hidden in the candy kingdom and on the ledges', hub: 'A candy castle • candy canes and gumdrops • jump pads • SUGAR RUSH button' },
+    github: { icon: '⭐', what: 'Golden stars', where: 'Hidden on the Merge Tower, the ledges and around the repository', hub: 'The Merge Tower • a giant contribution graph to light up together • the MERGE button • floating code • git push button' },
     ocean: { icon: '🫧', what: 'Pearls', where: 'Hidden in the sunken city and on the ledges', hub: 'A sunken temple • coral and kelp • floaty water • jump pads • BUBBLES button' },
   }[h.hubStyle];
   const hero = el('div', { class: 'hunt-hero' + (jungle ? ' relics' : '') + (MAP ? ' theme-' + h.hubStyle : '') },
@@ -48,8 +49,8 @@ if (!h.visible) {
     jungle ? el('div', { class: 'hunt-leaf l2' }) : el('div', { class: 'hunt-planet p2' }),
     !h.public ? el('div', { class: 'hunt-private', text: 'Private preview: only admins can see the event right now' }) : null,
     h.custom ? null : el('div', { class: 'hunt-part', text: quests ? 'PART 3' : 'PART 2' }),
-    el('div', { class: 'hunt-logo', text: 'THE HUNT' }),
-    el('div', { class: 'hunt-logo2 no-i18n', text: sub.toUpperCase() }),
+    el('div', { class: 'hunt-logo', text: h.hubStyle === 'github' ? 'IGA 26' : 'THE HUNT' }),
+    el('div', { class: 'hunt-logo2 no-i18n', text: (h.hubStyle === 'github' ? 'THE GREAT MERGE' : sub).toUpperCase() }),
     h.custom ? el('p', { class: 'hunt-sub no-i18n', text: h.description }) : el('p', { class: 'hunt-sub', text: quests
       ? 'Ancient relics are hidden behind a quest in every game. Beat the obby, win a round, survive the disasters, reach Door 25... Finish a game\'s quest to get its relic!'
       : 'A rift to another dimension has opened! Jump through the wormholes and find the dimension shard hidden in every game. Your scanner shows how close you are.' }),
@@ -148,6 +149,10 @@ style.textContent = `
 .hunt-found > *, .hunt-found { color: #fff; }
 .hunt-found { background: linear-gradient(135deg, #f3dcff, #b45cff 50%, #4a1a9c); box-shadow: 0 0 10px #b45cff; }
 .hunt-mini-token { background: rgba(0,0,0,.45); border: 2px dashed #b45cff; }
+.hunt-hero.theme-github { background: radial-gradient(ellipse at 50% 0%, #1f6f3a, #0d1117 70%); }
+.hunt-hero.theme-github .hunt-logo { color: #f0f6fc; text-shadow: 0 0 24px rgba(46,160,67,.7), 0 4px 0 #238636; letter-spacing: 6px; }
+.hunt-hero.theme-github .hunt-logo2 { color: #3fb950; }
+.hunt-hero.theme-github .hunt-planet { background: radial-gradient(circle at 35% 35%, #3fb950, #0e4429) !important; }
 .hunt-hero.theme-winter { background: radial-gradient(ellipse at 50% 0%, #5fa8e8, #173a6b 75%); }
 .hunt-hero.theme-spooky { background: radial-gradient(ellipse at 50% 0%, #5a2d82, #120a1c 75%); }
 .hunt-hero.theme-candy { background: radial-gradient(ellipse at 50% 0%, #ff8cc6, #8a2d6b 80%); }

@@ -26,6 +26,13 @@ export const HUB_THEMES = {
     portal: ['#ff5fa2', '#5fd3ff', '#b6ff5f', '#ffb85f'], pillar: '#ffffff', pillarMat: 'SmoothPlastic', frag: ['#ff3b8d', '#ffffff'],
     button: 'SUGAR RUSH', welcome: 'Welcome to the Candy Kingdom! Find the 6 hidden candies.',
   },
+  // IGA 26: a giant repository over Robis (GitHub colours)
+  github: {
+    title: 'IGA 26: The Great Merge', collectible: 'golden star', collectibles: 'golden stars',
+    ground: '#0d1117', groundMat: 'SmoothPlastic', rim: '#2ea043', path: '#161b22', sky: [[60, 70, 95], [50, 60, 85]], clock: 20, fog: [13, 17, 23],
+    portal: ['#2ea043', '#1f6feb', '#a371f7', '#f78166'], pillar: '#30363d', pillarMat: 'SmoothPlastic', frag: ['#e3b341', '#ffffff'],
+    button: 'git push', welcome: 'Welcome to IGA 26: The Great Merge! Light up the contribution graph, find the 6 golden stars and press MERGE.',
+  },
   ocean: {
     title: 'Sunken City', collectible: 'pearl', collectibles: 'pearls',
     ground: '#e3d29a', groundMat: 'Sand', rim: '#1fd1c9', path: '#c9b77e', sky: [[60, 140, 190], [50, 120, 170]], clock: 12, fog: [20, 90, 140],
@@ -78,6 +85,23 @@ function landmark(ws, theme, t) {
     part(m, { name: 'Stick', size: [0.8, 8, 0.8], pos: [0, 31, 0], color: '#ffffff', material: 'SmoothPlastic' });
     const pop = part(m, { name: 'Lollipop', size: [1.2, 7, 7], pos: [0, 37, 0], rot: [0, 90, 0], color: '#ff3b8d', material: 'Neon', shape: 'Cylinder', canCollide: false });
     light(pop, '#ff3b8d', 30, 1.2);
+  } else if (theme === 'github') {
+    // the Merge Tower: the main branch going up, feature branches joining it
+    part(m, { name: 'Main', size: [34, 1.6, 1.6], pos: [0, 17, 0], rot: [0, 0, 90], color: '#2ea043', material: 'Neon', shape: 'Cylinder', canCollide: false });
+    for (let i = 0; i < 6; i++) {
+      const y = 5 + i * 5, side = i % 2 ? 1 : -1, col = t.portal[i % 4];
+      const node = part(m, { name: 'Commit', size: [2.6, 2.6, 2.6], pos: [0, y, 0], color: '#ffffff', material: 'Neon', shape: 'Ball', canCollide: false });
+      if (i % 2 === 0) light(node, '#2ea043', 10, 0.8);
+      // a branch out to the side and back in (a merge)
+      part(m, { name: 'Branch', size: [5.5, 0.8, 0.8], pos: [side * 2.6, y - 1.6, 0], rot: [0, 0, side * 50], color: col, material: 'Neon', canCollide: false });
+      part(m, { name: 'BranchCommit', size: [1.8, 1.8, 1.8], pos: [side * 4.6, y - 3.4, 0], color: col, material: 'Neon', shape: 'Ball', canCollide: false });
+    }
+    const octo = part(m, { name: 'OctoHead', size: [8, 7, 7], pos: [0, 37.5, 0], color: '#f0f6fc', material: 'SmoothPlastic', shape: 'Ball', canCollide: false });
+    light(octo, '#a371f7', 40, 1.5);
+    for (const sx of [-1, 1]) {
+      part(m, { name: 'Ear', size: [2, 3, 2], pos: [sx * 2.6, 41.5, 0], rot: [0, 0, -sx * 25], color: '#f0f6fc', material: 'SmoothPlastic', canCollide: false });
+      part(m, { name: 'Eye', size: [1, 1.4, 0.4], pos: [sx * 1.4, 37.8, 3.4], color: '#0d1117', material: 'SmoothPlastic', canCollide: false });
+    }
   } else {
     // a sunken temple with a big glowing shell
     part(m, { name: 'Temple', size: [20, 3, 20], pos: [0, 2.5, 0], color: '#bfc9c2', material: 'Marble' });
@@ -126,6 +150,15 @@ function decor(ws, theme, t, rand) {
       part(d, { name: 'CandyCane', size: [0.9, 10, 0.9], pos: [x, 5.5, z], color: '#ffffff', material: 'SmoothPlastic', canCollide: false });
       part(d, { name: 'CaneHook', size: [3, 0.9, 0.9], pos: [x + 1, 10.5, z], color: '#ff3b5c', material: 'SmoothPlastic', canCollide: false });
       if (i % 2) part(d, { name: 'Gumdrop', size: [3, 2.4, 3], pos: [x + 3, 1.8, z + 2], color: c, material: 'Glass', shape: 'Ball', transparency: 0.15 });
+    } else if (theme === 'github') {
+      // floating code windows and green "commit" blocks
+      if (i % 2) {
+        const y = 6 + rand() * 10;
+        part(d, { name: 'CodeWindow', size: [10, 6, 0.4], pos: [x, y, z], rot: [0, rand() * 360, 0], color: '#161b22', material: 'SmoothPlastic', canCollide: false });
+        for (let l = 0; l < 4; l++) part(d, { name: 'CodeLine', size: [2 + rand() * 5, 0.4, 0.45], pos: [x, y + 2 - l * 1.2, z], rot: [0, 0, 0], color: t.portal[(i + l) % 4], material: 'Neon', canCollide: false });
+      } else {
+        part(d, { name: 'CommitBlock', size: [3, 3, 3], pos: [x, 2.5, z], color: ['#0e4429', '#006d32', '#26a641', '#39d353'][i % 4], material: 'SmoothPlastic' });
+      }
     } else {
       const c = ['#ff7ab6', '#ff9a5c', '#b45cff'][i % 3];
       part(d, { name: 'Coral', size: [1.4, 3 + rand() * 6, 1.4], pos: [x, 3, z], rot: [rand() * 20, 0, rand() * 20], color: c, material: 'SmoothPlastic', canCollide: false });
@@ -137,6 +170,80 @@ function decor(ws, theme, t, rand) {
 }
 
 // prizes: [{ name, need | how }]
+// IGA 26: every step on the graph is a commit (darker -> brighter green); a
+// fully green graph lets anyone press MERGE: fireworks, then a new graph.
+const GITHUB_LUA = `
+-- IGA 26: the contribution graph and the MERGE button
+local graph = workspace.ContributionGraph
+local GREENS = { Color3.fromHex("#161b22"), Color3.fromHex("#0e4429"), Color3.fromHex("#006d32"), Color3.fromHex("#26a641"), Color3.fromHex("#39d353") }
+local days = {}
+for _, d in ipairs(graph:GetChildren()) do if d.Name == "Day" then table.insert(days, d) end end
+local total = #days
+local lit = 0
+local merged = false
+local countText = graph.GraphCount.BillboardText
+local function recount()
+	lit = 0
+	for _, d in ipairs(days) do if d.Level.Value > 0 then lit = lit + 1 end end
+	countText.Text = merged and "MERGED! A new graph starts soon..." or ("Commits: " .. lit .. " / " .. total .. (lit >= total and "  -  press MERGE on the tower!" or ""))
+end
+local cool = {}
+for _, d in ipairs(days) do
+	d.Touched:Connect(function(hit)
+		local player = charOf(hit)
+		if not player or merged then return end
+		local now = tick()
+		if cool[d] and now - cool[d] < 1.5 then return end
+		cool[d] = now
+		if d.Level.Value < 4 then
+			d.Level.Value = d.Level.Value + 1
+			d.Color = GREENS[d.Level.Value + 1]
+			if d.Level.Value == 1 then
+				recount()
+				if lit == total then say("The whole graph is green! Go press MERGE on the top of the Merge Tower!", 8) end
+			end
+		end
+	end)
+end
+recount()
+local function fireworks()
+	for i = 1, 70 do
+		local b = Instance.new("Part")
+		b.Name = "Firework"
+		b.Shape = Enum.PartType.Ball
+		b.Size = Vector3.new(1, 1, 1) * (0.8 + math.random() * 1.5)
+		b.Material = Enum.Material.Neon
+		b.Color = GREENS[math.random(3, 5)]
+		b.CanCollide = false
+		b.Anchored = false
+		b.Position = Vector3.new(math.random(-30, 30), 50 + math.random() * 25, math.random(-30, 30))
+		b.Velocity = Vector3.new(math.random(-20, 20), math.random(10, 40), math.random(-20, 20))
+		b.Parent = workspace
+		Debris:AddItem(b, 5)
+		if i % 10 == 0 then wait(0.1) end
+	end
+end
+workspace.Merge.MergeButton.ClickDetector.MouseClick:Connect(function(player)
+	if merged then return end
+	if lit < total then
+		player:Notify("Checks pending: " .. (total - lit) .. " commits left on the contribution graph.")
+		return
+	end
+	merged = true
+	recount()
+	say(player.Name .. " merged the pull request! IGA 26 is shipped!", 10)
+	for _, p in ipairs(Players:GetPlayers()) do p:Notify("Merged! Thank you for contributing to IGA 26 :)") end
+	fireworks()
+	wait(3)
+	fireworks()
+	wait(60)
+	for _, d in ipairs(days) do d.Level.Value = 0; d.Color = GREENS[1] end
+	merged = false
+	recount()
+	say("A new contribution graph is waiting. Commit again!", 6)
+end)
+`;
+
 export function buildThemedHub(games, prizes = [], opts = {}) {
   const theme = HUB_THEMES[opts.theme] ? opts.theme : 'winter';
   const t = HUB_THEMES[theme];
@@ -145,10 +252,10 @@ export function buildThemedHub(games, prizes = [], opts = {}) {
   const ws = g.Workspace;
   const L = g.Lighting;
   L.ClockTime = t.clock;
-  L.Brightness = theme === 'spooky' ? 0.5 : 1;
+  L.Brightness = theme === 'spooky' ? 0.5 : theme === 'github' ? 0.7 : 1;
   L.Ambient = Color3.fromRGB(...t.sky[0]);
   L.OutdoorAmbient = Color3.fromRGB(...t.sky[1]);
-  L.FogEnd = theme === 'ocean' ? 260 : theme === 'spooky' ? 320 : 900;
+  L.FogEnd = theme === 'ocean' ? 260 : theme === 'spooky' ? 320 : theme === 'github' ? 500 : 900;
   L.FogColor = Color3.fromRGB(...t.fog);
   if (theme === 'ocean') ws.Gravity = 110; // a bit floaty under the sea
   const rand = rng(777 + theme.length);
@@ -219,6 +326,26 @@ export function buildThemedHub(games, prizes = [], opts = {}) {
     inst(gate, 'Sparkles', { SparkleColor: Color3.fromHex(c) });
     light(gate, c, 20, 1.3);
   });
+
+  // ---------------------------------------------------------------- IGA 26: the contribution graph + MERGE
+  if (theme === 'github') {
+    const graph = model(ws, 'ContributionGraph');
+    const W = 26, H = 7, S = 2.2;
+    for (let cx = 0; cx < W; cx++) {
+      for (let cz = 0; cz < H; cz++) {
+        const tile = part(graph, { name: 'Day', size: [S - 0.25, 0.3, S - 0.25], pos: [(cx - (W - 1) / 2) * S, 2.15, -36 - cz * S], color: '#161b22', material: 'SmoothPlastic', canCollide: false });
+        inst(tile, 'IntValue', { Name: 'Level', Value: 0 });
+      }
+    }
+    part(graph, { name: 'GraphBase', size: [W * S + 1.5, 0.2, H * S + 1.5], pos: [0, 2.05, -36 - ((H - 1) / 2) * S], color: '#0d1117', material: 'SmoothPlastic', canCollide: false });
+    label(part(graph, { name: 'GraphSign', size: [1, 1, 1], pos: [0, 4, -36 - H * S - 1], transparency: 1, canCollide: false }), 'Contribution graph: walk on it to commit!', 3);
+    label(part(graph, { name: 'GraphCount', size: [1, 1, 1], pos: [0, 3, -36 - H * S - 1], transparency: 1, canCollide: false }), 'Commits: 0 / ' + W * H, 1);
+    const merge = model(ws, 'Merge');
+    part(merge, { name: 'Stand', size: [5, 1, 3], pos: [0, top[1] - 1, -3], color: '#30363d', material: 'SmoothPlastic' });
+    const mb = part(merge, { name: 'MergeButton', size: [4, 1.2, 2], pos: [0, top[1] - 0.2, -3], color: '#238636', material: 'Neon' });
+    inst(mb, 'ClickDetector', { MaxActivationDistance: 24 });
+    label(mb, 'MERGE PULL REQUEST', 3);
+  }
 
   // ---------------------------------------------------------------- 6 collectibles
   // on top of the landmark, on the jump-pad ledges, behind the sign, far out.
@@ -365,6 +492,7 @@ spawn(function()
 	end
 end)
 
+${theme === 'github' ? GITHUB_LUA : ''}
 -- the collectibles spin
 local list = workspace.StarFragments:GetChildren()
 local t = 0

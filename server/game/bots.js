@@ -419,7 +419,7 @@ export class Bot {
     const w = [
       ['walk', 5 * this.p.active],
       ['idle', 1.5],
-      ['afk', round ? 0 : this.p.afky * 0.6],
+      ['afk', round ? 0 : this.p.afky * (this.battle ? 0.1 : 0.6)], // in a fight people rarely go AFK
       ['follow', others.length ? 2 * this.p.social : 0],
       ['hide', this.p.hider * (round ? 2.5 : 1.2)],
       ['jump', this.p.jumpy * 0.8],
@@ -885,7 +885,7 @@ export class Bot {
     const s = this.state;
     const k = this.task.kind;
     if (k === 'leaving' || k === 'afk') return k === 'afk';
-    const enemies = others.map((o) => [o, Math.hypot(o.state.p[0] - s.x, o.state.p[1] - s.y, o.state.p[2] - s.z)]).filter((x) => x[1] < 140).sort((a, b) => a[1] - b[1]);
+    const enemies = others.map((o) => [o, Math.hypot(o.state.p[0] - s.x, o.state.p[1] - s.y, o.state.p[2] - s.z)]).filter((x) => x[1] < 450).sort((a, b) => a[1] - b[1]);
     const hp = this._hp();
     // hurt: run and hide (and maybe come back healed)
     if (hp < 0.35 && enemies.length && enemies[0][1] < 45 && k !== 'hide') {
@@ -902,7 +902,7 @@ export class Bot {
     }
     if (!enemies.length) return false;
     const [foe, d] = enemies.find(([o, dd]) => dd < 25 || this._sees(o)) || enemies[0];
-    const range = k === 'idle' && this.p.hider > 0.65 ? 30 : 110; // waiting in ambush: only close ones
+    const range = k === 'idle' && this.p.hider > 0.65 ? 30 : 450; // waiting in ambush: only close ones; otherwise go find someone
     if (d > range) return false;
     // sometimes go for the weakest one in sight instead
     const weak = enemies.filter(([o, dd]) => dd < 60 && this._hp(o) < 0.4)[0];
@@ -926,7 +926,7 @@ export class Bot {
       const miss = ranged ? (chance(0.25 + d / 150) ? rnd(1.5, 4) : rnd(-0.6, 0.6)) : rnd(-0.4, 0.4);
       this.server.handle(this.session, { t: 'activate', id: task.tool.id, p: [ox + miss, oy + rnd(-0.4, 0.6), oz - miss * 0.5] });
     }
-    if (d > 160) { this.task.until = t; return null; }
+    if (d > 450) { this.task.until = t; return null; }
     if (ranged) {
       // keep a distance; circle the enemy when close enough
       if (d > 35 || !sees) return { x: ox, y: oy, z: oz, moving: true, near: 25 };
