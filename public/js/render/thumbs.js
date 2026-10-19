@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { buildAvatar, preloadAvatar, buildPet } from './avatar.js';
 
 let renderer = null;
+let headQueue = Promise.resolve();
 let queue = Promise.resolve();
 const cache = new Map();
 
@@ -69,7 +70,10 @@ async function store(key, url) {
 
 function schedule(key, fn) {
   if (cache.has(key)) return cache.get(key);
-  const draw = () => (queue = queue.then(fn, fn)).catch((e) => { console.warn('thumbnail failed', e); return ''; });
+  // avatars get their own line: a heavy game picture must not keep the
+  // player's own head waiting (each render() sets its size, so it's safe)
+  const head = key.startsWith('head:') || key.startsWith('av:');
+  const draw = () => (head ? (headQueue = headQueue.then(fn, fn)) : (queue = queue.then(fn, fn))).catch((e) => { console.warn('thumbnail failed', e); return ''; });
   const p = PERSIST.test(key)
     ? stored(key).then((hit) => hit || draw().then((url) => { store(key, url); return url; }))
     : draw();

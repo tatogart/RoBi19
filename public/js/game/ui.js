@@ -159,25 +159,44 @@ export class HUD {
   }
 
   // ------------------------------------------------------------ loading
-  showLoading(name, by) {
-    this.loading = h('div', 'loading-screen', `
-      <div class="ls-name">${esc(name || 'Loading')}</div>
-      <div class="ls-by">${by ? 'By ' + esc(by) : ''}</div>
-      <img class="ls-logo" src="/img/icon.svg" alt="">
-      <div class="ls-status">Loading...</div>
-      <div class="ls-tip"></div>`);
+  // The 2023-style loading screen: the game's picture blurred behind, its
+  // icon, name and creator in the middle, a progress bar, tips at the bottom
+  // and a button to leave.
+  showLoading(name, by, info) {
+    const thumb = info && info.id && info.hasThumbnail && !window.ROBIS_STANDALONE ? `/api/games/${info.id}/thumbnail?v=${info.updated || 0}` : '';
+    this.loading = h('div', 'loading-screen ls23', `
+      <div class="ls-bg"${thumb ? ` style="background-image:url('${thumb}')"` : ''}></div>
+      <button class="ls-close" aria-label="Leave">✕</button>
+      <div class="ls-center">
+        <div class="ls-icon">${thumb ? `<img src="${thumb}" alt="">` : '<img class="ls-icon-logo" src="/img/icon.svg" alt="">'}</div>
+        <div class="ls-name">${esc(name || 'Loading')}</div>
+        <div class="ls-by">${by ? 'By ' + esc(by) : ''}</div>
+        <div class="ls-bar"><i></i></div>
+      </div>
+      <div class="ls-foot">
+        <div class="ls-tip"></div>
+        <div class="ls-state"><img class="ls-logo" src="/img/icon.svg" alt=""><span class="ls-status">Loading...</span></div>
+      </div>`);
     this.root.append(this.loading);
-    // Classic loading screen tips.
+    this._lsStep = 0;
+    this.loading.querySelector('.ls-close').onclick = () => { location.href = info && info.id ? `/game?id=${info.id}` : '/home'; };
+    for (const img of this.loading.querySelectorAll('img')) img.onerror = () => { img.style.visibility = 'hidden'; };
     const TIPS = ['Press / to chat.', 'Try /e dance in the chat!', 'Press Shift to toggle Shift Lock.', 'Press Esc to open the menu.',
-      'Make your own games with Robis Studio.', 'Invite friends from the Esc menu → Players.', 'Collect your daily Robits on the Home page.',
+      'Make your own games with Robis Studio.', 'Invite friends from the Esc menu → Players.', 'Finish Daily Quests on the Home page to level up.',
       'Right-click and drag to turn the camera.', 'Walk into a truss to climb it.'];
     const tip = this.loading.querySelector('.ls-tip');
     let i = Math.floor(Math.random() * TIPS.length);
-    const next = () => { if (this.loading) { tip.textContent = 'Tip: ' + TIPS[i++ % TIPS.length]; } };
+    const next = () => { if (this.loading) { tip.textContent = TIPS[i++ % TIPS.length]; } };
     next();
-    this._tipTimer = setInterval(next, 3500);
+    this._tipTimer = setInterval(next, 4000);
   }
-  setLoadingStatus(s) { if (this.loading) this.loading.querySelector('.ls-status').textContent = s; }
+  setLoadingStatus(s) {
+    if (!this.loading) return;
+    this.loading.querySelector('.ls-status').textContent = s;
+    // every step fills the bar a bit more (it never looks stuck at 0)
+    this._lsStep = (this._lsStep || 0) + 1;
+    this.loading.querySelector('.ls-bar i').style.width = Math.min(92, 15 + this._lsStep * 25) + '%';
+  }
   setLoadingName(name, by) {
     if (!this.loading) return;
     this.loading.querySelector('.ls-name').textContent = name;
@@ -188,6 +207,7 @@ export class HUD {
     if (!this.loading) return;
     const l = this.loading;
     this.loading = null;
+    l.querySelector('.ls-bar i').style.width = '100%';
     l.classList.add('done');
     setTimeout(() => l.remove(), 700);
   }

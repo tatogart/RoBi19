@@ -264,3 +264,28 @@ body:has(.game-root.touch) .room-hint { display: none; }
 @media (max-width: 700px) { .big-message { font-size: 32px; } }
 .chat .line.scam-warn { color: #ffd23b; font-weight: 700; font-size: 12px; }
 .chat .line.scam-warn.scam { color: #ff6b6b; }
+
+/* ---- the 2023-style loading screen ---- */
+.loading-screen.ls23 { background: #191b1d; justify-content: center; overflow: hidden; }
+.ls23 .ls-bg { position: absolute; inset: -40px; background: radial-gradient(circle at 50% 40%, #2c3036, #141517 75%); background-size: cover; background-position: center; filter: blur(28px) brightness(.35) saturate(1.2); transform: scale(1.1); }
+.ls23 .ls-center { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; animation: lsIn .5s ease-out; }
+.ls23 .ls-icon { width: 168px; height: 168px; border-radius: 22px; overflow: hidden; background: #2c2f33; box-shadow: 0 10px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08); margin-bottom: 14px; display: flex; align-items: center; justify-content: center; }
+.ls23 .ls-icon img { width: 100%; height: 100%; object-fit: cover; }
+.ls23 .ls-icon .ls-icon-logo { width: 60%; height: 60%; object-fit: contain; }
+.ls23 .ls-name { font-size: 34px; font-weight: 800; letter-spacing: .2px; text-shadow: 0 2px 10px rgba(0,0,0,.5); }
+.ls23 .ls-by { font-size: 16px; color: #b8bcc2; margin-top: 0; }
+.ls23 .ls-bar { width: 260px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.14); overflow: hidden; margin-top: 22px; }
+.ls23 .ls-bar i { display: block; height: 100%; width: 8%; background: #fff; border-radius: 4px; transition: width .6s ease; }
+.ls23 .ls-foot { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 0 28px calc(24px + env(safe-area-inset-bottom)); }
+.ls23 .ls-tip { position: static; text-align: left; color: #c9ccd1; font-size: 15px; max-width: 60%; }
+.ls23 .ls-state { display: flex; align-items: center; gap: 10px; color: #c9ccd1; font-size: 14px; }
+.ls23 .ls-logo { width: 28px; height: 28px; margin: 0; animation: lsSpin 1.2s linear infinite; }
+.ls23 .ls-status { margin: 0; color: #c9ccd1; font-size: 14px; }
+.ls23 .ls-close { position: absolute; top: calc(14px + env(safe-area-inset-top)); right: calc(16px + env(safe-area-inset-right)); width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255,255,255,.12); color: #fff; font-size: 16px; cursor: pointer; z-index: 2; }
+.ls23 .ls-close:hover { background: rgba(255,255,255,.22); }
+@keyframes lsIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (max-width: 700px), (max-height: 500px) {
+  .ls23 .ls-icon { width: 110px; height: 110px; border-radius: 16px; margin-bottom: 8px; }
+  .ls23 .ls-name { font-size: 24px; text-align: center; }
+  .ls23 .ls-tip { font-size: 13px; }
+}

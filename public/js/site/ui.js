@@ -191,14 +191,18 @@ export function toast(text, type = '') {
 
 export function spinner() { return el('div', { class: 'loading-spinner' }); }
 
-// The 2019 "Robis is now loading. Get ready to play!" dialog before launching.
+// The 2023-style launch dialog: the spinning logo, "Starting Robis...",
+// then "Joining..." (and the game opens).
 export function launchGame(gameId, serverId, privateId) {
-  const logo = el('img', { src: '/img/icon.svg', class: 'spin-logo', alt: '' });
+  const status = el('div', { class: 'launch-status', text: 'Starting Robis...' });
   const m = modal({
-    body: el('div', { class: 'launch-dialog' }, logo,
-      el('h3', { text: 'Robis is now loading. Get ready to play!' }),
-      el('div', { class: 'muted', text: 'Starting the Robis Player...' })),
+    body: el('div', { class: 'launch-dialog launch23' },
+      el('div', { class: 'launch-logo' }, el('img', { src: '/img/icon.svg', alt: '' })),
+      status,
+      el('div', { class: 'launch-dots' }, el('i'), el('i'), el('i'))),
   });
+  m.root.classList.add('launch-backdrop');
+  setTimeout(() => { status.textContent = 'Joining the game...'; }, 650);
   setTimeout(() => {
     m.close();
     location.href = `/play?placeId=${gameId}${serverId ? '&serverId=' + serverId : ''}${privateId ? '&private=' + privateId : ''}`;

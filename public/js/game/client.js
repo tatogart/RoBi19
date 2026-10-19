@@ -82,7 +82,7 @@ export class GameClient {
   // ------------------------------------------------------------ lifecycle
   start() {
     const { gameInfo } = this.opts;
-    this.hud.showLoading(gameInfo?.name || 'Robis', gameInfo?.creator?.username);
+    this.hud.showLoading(gameInfo?.name || 'Robis', gameInfo?.creator?.username, gameInfo);
     this.hud.setLoadingStatus('Connecting to server...');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     this.ws = new WebSocket(`${proto}://${location.host}/ws${wsSession()}`);
