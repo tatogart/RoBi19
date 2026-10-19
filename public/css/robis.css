@@ -1582,3 +1582,37 @@ html[data-theme="dark"] .bulk-bar { background: #3a3220; border-color: #6b5a24; 
 .game-card.skeleton { min-height: 220px; border-radius: 8px; background: linear-gradient(90deg, var(--gray-bg) 0%, rgba(255,255,255,.35) 50%, var(--gray-bg) 100%); background-size: 200% 100%; animation: skel 1.2s infinite linear; }
 @keyframes skel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (max-width: 700px) { .today-strip { grid-template-columns: 1fr; } .greet-card.compact .greet-head { width: 64px; height: 64px; } .greet-card.compact h1 { font-size: 20px; } }
+
+/* ================= Plain 2019: no modern effects (the 2023 loading screens stay) ================= */
+/* nothing slides, zooms, lifts or blurs */
+.rbx-content > * { animation: none !important; }
+.modal { animation: none !important; border-radius: 4px; }
+.modal-backdrop { backdrop-filter: none !important; background: rgba(0, 0, 0, .5); }
+.btn:not(:disabled):active { transform: none; }
+.btn, .btn-primary, .btn-green { box-shadow: none !important; }
+.game-card, .item-card { transition: none; }
+.game-card:hover, .item-card:hover { transform: none !important; box-shadow: var(--shadow) !important; }
+.game-card .thumb img, .item-card .thumb img { transition: none; }
+.game-card:hover .thumb img, .item-card:hover .thumb img { transform: none !important; }
+.game-card:hover .name, .item-card:hover .name { text-decoration: underline; }
+.rbx-header .logo:hover img { transform: none; }
+.input:focus { box-shadow: none; border-color: var(--blue); }
+.pill { border-radius: 3px; }
+/* the home: a plain "Hello, name!" with the round head, like 2019 */
+.greet-card, .greet-card.compact { background: none !important; box-shadow: none !important; border-radius: 0; padding: 4px 0 !important; }
+.greet-card .greet-head, .greet-card.compact .greet-head { box-shadow: none !important; background: #d4d4d4 !important; }
+.today-chip { border-radius: 3px; box-shadow: var(--shadow); }
+.today-chip-ic { filter: grayscale(.15); }
+.see-all { font-weight: 600; }
+.game-card.skeleton { animation: none; background: var(--panel); box-shadow: var(--shadow); }
+/* levels and quests: flat */
+.lvl-badge { background: #f5a623; box-shadow: none; border-radius: 3px; }
+.lvl-bar { border-radius: 2px; box-shadow: none; background: #d8d8d8; }
+.lvl-bar i { background: #f5a623; border-radius: 0; }
+html[data-theme="dark"] .lvl-bar { background: #555; }
+.quest { border-radius: 3px; }
+.quest-bar, .quest-bar i { border-radius: 0; }
+/* the left menu without the extra roundness */
+.rbx-leftnav a.active { color: var(--text); }
+.dropdown { box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
+@media (max-width: 700px) { .greet-card.compact .greet-head { width: 64px !important; height: 64px !important; } }
