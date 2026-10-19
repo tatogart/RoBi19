@@ -191,11 +191,12 @@ export function installClassic(api, ctx) {
       },
       richest: people.slice().sort((a, b) => (b.robits || 0) - (a.robits || 0)).slice(0, 10).map((u) => ({ id: u.id, username: u.username, robits: u.robits || 0 })),
       newest: people.slice().sort((a, b) => b.created - a.created).slice(0, 10).map((u) => ({ id: u.id, username: u.username, created: u.created })),
-      settings: { guests: S.guests !== false, nameBlacklist: S.nameBlacklist, welcome: S.welcome },
+      settings: { ads: S.ads !== false, guests: S.guests !== false, nameBlacklist: S.nameBlacklist, welcome: S.welcome },
     });
   });
   const SITE_OPS = {
     deleteGuests() { const g = accounts().filter((u) => u.guest && !manager.findUser(u.id)); for (const u of g) deleteAccount(u); return `${g.length} guest account(s) deleted`; },
+    ads(b) { S.ads = !!b.on; return b.on ? 'Ads are on' : 'Ads are off'; },
     guests(b) { S.guests = !!b.on; return b.on ? 'Guest play is on' : 'Guest play is off'; },
     resetStipends() { for (const u of accounts()) u.lastStipend = 0; return 'Everyone can claim the stipend again'; },
     purgeSessions() {

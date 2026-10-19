@@ -48,6 +48,20 @@ export function socialBanner(site) {
     el('span', { class: 'social-banner-text' }, el('b', { text: `Join Robis on ${tg.label}!` }), el('span', { text: 'News, updates, events and giveaways first.' })),
     el('span', { class: 'btn btn-primary', text: 'Join' }));
 }
+// A 2019-style banner ad ("ADVERTISEMENT" above it), drawn with HTML so
+// nothing is loaded from other sites. Admins turn it off in Site Tools.
+const AD = { name: 'Limonchat', url: 'https://81-90-31-167.sslip.io/' };
+export function adBanner() {
+  return el('div', { class: 'ad-wrap' },
+    el('div', { class: 'ad-label', text: 'ADVERTISEMENT' }),
+    el('a', { class: 'ad-banner', href: AD.url, target: '_blank', rel: 'noopener sponsored' },
+      el('span', { class: 'ad-lemon', text: '🍋' }),
+      el('span', { class: 'ad-text' },
+        el('b', { class: 'ad-name no-i18n', text: AD.name }),
+        el('span', { class: 'ad-slogan', text: 'The messenger for you and your friends. Free!' })),
+      el('span', { class: 'ad-chat' }, el('i', { text: 'Hi! 👋' }), el('i', { class: 'me', text: 'Play Robis?' })),
+      el('span', { class: 'ad-btn', text: 'Chat now!' })));
+}
 export let SITE = null;
 
 export async function initPage({ requireAuth = true, active = '', nav = true } = {}) {
@@ -58,6 +72,8 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     return new Promise(() => {});
   }
   document.body.prepend(buildHeader(me, active));
+  // the banner ad on the main pages, like Roblox in 2019
+  if (site && site.ads && ['home', 'games', 'catalog'].includes(active)) { const app = document.getElementById('app'); if (app) app.prepend(adBanner()); }
   if (nav && me) {
     document.body.prepend(buildNav(me, active));
     document.body.append(buildTabBar(active));

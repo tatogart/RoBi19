@@ -2491,6 +2491,7 @@ async function drawSiteTools() {
         el('p', { class: 'small muted', text: `${st.guests} guest account(s) right now.` }),
         el('div', { class: 'cl-grid' },
           B(t.settings.guests ? 'Turn guest play off' : 'Turn guest play on', () => run('guests', { on: !t.settings.guests })),
+          B(t.settings.ads ? 'Turn the ads off' : 'Turn the ads on', () => run('ads', { on: !t.settings.ads })),
           B('Delete all guests', () => run('deleteGuests', {}, 'Delete every guest account that is not in a game?'), true))),
       box('Maintenance',
         el('div', { class: 'cl-grid' },
