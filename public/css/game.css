@@ -318,3 +318,8 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .ew-item .ico { font-size: 28px; line-height: 1; }
 .ew-item .nm { font-size: 11px; margin-top: 2px; }
 .ew-item.owned { border-color: #ffc400; }
+
+/* "Landscape": the game turned 90° inside the page (iPhones that won't rotate) */
+.game-root.force-landscape { right: auto; bottom: auto; transform-origin: 0 0; transform: rotate(90deg) translateY(-100%); }
+.game-root.force-landscape .rotate-hint { display: none !important; }
+.rotate-hint .rot-land { font-size: 13px; background: #00a2ff; border-radius: 10px; padding: 3px 9px; font-weight: 700; }

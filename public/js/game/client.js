@@ -69,12 +69,13 @@ export class GameClient {
     // iPhones (Safari) report the new size late after the phone turns, or
     // not at all to a ResizeObserver (older ones don't have it): check again
     // a few times after every rotation / resize.
-    this._settle = () => { this.resize(); for (const ms of [120, 350, 800]) setTimeout(this._resize, ms); };
+    this._settle = () => { this.applyLandscape(); this.resize(); for (const ms of [120, 350, 800]) setTimeout(this._resize, ms); };
     this.ro = typeof ResizeObserver === 'function' ? new ResizeObserver(this._resize) : null;
     if (this.ro) this.ro.observe(this.root);
     addEventListener('orientationchange', this._settle);
     addEventListener('resize', this._settle);
     if (window.visualViewport) visualViewport.addEventListener('resize', this._settle);
+    this.applyLandscape();
     this.frames = 0;
     this.fpsTime = 0;
   }
@@ -179,6 +180,29 @@ export class GameClient {
       this._autoLowered = true;
       this.hud.addChat('', `Graphics lowered to ${next} to keep the game smooth (change it in the menu).`, { system: true });
     }
+  }
+
+  // iPhones can't be turned by a web page (and not at all with the rotation
+  // lock on), so "Landscape" turns the game 90° inside the page instead.
+  // Only while the phone is held upright; a real landscape turns it off.
+  setLandscape(on) {
+    this.settings.landscape = !!on;
+    this.saveSettings();
+    this.applyLandscape();
+    this.resize();
+  }
+  applyLandscape() {
+    const on = !!this.settings.landscape && this.isTouch && !this.root.classList.contains('embedded') && innerHeight > innerWidth;
+    this.root.classList.toggle('force-landscape', on);
+    this.root.style.width = on ? innerHeight + 'px' : '';
+    this.root.style.height = on ? innerWidth + 'px' : '';
+    this.input.rotated = on;
+    if (this.hud) this.hud.landscapeChanged?.(on);
+  }
+  // where the canvas is on the screen (in the turned game's own coordinates when turned)
+  viewRect() {
+    if (this.input.rotated) return { left: 0, top: 0, width: this.canvas.clientWidth, height: this.canvas.clientHeight };
+    return this.canvas.getBoundingClientRect();
   }
 
   resize() {
@@ -481,7 +505,7 @@ export class GameClient {
 
   pickPart(clientX, clientY) {
     if (!this.sync) return null;
-    const r = this.canvas.getBoundingClientRect();
+    const r = this.viewRect();
     const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     if (document.pointerLockElement) ndc.set(0, 0);
     this.raycaster.setFromCamera(ndc, this.camera);
@@ -586,7 +610,7 @@ export class GameClient {
   }
   // Where the player aims: the first thing under the mouse (players included), or far away.
   aimPoint(clientX, clientY) {
-    const r = this.canvas.getBoundingClientRect();
+    const r = this.viewRect();
     const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     if (document.pointerLockElement) ndc.set(0, 0);
     // Phone use button: aim at the crosshair, a little above the middle (over your own head).

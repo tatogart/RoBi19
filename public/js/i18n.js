@@ -1584,7 +1584,7 @@ const RU = {
   'Resume Game': 'Продолжить', 'Reset Character': 'Возродиться', 'Leave Game': 'Выйти из игры', 'Game menu': 'Меню игры',
   'To chat click here or press "/" key': 'Чтобы написать, нажми здесь или клавишу «/»', 'Tap here to chat': 'Нажми, чтобы написать',
   'Chat (try /e dance, /e wave, /e cheer)': 'Чат (попробуй /e dance, /e wave, /e cheer)', 'Chat': 'Чат', 'Fullscreen': 'Полный экран',
-  'Rotate your device for a better view': 'Поверни устройство для лучшего обзора', 'Developer Console': 'Консоль разработчика',
+  'Rotate your device for a better view': 'Поверни устройство для лучшего обзора', 'Developer Console': 'Консоль разработчика', 'Landscape': 'Ландшафт', 'Landscape (turn the game)': 'Ландшафт (повернуть игру)',
   'Server Lua or :commands (owners and admins)': 'Серверный Lua или :команды (владельцы и админы)', 'Disconnected': 'Отключено',
   'Unable to join': 'Не удалось войти', 'Walk (or arrow keys)': 'Ходить (или стрелки)', 'Jump': 'Прыжок', 'Rotate the camera': 'Вращать камеру',
   'Zoom in / out (all the way in = first person)': 'Приблизить / отдалить (до упора — вид от первого лица)', 'Toggle Shift Lock': 'Shift Lock',

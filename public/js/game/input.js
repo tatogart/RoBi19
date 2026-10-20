@@ -9,6 +9,9 @@ export class Input {
     this.touchMove = { x: 0, y: 0 };
     this.touchJump = false;
     this.enabled = true;
+    // the game is turned 90° inside the page ("Landscape" on iPhones that
+    // won't rotate): touches are mapped into the turned game's own coordinates
+    this.rotated = false;
     this.onRotate = opts.onRotate || (() => {});
     this.onZoom = opts.onZoom || (() => {});
     this.onKey = opts.onKey || (() => {});
@@ -69,6 +72,8 @@ export class Input {
     const el = this.el;
     this.touches = new Map();
     const R = 55; // thumbstick radius in px
+    const at = (t) => (this.rotated ? { x: t.clientY, y: innerWidth - t.clientX } : { x: t.clientX, y: t.clientY });
+    const size = () => (this.rotated ? { w: innerHeight, h: innerWidth } : { w: innerWidth, h: innerHeight });
     const cameraTouches = () => [...this.touches.values()].filter((t) => !t.stick);
     const resetStick = () => {
       this.touchMove = { x: 0, y: 0 };
@@ -77,15 +82,17 @@ export class Input {
     };
     el.addEventListener('touchstart', (e) => {
       this.isTouch = true;
+      const { w, h } = size();
       for (const t of e.changedTouches) {
+        const p = at(t);
         // Dynamic thumbstick: any touch in the lower-left area of the screen.
         const hasStick = [...this.touches.values()].some((x) => x.stick);
-        const stick = !hasStick && t.clientX < innerWidth * 0.45 && t.clientY > innerHeight * 0.35;
-        this.touches.set(t.identifier, { x0: t.clientX, y0: t.clientY, x: t.clientX, y: t.clientY, stick, t0: performance.now() });
+        const stick = !hasStick && p.x < w * 0.45 && p.y > h * 0.35;
+        this.touches.set(t.identifier, { x0: p.x, y0: p.y, x: p.x, y: p.y, stick, t0: performance.now() });
         if (stick && this.stickEl) {
           this.stickEl.classList.add('active');
-          this.stickEl.style.left = t.clientX - R - 5 + 'px';
-          this.stickEl.style.top = t.clientY - R - 5 + 'px';
+          this.stickEl.style.left = p.x - R - 5 + 'px';
+          this.stickEl.style.top = p.y - R - 5 + 'px';
         }
       }
       const cams = cameraTouches();
@@ -96,8 +103,9 @@ export class Input {
       for (const t of e.changedTouches) {
         const s = this.touches.get(t.identifier);
         if (!s) continue;
+        const p = at(t);
         if (s.stick) {
-          let dx = t.clientX - s.x0, dy = t.clientY - s.y0;
+          let dx = p.x - s.x0, dy = p.y - s.y0;
           const m = Math.hypot(dx, dy);
           if (m > R) { dx *= R / m; dy *= R / m; }
           // Small dead zone, then full speed at 70% of the radius (like the 2019 dynamic thumbstick).
@@ -107,7 +115,7 @@ export class Input {
           if (this.knobEl) this.knobEl.style.transform = `translate(${dx}px, ${dy}px)`;
         }
         s.px = s.x; s.py = s.y;
-        s.x = t.clientX; s.y = t.clientY;
+        s.x = p.x; s.y = p.y;
       }
       const cams = cameraTouches();
       if (cams.length >= 2) {
@@ -125,9 +133,10 @@ export class Input {
     const end = (e) => {
       for (const t of e.changedTouches) {
         const s = this.touches.get(t.identifier);
+        const p = at(t);
         if (s && s.stick) resetStick();
-        else if (s && Math.hypot(t.clientX - s.x0, t.clientY - s.y0) < 10 && performance.now() - s.t0 < 350) {
-          this.onClick({ clientX: t.clientX, clientY: t.clientY });
+        else if (s && Math.hypot(p.x - s.x0, p.y - s.y0) < 10 && performance.now() - s.t0 < 350) {
+          this.onClick({ clientX: p.x, clientY: p.y, local: this.rotated });
         }
         this.touches.delete(t.identifier);
       }

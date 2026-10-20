@@ -141,8 +141,10 @@ export class HUD {
     this.jump.addEventListener('touchcancel', press(false));
 
     // Portrait hint for phones (the game is playable either way).
-    this.rotateHint = h('div', 'rotate-hint', '<span>📱↻</span> Rotate your device for a better view <button aria-label="Dismiss">×</button>');
-    this.rotateHint.querySelector('button').onclick = () => { this.rotateHint.remove(); this.rotateDismissed = true; };
+    // iPhones with the rotation lock (or ones that just won't turn): "Landscape" turns the game itself.
+    this.rotateHint = h('div', 'rotate-hint', '<span>📱↻</span> Rotate your device for a better view <button class="rot-land">Landscape</button><button class="rot-x" aria-label="Dismiss">×</button>');
+    this.rotateHint.querySelector('.rot-x').onclick = () => { this.rotateHint.remove(); this.rotateDismissed = true; };
+    this.rotateHint.querySelector('.rot-land').onclick = () => client.setLandscape(true);
     this.el.append(this.rotateHint);
     setTimeout(() => this.rotateHint.classList.add('fade'), 6000);
 
@@ -490,6 +492,11 @@ export class HUD {
     const lock = h('select', '', `<option value="1">On</option><option value="0" ${c.settings.shiftLockEnabled ? '' : 'selected'}>Off</option>`);
     lock.onchange = () => { c.settings.shiftLockEnabled = lock.value === '1'; c.saveSettings(); };
     row('Shift Lock Switch', lock);
+    if (c.isTouch) {
+      const land = h('select', '', `<option value="0">Off</option><option value="1" ${c.settings.landscape ? 'selected' : ''}>On</option>`);
+      land.onchange = () => c.setLandscape(land.value === '1');
+      row('Landscape (turn the game)', land);
+    }
     const fps = h('select', '', `<option value="0">Off</option><option value="1" ${c.settings.showFps ? 'selected' : ''}>On</option>`);
     fps.onchange = () => { c.settings.showFps = fps.value === '1'; c.saveSettings(); };
     row('Show FPS', fps);
