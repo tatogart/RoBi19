@@ -2593,6 +2593,11 @@ test('catalog gear is in the backpack in games; the Harpoon pulls (not in obbies
   const harpoon = (await call('GET', '/catalog?type=All&q=Harpoon', null, p.cookie)).data.items.find((i) => i.name === 'Harpoon');
   assert.ok(harpoon && harpoon.type === 'Gear');
   await call('POST', `/admin/users/${p.data.user.id}/give`, { itemIds: [harpoon.id] }, admin);
+  // only the gear you wear goes in the game backpack: owned but not worn = nothing
+  const sword = (await call('GET', '/catalog?q=Classic Sword', null, p.cookie)).data.items[0];
+  await call('POST', `/admin/users/${p.data.user.id}/give`, { itemIds: [sword.id] }, admin);
+  const av = (await call('GET', '/avatar', null, p.cookie)).data.avatar;
+  assert.equal((await call('PUT', '/avatar', { ...av, wearing: [...av.wearing.filter((x) => x !== sword.id), harpoon.id] }, p.cookie)).status, 200);
   const maker = (await call('POST', '/auth/signup', { username: 'HarpoonMaker', password: 'secret123' })).cookie;
   const gm = (await call('POST', '/games', { name: 'Harpoon Place', template: 'baseplate' }, maker)).data.game;
   await call('PATCH', `/games/${gm.id}`, { isPublic: true }, maker);
@@ -2609,6 +2614,7 @@ test('catalog gear is in the backpack in games; the Harpoon pulls (not in obbies
   const c = await join(p.cookie, { placeId: gm.id });
   await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
   await c.wait(() => !!findTool(c), 4000);
+  assert.ok(!c.inbox.some((m) => (m.t === 'welcome' || m.t === 'tick') && JSON.stringify(m).includes('"Classic Sword"')));
   const id = findTool(c);
   c.ws.send(JSON.stringify({ t: 'equip', id }));
   await new Promise((r) => setTimeout(r, 200));

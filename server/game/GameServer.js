@@ -1021,24 +1021,22 @@ export class GameServer {
   }
 
   // ------------------------------------------------------------ catalog gear
-  // The Gear a player owns is in their backpack in every game (2020): the
-  // one they wear first. Most are just for show; the Harpoon pulls you.
+  // The Gear a player wears on their avatar (one) is a Tool in their backpack
+  // in every game (2020). Most are just for show; the Harpoon pulls you.
   _giveGear(session, backpack) {
     const D = this.manager && this.manager.db && this.manager.db.data;
     if (!D || !backpack || session.bot || !session.user) return;
     const inv = D.inventory[session.user.id] || [];
-    const wearing = (session.avatar && session.avatar.wearing) || [];
-    const gears = inv.map((id) => D.items[id]).filter((it) => it && it.type === 'Gear' && it.data && it.data.model)
-      .sort((a, b) => wearing.includes(b.id) - wearing.includes(a.id)).slice(0, 8);
-    for (const it of gears) {
-      const t = createInstance('Tool');
-      t.Name = it.name;
-      t.ToolModel = it.data.model;
-      try { t.Color = Color3.fromHex(it.data.color || '#a3a2a5'); } catch { /* bad color */ }
-      t.ToolTip = it.data.model === 'harpoon' ? 'Click where the harpoon should hook' : it.name;
-      t._catalogGear = it.data.model;
-      t.Parent = backpack;
-    }
+    const worn = ((session.avatar && session.avatar.items) || []).map((i) => i && i.id);
+    const it = worn.map((id) => D.items[id]).find((x) => x && x.type === 'Gear' && x.data && x.data.model && inv.includes(x.id));
+    if (!it) return;
+    const t = createInstance('Tool');
+    t.Name = it.name;
+    t.ToolModel = it.data.model;
+    try { t.Color = Color3.fromHex(it.data.color || '#a3a2a5'); } catch { /* bad color */ }
+    t.ToolTip = it.data.model === 'harpoon' ? 'Click where the harpoon should hook' : it.name;
+    t._catalogGear = it.data.model;
+    t.Parent = backpack;
   }
   // games where a pull would skip the game (obbies, races, rounds)
   _gearCanPull() {

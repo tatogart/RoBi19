@@ -345,7 +345,7 @@ const RU = {
   'Something is coming... Stay tuned!': 'Скоро что-то будет... Следи за новостями!',
   'THE HUNT QUEST': 'КВЕСТ THE HUNT',
   'Harpoon': 'Гарпун', 'The harpoon can\'t pull you in this game.': 'В этой игре гарпун не может тебя притянуть.', 'Click where the harpoon should hook': 'Кликни туда, где гарпун должен зацепиться',
-  'Shoot it at a wall or a roof and the rope pulls you there! In your backpack in every game (some games don\'t let it pull you).': 'Стреляй в стену или крышу — верёвка притянет тебя туда! Лежит в рюкзаке в каждой игре (в некоторых играх не тянет).',
+  'Shoot it at a wall or a roof and the rope pulls you there! Wear it on your avatar and it\'s in your backpack in every game (some games don\'t let it pull you).': 'Стреляй в стену или крышу — верёвка притянет тебя туда! Надень его на аватар — и он будет в рюкзаке в каждой игре (в некоторых играх не тянет).',
   'Not for sale': 'Не продаётся', 'A special item: only the Robis team can give it. It can\'t be bought, traded or gifted.': 'Особый предмет: его может выдать только команда Robis. Его нельзя купить, обменять или подарить.',
   '+ Create a special item': '+ Создать особый предмет', 'Create a special item': 'Создать особый предмет', 'Look': 'Вид', 'Plate': 'Плашка', 'Second color': 'Второй цвет',
   'Give it right away to': 'Сразу выдать игрокам', 'Limited & player items': 'Лимитки и предметы игроков', 'No special items yet.': 'Особых предметов пока нет.',

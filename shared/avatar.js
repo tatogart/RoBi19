@@ -154,7 +154,7 @@ export const CATALOG = [
   // Gear
   { name: 'Classic Sword', type: 'Gear', price: 100, data: { model: 'sword', color: '#b4b4b4' }, desc: 'The linked sword. Cosmetic.' },
   { name: 'Rocket Launcher', type: 'Gear', price: 250, data: { model: 'rocket', color: '#4b974b' }, desc: 'Cosmetic rocket launcher.' },
-  { name: 'Harpoon', type: 'Gear', price: 350, data: { model: 'harpoon', color: '#8b5a2b' }, desc: 'Shoot it at a wall or a roof and the rope pulls you there! In your backpack in every game (some games don\'t let it pull you).' },
+  { name: 'Harpoon', type: 'Gear', price: 350, data: { model: 'harpoon', color: '#8b5a2b' }, desc: 'Shoot it at a wall or a roof and the rope pulls you there! Wear it on your avatar and it\'s in your backpack in every game (some games don\'t let it pull you).' },
   // Pets: they follow you around in every game (see public/js/render/avatar.js PETS).
   { name: 'Puppy', type: 'Pet', price: 100, data: { model: 'dog', color: '#a0703c', accent: '#f8f8f8' }, desc: 'A loyal little friend that follows you everywhere.' },
   { name: 'Kitty', type: 'Pet', price: 100, data: { model: 'cat', color: '#e8913a', accent: '#f8f8f8' }, desc: 'Purrs when you stand still.' },
