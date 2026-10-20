@@ -69,7 +69,7 @@ const SWITCH_AT = Date.UTC(2026, 9, 3, 12, 0);
 export const PRIZE_MODELS = {
   Hat: ['cap', 'cone', 'tophat', 'crown', 'viking', 'party', 'headphones', 'halo', 'dominator', 'beanie', 'pirate', 'witch', 'shades', 'wings', 'astronaut', 'planet', 'explorer', 'octohood', 'commitcrown', 'starhalo'],
   Pet: ['dog', 'cat', 'bunny', 'penguin', 'robot', 'ghost', 'dragon', 'ufo', 'alien', 'golem', 'drone'],
-  Gear: ['sword', 'rocket', 'gun', 'flashlight', 'brush', 'hammer', 'saber', 'torch'],
+  Gear: ['sword', 'rocket', 'gun', 'flashlight', 'brush', 'hammer', 'saber', 'torch', 'harpoon'],
   TShirt: ['star'],
   Accessory: ['glitchvisor', 'graphcape', 'duck', 'bee', 'parrot', 'cape', 'jetpack', 'backpack'],
   Emote: ['mergedance', 'hype', 'robot', 'stadium'],

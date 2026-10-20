@@ -2586,3 +2586,45 @@ test('special items: only admins make and give them, nobody can buy or trade the
   assert.equal((await call('DELETE', `/admin/special/${id}`, null, admin)).status, 200);
   assert.equal((await call('GET', `/catalog/${id}`, null, kid.cookie)).status, 404);
 });
+
+test('catalog gear is in the backpack in games; the Harpoon pulls (not in obbies)', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'HarpoonKid', password: 'secret123' });
+  const harpoon = (await call('GET', '/catalog?type=All&q=Harpoon', null, p.cookie)).data.items.find((i) => i.name === 'Harpoon');
+  assert.ok(harpoon && harpoon.type === 'Gear');
+  await call('POST', `/admin/users/${p.data.user.id}/give`, { itemIds: [harpoon.id] }, admin);
+  const maker = (await call('POST', '/auth/signup', { username: 'HarpoonMaker', password: 'secret123' })).cookie;
+  const gm = (await call('POST', '/games', { name: 'Harpoon Place', template: 'baseplate' }, maker)).data.game;
+  await call('PATCH', `/games/${gm.id}`, { isPublic: true }, maker);
+  const findTool = (c) => {
+    for (const m of c.inbox) {
+      const nodes = m.t === 'welcome' ? JSON.stringify(m.snapshot) : m.t === 'tick' ? JSON.stringify(m.ops) : '';
+      const at = nodes.indexOf('"Harpoon"');
+      if (at < 0) continue;
+      const ids = [...nodes.slice(0, at).matchAll(/"id":"?([\w-]+)"?/g)];
+      if (ids.length) return ids[ids.length - 1][1];
+    }
+    return null;
+  };
+  const c = await join(p.cookie, { placeId: gm.id });
+  await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  await c.wait(() => !!findTool(c), 4000);
+  const id = findTool(c);
+  c.ws.send(JSON.stringify({ t: 'equip', id }));
+  await new Promise((r) => setTimeout(r, 200));
+  c.ws.send(JSON.stringify({ t: 'activate', id, p: [20, 5, 20] }));
+  const h = await c.wait((m) => m.t === 'harpoon', 4000);
+  assert.equal(h.pull, true);
+  c.ws.close();
+  // the obby: the rope shoots, but doesn't pull
+  const obby = (await call('GET', '/games?sort=featured', null, p.cookie)).data.games.find((g) => g.name === 'Mega Fun Obby');
+  const c2 = await join(p.cookie, { placeId: obby.id });
+  await c2.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  await c2.wait(() => !!findTool(c2), 4000);
+  const id2 = findTool(c2);
+  c2.ws.send(JSON.stringify({ t: 'equip', id: id2 }));
+  await new Promise((r) => setTimeout(r, 200));
+  c2.ws.send(JSON.stringify({ t: 'activate', id: id2, p: [10, 5, 10] }));
+  assert.equal((await c2.wait((m) => m.t === 'harpoon', 4000)).pull, false);
+  c2.ws.close();
+});

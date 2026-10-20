@@ -1220,6 +1220,18 @@ function hairShell(material, { front = 0.35, back = -0.3, sides = 0, thick = 0.0
 }
 
 const GEARS = {
+  // a wooden harpoon gun: the shaft, a metal barbed tip and a coil of rope
+  harpoon(d) {
+    const g = new THREE.Group();
+    const wood = mat(d.color || '#8b5a2b', { roughness: 0.85 });
+    const metal = mat('#9aa3ab', { metalness: 0.85, roughness: 0.3 });
+    g.add(M(new THREE.CylinderGeometry(0.13, 0.13, 2.3, 10), wood, 0, 0.05, -1.15, Math.PI / 2, 0, 0));
+    g.add(M(new THREE.ConeGeometry(0.24, 0.7, 10), metal, 0, 0.05, -2.6, -Math.PI / 2, 0, 0));
+    g.add(M(new THREE.BoxGeometry(0.5, 0.06, 0.25), metal, 0, 0.05, -2.35));
+    g.add(M(new THREE.BoxGeometry(0.3, 0.55, 0.5), wood, 0, -0.25, -0.2, 0.25, 0, 0));
+    g.add(M(new THREE.TorusGeometry(0.28, 0.08, 6, 14), mat('#d8c9a3', { roughness: 1 }), 0.25, 0.05, -0.85, 0, Math.PI / 2, 0));
+    return g;
+  },
   torch(d) {
     const g = new THREE.Group();
     g.add(M(new THREE.CylinderGeometry(0.12, 0.09, 1.8, 8), mat(d.color || '#7a4a22', { roughness: 0.9 }), 0, 0.35, -0.6, Math.PI / 2.6, 0, 0));
@@ -1329,7 +1341,8 @@ export function buildAvatar(avatar, opts = {}) {
     if (acc.userData.spin) root.userData.spin = acc.userData.spin;
   }
   let gear = null;
-  if (look.gear && GEARS[look.gear.model]) {
+  // (in games the catalog gear is a Tool in the backpack instead: opts.gear === false)
+  if (look.gear && GEARS[look.gear.model] && opts.gear !== false) {
     gear = GEARS[look.gear.model](look.gear);
     if (look.gear.model === 'rocket') { gear.position.set(0.3, 1.3, 0); rArm.add(gear); } else { gear.position.set(0, -1, -0.1); gear.rotation.x = -Math.PI / 2; rArm.add(gear); }
   }

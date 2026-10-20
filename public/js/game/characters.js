@@ -22,7 +22,7 @@ export class CharacterView {
     this.info = info;
     this.userId = info.userId;
     this.isLocal = isLocal;
-    this.av = buildAvatar(info.avatar, { pet: false });
+    this.av = buildAvatar(info.avatar, { pet: false, gear: false });
     this.group = this.av.group;
     this.group.visible = false;
     scene.add(this.group);

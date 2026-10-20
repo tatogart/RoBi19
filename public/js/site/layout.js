@@ -1,6 +1,6 @@
 // Builds the shared page chrome (blue header, left navigation, footer).
 import { api, getMe } from './api.js';
-import { inDiscord, setDiscordStatus } from '../discord.js';
+import { inDiscord, setDiscordStatus, discordSdk } from '../discord.js';
 import { el, icon, iconSvg, fmtNum, headshotImg, toast, modal, joinFriendDialog } from './ui.js';
 import { installApp, isInstalled } from './install.js';
 import { startInvites } from './invites.js';
@@ -50,17 +50,29 @@ export function socialBanner(site) {
 }
 // A 2019-style banner ad ("ADVERTISEMENT" above it), drawn with HTML so
 // nothing is loaded from other sites. Admins turn it off in Site Tools.
+// Its classes don't say "ad": ad blockers hide .ad-banner, .ad-wrap...
+// A click opens Limonchat outside Robis: a new browser tab, the real
+// browser from the installed app, Discord or Telegram.
 const AD = { name: 'Limonchat', url: 'https://81-90-31-167.sslip.io/' };
+export function openOutside(url) {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && tg.openLink) { tg.openLink(url); return; }
+  if (inDiscord() && SITE && SITE.discord && SITE.discord.appId) {
+    discordSdk(SITE.discord.appId).then((sdk) => sdk.commands.openExternalLink({ url })).catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 export function adBanner() {
-  return el('div', { class: 'ad-wrap' },
-    el('div', { class: 'ad-label', text: 'ADVERTISEMENT' }),
-    el('a', { class: 'ad-banner', href: AD.url, target: '_blank', rel: 'noopener sponsored' },
-      el('span', { class: 'ad-lemon', text: '🍋' }),
-      el('span', { class: 'ad-text' },
-        el('b', { class: 'ad-name no-i18n', text: AD.name }),
-        el('span', { class: 'ad-slogan', text: 'The messenger for you and your friends. Free!' })),
-      el('span', { class: 'ad-chat' }, el('i', { text: 'Hi! 👋' }), el('i', { class: 'me', text: 'Play Robis?' })),
-      el('span', { class: 'ad-btn', text: 'Chat now!' })));
+  return el('div', { class: 'lmn-wrap' },
+    el('div', { class: 'lmn-label', text: 'ADVERTISEMENT' }),
+    el('a', { class: 'lmn-box', href: AD.url, target: '_blank', rel: 'noopener noreferrer', onclick: (e) => { e.preventDefault(); openOutside(AD.url); } },
+      el('span', { class: 'lmn-lemon', text: '🍋' }),
+      el('span', { class: 'lmn-text' },
+        el('b', { class: 'lmn-name no-i18n', text: AD.name }),
+        el('span', { class: 'lmn-slogan', text: 'The messenger for you and your friends. Free!' })),
+      el('span', { class: 'lmn-chat' }, el('i', { text: 'Hi! 👋' }), el('i', { class: 'me', text: 'Play Robis?' })),
+      el('span', { class: 'lmn-btn', text: 'Chat now!' })));
 }
 export let SITE = null;
 

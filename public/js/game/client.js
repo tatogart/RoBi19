@@ -262,6 +262,7 @@ export class GameClient {
         else this.hud.dialog('Purchase failed', m.msg, [{ text: 'OK', primary: true }]);
         return;
       case 'emote': { const v = this.views.get(m.userId); if (v) v.emote(m.emote); return; }
+      case 'harpoon': this.onHarpoon(m); return;
       case 'teleport': {
         if (this.local) {
           const [x, y, z] = m.cf;
@@ -635,6 +636,38 @@ export class GameClient {
     this.send({ t: 'activate', id: t.id, p: [p.x, p.y, p.z] });
   }
 
+  // The Harpoon (catalog gear): a rope from the hand to where it hooked; it
+  // pulls its owner there when the game allows it.
+  onHarpoon(m) {
+    const v = this.views.get(m.userId);
+    if (!v || !Array.isArray(m.p)) return;
+    const to = new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
+    const hand = new THREE.Vector3();
+    const arm = v.av && v.av.limbs && v.av.limbs['Right Arm'];
+    if (arm) arm.getWorldPosition(hand); else hand.copy(v.pos);
+    const geo = new THREE.BufferGeometry().setFromPoints([hand, hand.clone()]);
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xd8c9a3 }));
+    this.scene.add(line);
+    const t0 = performance.now();
+    const shoot = 160, hold = m.pull ? 700 : 350;
+    const anim = () => {
+      const k = Math.min(1, (performance.now() - t0) / shoot);
+      if (arm) arm.getWorldPosition(hand);
+      const pos = geo.attributes.position;
+      pos.setXYZ(0, hand.x, hand.y, hand.z);
+      const end = hand.clone().lerp(to, k);
+      pos.setXYZ(1, end.x, end.y, end.z);
+      pos.needsUpdate = true;
+      if (performance.now() - t0 < shoot + hold) requestAnimationFrame(anim);
+      else { this.scene.remove(line); geo.dispose(); line.material.dispose(); }
+    };
+    anim();
+    sound.equip();
+    if (m.pull && m.userId === this.userId && this.local) {
+      setTimeout(() => { this._pull = { x: to.x, y: to.y, z: to.z, until: performance.now() + 1100 }; }, shoot);
+    }
+  }
+
   // ------------------------------------------------------------ simulation
   myHumanoid() {
     const v = this.views.get(this.userId);
@@ -696,6 +729,18 @@ export class GameClient {
       if (!wasGrounded && !s.jumped && this.input.wantsJump() && now - (this._groundAt || 0) < 130 && humP.JumpPower > 0 && s.vy <= 0) {
         s.vy = humP.JumpPower; s.jumped = true; this._groundAt = 0; sound.jump();
       }
+      const pull = this._pull;
+      if (pull && (performance.now() > pull.until || Math.hypot(pull.x - s.x, pull.y - s.y, pull.z - s.z) < 4)) this._pull = null;
+      if (this._pull) {
+        // the harpoon's rope pulls you to where it hooked (physics still stops you at walls)
+        const dx = pull.x - s.x, dy = pull.y + 2 - s.y, dz = pull.z - s.z;
+        const len = Math.hypot(dx, dy, dz) || 1, h = Math.hypot(dx, dz) || 1e-6;
+        const SPEED = 85;
+        const g = this.game.GetService('Workspace')._p.Gravity;
+        s.vy = (dy / len) * SPEED + g * dt;
+        s.grounded = false;
+        stepCharacter(s, { mx: dx / h, mz: dz / h, jump: false }, dt, { query: (a, b, c, d) => this.world.query(a, b, c, d), gravity: g }, { ...humP, WalkSpeed: (h / len) * SPEED, JumpPower: 0 });
+      } else
       stepCharacter(s, { mx, mz, jump: this.input.wantsJump() }, dt, { query: (a, b, c, d) => this.world.query(a, b, c, d), gravity: this.game.GetService('Workspace')._p.Gravity }, humP);
       // landing after a real fall: a thump
       if (s.grounded && !wasGrounded && fallVy < -45) sound.land(Math.min(3, -fallVy / 60));

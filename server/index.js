@@ -82,8 +82,11 @@ export function createServer({ dataDir = process.env.ROBIS_DATA || path.join(ROO
   const close = () => new Promise((resolve) => {
     manager.shutdown();
     db.flush();
+    // players still connected don't hold the shutdown up
+    for (const c of wss.clients) c.terminate();
     wss.close();
     server.close(() => resolve());
+    if (server.closeAllConnections) server.closeAllConnections();
   });
   if (!quiet) server.on('listening', () => {
     const a = server.address();

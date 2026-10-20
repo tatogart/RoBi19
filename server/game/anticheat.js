@@ -49,7 +49,7 @@ export class AntiCheat {
     Object.assign(ac, { t: now, x: nx, y: ny, z: nz });
     if (dt <= 0) return;
     // things the game itself does: no checks for a moment
-    const excused = session.vehicle || hum.Flying || (session.lastServerTp && now - session.lastServerTp < 2) || now - (session.spawnedAt || 0) < 3;
+    const excused = session.vehicle || hum.Flying || (session.lastServerTp && now - session.lastServerTp < 2) || (session.lastPull && now - session.lastPull < 2.5) || now - (session.spawnedAt || 0) < 3;
     if (excused) { ac.dist = 0; ac.span = 0; ac.riseFrom = null; return; }
     const scale = Math.max(1, ch._scale || 1);
     const walk = Math.max(16, hum.WalkSpeed) * scale;

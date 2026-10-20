@@ -165,7 +165,7 @@ export class HUD {
     const key = tools.map((t) => t.id + t._p.Name).join(',') + '|' + (equipped ? equipped.id : '');
     if (key === this._toolsKey) return;
     this._toolsKey = key;
-    const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨', saber: '⚔️', torch: '🔥' };
+    const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨', saber: '⚔️', torch: '🔥', harpoon: '🪝' };
     this.useBtn.classList.toggle('hidden', !equipped);
     if (equipped) this.useBtn.textContent = ICONS[equipped._p.ToolModel] || '🧰';
     this.hotbar.replaceChildren(...tools.slice(0, 9).map((t, i) => {
@@ -195,7 +195,7 @@ export class HUD {
   _drawBag() {
     const grid = this.bag.querySelector('.bp-grid');
     const f = this.bag.querySelector('.bp-search').value.trim().toLowerCase();
-    const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨', saber: '⚔️', torch: '🔥' };
+    const ICONS = { sword: '🗡️', gun: '🔫', rocket: '🚀', flashlight: '🔦', brush: '🖌️', hammer: '🔨', saber: '⚔️', torch: '🔥', harpoon: '🪝' };
     const items = this._allTools.map((t, i) => [t, i]).filter(([t]) => !f || t._p.Name.toLowerCase().includes(f));
     grid.replaceChildren(...(items.length ? items.map(([t, i]) => {
       const b = h('button', 'bp-slot' + (this._equipped && this._equipped.id === t.id ? ' on' : ''), `${i < 9 ? `<span class="num">${i + 1}</span>` : ''}<span class="ico">${ICONS[t._p.ToolModel] || '🧰'}</span><span class="nm">${esc(t._p.Name)}</span>`);

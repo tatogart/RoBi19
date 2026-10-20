@@ -1013,10 +1013,55 @@ export class GameServer {
         try { t.Clone().Parent = backpack; } catch { /* not cloneable */ }
       }
     }
+    this._giveGear(session, backpack);
     this.applyPassPerks(session, hum);
     this.enqueue(['char', player.UserId, model.id, cf.toArray()]);
     player._fire('CharacterAdded', model);
     this.applyAbuse(session, hum);
+  }
+
+  // ------------------------------------------------------------ catalog gear
+  // The Gear a player owns is in their backpack in every game (2020): the
+  // one they wear first. Most are just for show; the Harpoon pulls you.
+  _giveGear(session, backpack) {
+    const D = this.manager && this.manager.db && this.manager.db.data;
+    if (!D || !backpack || session.bot || !session.user) return;
+    const inv = D.inventory[session.user.id] || [];
+    const wearing = (session.avatar && session.avatar.wearing) || [];
+    const gears = inv.map((id) => D.items[id]).filter((it) => it && it.type === 'Gear' && it.data && it.data.model)
+      .sort((a, b) => wearing.includes(b.id) - wearing.includes(a.id)).slice(0, 8);
+    for (const it of gears) {
+      const t = createInstance('Tool');
+      t.Name = it.name;
+      t.ToolModel = it.data.model;
+      try { t.Color = Color3.fromHex(it.data.color || '#a3a2a5'); } catch { /* bad color */ }
+      t.ToolTip = it.data.model === 'harpoon' ? 'Click where the harpoon should hook' : it.name;
+      t._catalogGear = it.data.model;
+      t.Parent = backpack;
+    }
+  }
+  // games where a pull would skip the game (obbies, races, rounds)
+  _gearCanPull() {
+    const D = this.manager && this.manager.db && this.manager.db.data;
+    const g = D && D.games[this.gameId];
+    const NO_PULL = ['obby', 'hotel', 'tower', 'speedrun', 'lava', 'race', 'doors', 'mm2', 'hideseek', 'piggy', 'disaster', 'minigames', 'freezetag', 'koth', 'ctf', 'brickbattle'];
+    if (g && g.gearPull === false) return false;
+    return !(g && g.seedKey && NO_PULL.includes(g.seedKey));
+  }
+  _harpoon(session, aim) {
+    if (!aim || !session.character || !session.state) return;
+    if (session.lastHarpoon && this.time - session.lastHarpoon < 1.2) return;
+    session.lastHarpoon = this.time;
+    const [x, y, z] = session.state.p;
+    let dir = aim.sub(new Vector3(x, y, z));
+    const dist = dir.Magnitude;
+    const RANGE = 90;
+    const hit = dist > 2 && dist <= RANGE;
+    const to = hit ? aim : new Vector3(x, y, z).add(dir.Unit.mul(Math.min(dist, RANGE)));
+    const pull = hit && this._gearCanPull();
+    if (pull) session.lastPull = this.time;
+    this.broadcast({ t: 'harpoon', userId: session.user.id, p: [to.X, to.Y, to.Z], pull, hit });
+    if (hit && !pull && (!session.harpoonWarned)) { session.harpoonWarned = true; this.send(session, { t: 'sys', text: 'The harpoon can\'t pull you in this game.' }); }
   }
 
   // ------------------------------------------------------------ Admin Abuse
@@ -1366,6 +1411,7 @@ export class GameServer {
         const p = Array.isArray(msg.p) ? msg.p.map(Number) : null;
         const aim = p && p.every(Number.isFinite) ? new Vector3(p[0], p[1], p[2]) : null;
         tool._fire('Activated', aim);
+        if (tool._catalogGear === 'harpoon') this._harpoon(session, aim);
         break;
       }
       case 'exitVehicle': this.exitVehicle(session); break;
@@ -1675,6 +1721,7 @@ export class GameServer {
     clearInterval(this.timer);
     clearInterval(this.huntTimer);
     clearInterval(this.huntScan);
+    clearInterval(this.questTimer);
     clearInterval(this._disco);
     for (const s of [...this.sessions.values()]) {
       this.send(s, { t: 'shutdown', msg });
