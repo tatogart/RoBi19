@@ -21,7 +21,7 @@ function renderBuy() {
     item.owned
       ? el('div', { class: 'row wrap' }, el('span', { class: 'pill', text: '✓ You own this item' }),
         item.serial ? el('span', { class: 'pill serial-pill no-i18n', text: `#${item.serial}${item.stock ? ' / ' + fmtFull(item.stock) : ''}` }) : null,
-        el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
+        item.type === 'Emote' ? el('span', { class: 'small muted', text: 'Use it in games: press . (dot) to open the emote menu.' }) : el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
       : me && me.guest
         ? el('div', { class: 'dev-lock' }, el('b', { text: 'Guests can\'t buy items' }), el('div', { class: 'small', text: 'Sign up for free to get items and Robits.' }), el('a', { class: 'btn btn-green', href: '/?signup=1', text: 'Sign Up' }))
       : item.devOnly && !item.canGet

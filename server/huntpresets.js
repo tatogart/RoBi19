@@ -19,8 +19,16 @@ export const HUNT_PRESETS = {
     team: { name: 'Temple Viking Helm', type: 'Hat', model: 'viking', color: '#c8a165' }, hub: { name: 'Rune Halo', type: 'Hat', model: 'halo', color: '#5bd6a0' } },
   // IGA 26 (in honor of GitHub IGA 26): the hub is a giant repository
   github: { title: 'IGA 26: The Great Merge', story: 'Robis celebrates GitHub IGA 26! A giant repository opened over Robis. Step through the branch portals and finish a quest in every game, light up the contribution graph together, find the 6 golden stars - and when the graph is all green, press MERGE on the Merge Tower!',
-    prizes: p5(['Octo Cap', 'Commit Shades', 'Copilot Bot', 'Merge Saber', 'Crown of IGA 26'], ['cap', 'shades', 'robot', 'saber', 'crown'], ['#2ea043', '#1f6feb', '#a371f7', '#a371f7', '#e3b341'], ['Hat', 'Hat', 'Pet', 'Gear', 'Hat']),
-    team: { name: 'Contributor Headphones', type: 'Hat', model: 'headphones', color: '#2ea043' }, hub: { name: 'Golden Star Halo', type: 'Hat', model: 'halo', color: '#e3b341' } },
+    prizes: [
+      { name: 'Octocat Hood', type: 'Hat', model: 'octohood', color: '#24292f', accent: '#a371f7', count: 1 },
+      { name: 'Merge Conflict Visor', type: 'Accessory', model: 'glitchvisor', color: '#30363d', share: 25 },
+      { name: 'Copilot Drone', type: 'Pet', model: 'drone', color: '#24292f', accent: '#3fb950', share: 50 },
+      { name: 'Contribution Cape', type: 'Accessory', model: 'graphcape', color: '#0d1117', accent: '#2ea043', share: 75 },
+      { name: 'Crown of Commits', type: 'Hat', model: 'commitcrown', color: '#2ea043', accent: '#e3b341', share: 100 },
+    ],
+    // the team goal gives an emote: everyone celebrates the merge together
+    team: { name: 'Merge Dance', type: 'Emote', model: 'mergedance', color: '#2ea043' },
+    hub: { name: 'Golden Star Halo', type: 'Hat', model: 'starhalo', color: '#e3b341' } },
   dimension: { title: 'Star Voyage', story: 'A wormhole opened over Robis! Jump into the space station, finish a quest in every game and collect the 6 star fragments.',
     prizes: p5(['Astronaut Helmet', 'UFO Pal', 'Space Saber', 'Planet Hat', 'Crown of the Cosmos'], ['astronaut', 'ufo', 'saber', 'planet', 'crown'], ['#e8e8f0', '#7dffb0', '#00e5ff', '#b45cff', '#ffd27a'], ['Hat', 'Pet', 'Gear', 'Hat', 'Hat']),
     team: { name: 'Alien Buddy', type: 'Pet', model: 'alien', color: '#7dffb0' }, hub: { name: 'Stardust Halo', type: 'Hat', model: 'halo', color: '#7df9ff' } },

@@ -202,14 +202,19 @@ export class HUD {
     const open = force !== undefined ? force : !this.emotes;
     if (!open) { if (this.emotes) { this.emotes.remove(); this.emotes = null; } return; }
     if (this.bag) this.toggleBackpack(false);
-    const LIST = [['dance', '💃', 'Dance'], ['dance2', '🕺', 'Dance 2'], ['dance3', '🤸', 'Dance 3'], ['wave', '👋', 'Wave'], ['point', '👉', 'Point'], ['cheer', '🙌', 'Cheer'], ['laugh', '😂', 'Laugh']];
+    // the free emotes + the ones bought in the catalog (2020)
+    const LIST = [['dance', '💃', 'Dance'], ['dance2', '🕺', 'Dance 2'], ['dance3', '🤸', 'Dance 3'], ['wave', '👋', 'Wave'], ['point', '👉', 'Point'], ['cheer', '🙌', 'Cheer'], ['laugh', '😂', 'Laugh'],
+      ...(this.client.ownedEmotes || []).map((e) => [e.emote, e.icon, e.name])];
+    this.client.loadEmotes?.(); // fresh for the next time (bought one meanwhile?)
     this.emotes = h('div', 'emote-wheel');
     const n = LIST.length;
+    const R = n > 10 ? 150 : 110;
     LIST.forEach(([id, ico, name], i) => {
       const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-      const b = h('button', 'ew-item', `<span class="ico">${ico}</span><span class="nm">${name}</span>`);
-      b.style.left = `calc(50% + ${Math.cos(a) * 110}px)`;
-      b.style.top = `calc(50% + ${Math.sin(a) * 110}px)`;
+      const b = h('button', 'ew-item', `<span class="ico">${esc(ico)}</span><span class="nm">${esc(name)}</span>`);
+      b.style.left = `calc(50% + ${Math.cos(a) * R}px)`;
+      b.style.top = `calc(50% + ${Math.sin(a) * R}px)`;
+      if (i >= 7) b.classList.add('owned');
       b.title = `${name} (${i + 1})`;
       b.onclick = (e) => { e.stopPropagation(); this.client.sendChat('/e ' + id); this.toggleEmotes(false); };
       this.emotes.append(b);

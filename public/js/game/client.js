@@ -83,6 +83,7 @@ export class GameClient {
   start() {
     const { gameInfo } = this.opts;
     this.hud.showLoading(gameInfo?.name || 'Robis', gameInfo?.creator?.username, gameInfo);
+    this.loadEmotes();
     this.hud.setLoadingStatus('Connecting to server...');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     this.ws = new WebSocket(`${proto}://${location.host}/ws${wsSession()}`);
@@ -464,6 +465,14 @@ export class GameClient {
       }
     } catch { /* not supported (e.g. iPhone Safari) */ }
     setTimeout(() => this.resize(), 300);
+  }
+
+  // the catalog emotes this player owns (for the emote menu)
+  loadEmotes() {
+    if (this._emotesAt && performance.now() - this._emotesAt < 15000) return;
+    this._emotesAt = performance.now();
+    const t = discordSession.get();
+    fetch('/api/me/emotes', { headers: t ? { 'x-robis-session': t, 'x-robis-discord': '1' } : {} }).then((r) => (r.ok ? r.json() : null)).then((r) => { if (r) this.ownedEmotes = r.emotes; }).catch(() => {});
   }
 
   resetCharacter() { this.send({ t: 'reset' }); }

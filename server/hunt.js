@@ -67,11 +67,16 @@ export const EVENTS = {
 const SWITCH_AT = Date.UTC(2026, 9, 3, 12, 0);
 // Models a prize can use in a custom event (see public/js/render/avatar.js).
 export const PRIZE_MODELS = {
-  Hat: ['cap', 'cone', 'tophat', 'crown', 'viking', 'party', 'headphones', 'halo', 'dominator', 'beanie', 'pirate', 'witch', 'shades', 'wings', 'astronaut', 'planet', 'explorer'],
-  Pet: ['dog', 'cat', 'bunny', 'penguin', 'robot', 'ghost', 'dragon', 'ufo', 'alien', 'golem'],
+  Hat: ['cap', 'cone', 'tophat', 'crown', 'viking', 'party', 'headphones', 'halo', 'dominator', 'beanie', 'pirate', 'witch', 'shades', 'wings', 'astronaut', 'planet', 'explorer', 'octohood', 'commitcrown', 'starhalo'],
+  Pet: ['dog', 'cat', 'bunny', 'penguin', 'robot', 'ghost', 'dragon', 'ufo', 'alien', 'golem', 'drone'],
   Gear: ['sword', 'rocket', 'gun', 'flashlight', 'brush', 'hammer', 'saber', 'torch'],
   TShirt: ['star'],
+  Accessory: ['glitchvisor', 'graphcape', 'duck', 'bee', 'parrot', 'cape', 'jetpack', 'backpack'],
+  Emote: ['mergedance', 'hype', 'robot', 'stadium'],
 };
+// where an accessory sits
+const ACCESSORY_SLOT = { glitchvisor: 'face', graphcape: 'back', duck: 'shoulder', bee: 'shoulder', parrot: 'shoulder', cape: 'back', jetpack: 'back', backpack: 'back' };
+const EMOTE_ICON = { mergedance: '🔀', hype: '🔥', robot: '🤖', stadium: '🏟️' };
 // What an admin can set for a game's quest (see server/huntquests.js).
 export const QUEST_TYPES = ['default', 'runes', 'stat', 'gain', 'below', 'badge', 'visit', 'click', 'script'];
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -97,7 +102,10 @@ function cleanPrize(r, ladder = true) {
   const model = PRIZE_MODELS[type].includes(r.model) ? r.model : PRIZE_MODELS[type][0];
   const name = cleanText(r.name, 50);
   if (name.length < 3) throw new Error('Every prize needs a name (3 letters or more).');
-  const data = type === 'TShirt' ? { graphic: 'star' } : { model, color: HEX.test(r.color) ? r.color : '#ffc400', accent: HEX.test(r.accent) ? r.accent : '#ffffff' };
+  const color = HEX.test(r.color) ? r.color : '#ffc400';
+  const data = type === 'TShirt' ? { graphic: 'star' }
+    : type === 'Emote' ? { emote: model, icon: EMOTE_ICON[model] || '⭐', color }
+      : { model, color, accent: HEX.test(r.accent) ? r.accent : '#ffffff', ...(type === 'Accessory' ? { slot: ACCESSORY_SLOT[model] || 'back' } : {}) };
   const out = { name, type, data };
   if (!ladder) return out;
   if (r.share) out.share = Math.max(0.05, Math.min(1, (+r.share || 0) / 100));
@@ -146,6 +154,17 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
       };
       D.huntPrepared.push(key);
     } catch { /* a bad preset: skip it */ }
+  }
+  // IGA 26 v2: real event items (new models), also for a world where it already runs
+  if (D.huntCustom.prep_github && (D.huntCustom.prep_github.v || 1) < 2 && HUNT_PRESETS.github) {
+    const pr = HUNT_PRESETS.github;
+    try {
+      Object.assign(D.huntCustom.prep_github, {
+        description: pr.story, v: 2,
+        prizes: pr.prizes.map((r, i) => ({ ...cleanPrize(r), id: i + 1 })), teamPrize: cleanPrize(pr.team, false), hubPrize: cleanPrize(pr.hub, false),
+      });
+      H._igaRefresh = true; // the items made for a running event get the new looks below
+    } catch (e) { console.warn('IGA 26 prizes:', e.message); }
   }
   const official = () => officialAccount(D);
   const allOfficial = () => {
@@ -209,6 +228,17 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     }
   };
   makePrizes();
+  if (H._igaRefresh) {
+    delete H._igaRefresh;
+    if (H.current === 'prep_github') {
+      // same items (the winners keep them), new names and looks
+      for (const [k, r] of Object.entries(allPrizes())) {
+        const it = D.items[H.rewards[k]];
+        if (it) { it.name = r.name; it.type = r.type; it.data = r.data; }
+      }
+    }
+    db.save();
+  }
   const needFor = (key, total) => {
     const r = ev().rewards[key];
     return Math.max(1, Math.min(total, r.count || Math.ceil(total * r.share)));

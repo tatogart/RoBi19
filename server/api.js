@@ -1205,13 +1205,18 @@ export function createApi(db, manager, opts = {}) {
     res.json({ avatar: normalizeAvatar(req.user.avatar), resolved: resolvedAvatar(req.user) });
   });
 
+  // the emotes this player owns (the emote menu in games adds them)
+  api.get('/me/emotes', requireUser, (req, res) => {
+    const list = (D.inventory[req.user.id] || []).map((id) => D.items[id]).filter((i) => i && i.type === 'Emote' && i.data && i.data.emote);
+    res.json({ emotes: list.map((i) => ({ id: i.id, name: i.name, emote: i.data.emote, icon: i.data.icon || '⭐' })) });
+  });
   api.put('/avatar', requireUser, (req, res) => {
     const a = normalizeAvatar(req.body || {});
     const owned = new Set(D.inventory[req.user.id] || []);
     const counts = {};
     a.wearing = a.wearing.filter((id) => {
       const it = D.items[id];
-      if (!it || !owned.has(id)) return false;
+      if (!it || !owned.has(id) || it.type === 'Emote') return false; // emotes are used, not worn
       counts[it.type] = (counts[it.type] || 0) + 1;
       return counts[it.type] <= (WEAR_LIMITS[it.type] || 1);
     });
@@ -1223,7 +1228,7 @@ export function createApi(db, manager, opts = {}) {
   // ------------------------------------------------------------ catalog
   api.get('/catalog', (req, res) => {
     const { type, q, sort } = req.query;
-    let items = Object.values(D.items).filter((i) => !i.offsale && (!type || type === 'All' || i.type === type || (type === 'Accessories' && (i.type === 'Hat' || i.type === 'Hair' || i.type === 'Accessory')) || (type === 'Developer' && i.data && i.data.devOnly) || (type === 'Clothing' && ['Shirt', 'Pants', 'TShirt'].includes(i.type)) || (type === 'Collectibles' && i.limited)));
+    let items = Object.values(D.items).filter((i) => !i.offsale && (!type || type === 'All' || i.type === type || (type === 'Accessories' && (i.type === 'Hat' || i.type === 'Hair' || i.type === 'Accessory')) || (type === 'Developer' && i.data && i.data.devOnly) || (type === 'Emotes' && i.type === 'Emote') || (type === 'Clothing' && ['Shirt', 'Pants', 'TShirt'].includes(i.type)) || (type === 'Collectibles' && i.limited)));
     if (q) items = items.filter((i) => i.name.toLowerCase().includes(String(q).toLowerCase()));
     if (req.query.creator) items = items.filter((i) => i.creatorId === toInt(req.query.creator));
     if (sort === 'price-asc') items.sort((a, b) => a.price - b.price);

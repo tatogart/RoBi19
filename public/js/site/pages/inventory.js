@@ -7,7 +7,7 @@ const app = document.getElementById('app');
 const uid = +qs('id') || me.id;
 const { user } = await api.get(`/users/${uid}`);
 app.append(el('h1', { text: uid === me.id ? 'My Inventory' : `${user.username}'s Inventory` }));
-const types = [['', 'All'], ['Hat', 'Hats'], ['Hair', 'Hair'], ['Accessory', 'Accessories'], ['Face', 'Faces'], ['Shirt', 'Shirts'], ['Pants', 'Pants'], ['TShirt', 'T-Shirts'], ['Gear', 'Gear'], ['Pet', 'Pets'], ['GamePass', 'Game Passes']];
+const types = [['', 'All'], ['Hat', 'Hats'], ['Hair', 'Hair'], ['Accessory', 'Accessories'], ['Face', 'Faces'], ['Shirt', 'Shirts'], ['Pants', 'Pants'], ['TShirt', 'T-Shirts'], ['Gear', 'Gear'], ['Pet', 'Pets'], ['Emote', 'Emotes'], ['GamePass', 'Game Passes']];
 // 2020: one load, then search, sort and the type tabs (with counts) work instantly
 const [{ items: all }, { passes }] = await Promise.all([api.get(`/users/${uid}/inventory`), api.get(`/users/${uid}/passes`)]);
 const wearing = new Set(uid === me.id ? ((me.rawAvatar && me.rawAvatar.wearing) || []) : []);

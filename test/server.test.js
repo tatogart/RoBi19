@@ -2399,6 +2399,12 @@ test('IGA 26: The Great Merge is a prepared event with its hub', async () => {
   assert.equal(ev.name, 'IGA 26: The Great Merge');
   assert.equal(ev.hub, 'github');
   assert.equal(ev.prizes.length, 5);
+  // real event items with their own models: a hood, a visor, a drone, a cape, a crown, an emote, a halo
+  assert.deepEqual(ev.prizes.map((p) => p.data.model), ['octohood', 'glitchvisor', 'drone', 'graphcape', 'commitcrown']);
+  assert.equal(ev.prizes[1].data.slot, 'face');
+  assert.equal(ev.teamPrize.type, 'Emote');
+  assert.equal(ev.teamPrize.data.emote, 'mergedance');
+  assert.equal(ev.hubPrize.data.model, 'starhalo');
   const r = await call('POST', '/admin/hunt/control', { action: 'launch', key: 'prep_github', public: true }, admin);
   assert.equal(r.status, 200, JSON.stringify(r.data));
   const H = srv.db.data.hunt;
@@ -2416,5 +2422,30 @@ test('IGA 26: The Great Merge is a prepared event with its hub', async () => {
   await new Promise((res) => setTimeout(res, 800));
   const errors = c.inbox.filter((m) => m.t === 'log' && m.level === 'error');
   assert.equal(errors.length, 0, JSON.stringify(errors.slice(0, 3)));
+  c.ws.close();
+});
+
+test('2020 emotes: bought in the catalog, used in games only when owned', async () => {
+  const p = await call('POST', '/auth/signup', { username: 'Emoter1', password: 'secret123' });
+  const emotes = (await call('GET', '/catalog?type=Emotes')).data.items;
+  assert.ok(emotes.length >= 8 && emotes.every((e) => e.type === 'Emote'));
+  const robot = emotes.find((e) => e.name === 'Robot');
+  const game = (await call('GET', '/games?sort=popular')).data.games[0];
+  const c = await join(p.cookie, { placeId: game.id });
+  await c.wait((m) => m.t === 'welcome');
+  // a free emote works, a catalog one needs the item
+  c.ws.send(JSON.stringify({ t: 'chat', text: '/e wave' }));
+  await c.wait((m) => m.t === 'emote' && m.emote === 'wave');
+  c.ws.send(JSON.stringify({ t: 'chat', text: '/e robot' }));
+  await c.wait((m) => m.t === 'sys' && /own this emote/.test(m.text));
+  srv.db.data.users[p.data.user.id].robits = 1000;
+  assert.equal((await call('POST', `/catalog/${robot.id}/buy`, {}, p.cookie)).status, 200);
+  assert.ok((await call('GET', '/me/emotes', null, p.cookie)).data.emotes.some((e) => e.emote === 'robot'));
+  c.ws.send(JSON.stringify({ t: 'chat', text: '/e robot' }));
+  await c.wait((m) => m.t === 'emote' && m.emote === 'robot');
+  // emotes can't be worn
+  const av = (await call('GET', '/avatar', null, p.cookie)).data.avatar;
+  const put = await call('PUT', '/avatar', { ...av, wearing: [...av.wearing, robot.id] }, p.cookie);
+  assert.ok(!put.data.avatar.wearing.includes(robot.id));
   c.ws.close();
 });

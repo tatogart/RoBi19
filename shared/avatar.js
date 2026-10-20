@@ -16,7 +16,7 @@ export const DEFAULT_AVATAR = {
   wearing: [],
 };
 
-export const ITEM_TYPES = ['Hat', 'Hair', 'Accessory', 'Face', 'Shirt', 'Pants', 'TShirt', 'Gear', 'Pet'];
+export const ITEM_TYPES = ['Hat', 'Hair', 'Accessory', 'Face', 'Shirt', 'Pants', 'TShirt', 'Gear', 'Pet', 'Emote'];
 export const WEAR_LIMITS = { Hat: 3, Hair: 1, Accessory: 4, Face: 1, Shirt: 1, Pants: 1, TShirt: 1, Gear: 1, Pet: 1 };
 
 // Built-in catalog. `data` tells the renderer how to draw the item.
@@ -131,6 +131,20 @@ export const CATALOG = [
   { name: 'Guest Cap', type: 'Hat', price: 0, offsale: true, data: { model: 'guestcap', color: '#1b1b1b', accent: '#e8413c', guestOnly: true }, desc: 'Only guests wear this. Make an account to get your own style!' },
   { name: 'Guest Shirt', type: 'Shirt', price: 0, offsale: true, data: { color: '#1b1b1b', accent: '#ffffff', pattern: 'guest', guestOnly: true }, desc: 'Only guests wear this.' },
   { name: 'Guest Pants', type: 'Pants', price: 0, offsale: true, data: { color: '#3c3c3c', accent: '#1b1b1b', pattern: 'plain', guestOnly: true }, desc: 'Only guests wear this.' },
+  // 2020: emotes in the catalog (the free ones - dance, wave, point, cheer,
+  // laugh - everyone has; these you buy, then use them from the emote menu)
+  { name: 'Salute', type: 'Emote', price: 50, data: { emote: 'salute', icon: '🫡', color: '#3a7bd5' }, desc: 'Yes sir! An emote for the emote menu (. key in games).' },
+  { name: 'Shrug', type: 'Emote', price: 50, data: { emote: 'shrug', icon: '🤷', color: '#7b5cff' }, desc: 'Who knows? An emote for the emote menu.' },
+  { name: 'Tilt', type: 'Emote', price: 75, data: { emote: 'tilt', icon: '🙃', color: '#ff8a3d' }, desc: 'A curious little head tilt.' },
+  { name: 'Applaud', type: 'Emote', price: 75, data: { emote: 'applaud', icon: '👏', color: '#02b757' }, desc: 'Clap for the winner.' },
+  { name: 'Stadium', type: 'Emote', price: 100, data: { emote: 'stadium', icon: '🏟️', color: '#e8413c' }, desc: 'Make the whole server cheer with you.' },
+  { name: 'Zombie', type: 'Emote', price: 150, data: { emote: 'zombie', icon: '🧟', color: '#4b974b' }, desc: 'Braaains... Arms out, slow and spooky.' },
+  { name: 'Robot', type: 'Emote', price: 200, data: { emote: 'robot', icon: '🤖', color: '#5b6b7b' }, desc: 'Beep boop: the classic robot dance.' },
+  { name: 'Hype Dance', type: 'Emote', price: 250, data: { emote: 'hype', icon: '🔥', color: '#ff3b5c' }, desc: 'The 2020 dance everyone was doing.' },
+  // 2020: new accessories and a pet
+  { name: 'Rubber Duck Buddy', type: 'Accessory', price: 120, data: { model: 'duck', slot: 'shoulder', color: '#ffd42a', accent: '#ff8a1a' }, desc: 'A squeaky friend on your shoulder. Coders talk to it to fix their bugs.' },
+  { name: 'Cat Hood', type: 'Hat', price: 180, data: { model: 'octohood', color: '#2b2b33', accent: '#ff7ab6' }, desc: 'A cozy hood with cat ears.' },
+  { name: 'Sky Drone', type: 'Pet', price: 450, data: { model: 'drone', color: '#dfe6ee', accent: '#00a2ff' }, desc: 'A little drone that follows you everywhere. The rotors really spin!' },
   { name: 'Developer Hard Hat', type: 'Hat', price: 0, data: { model: 'hardhat', color: '#f5cd30', accent: '#1b1b1b', devOnly: true }, desc: 'For developers only: make a game in Create to unlock it. The builder\'s classic.' },
   { name: 'Code Visor', type: 'Accessory', price: 0, data: { model: 'codevisor', slot: 'face', color: '#0f1117', accent: '#3ddc84', devOnly: true }, desc: 'For developers only. See the world in Lua.' },
   { name: 'Builder\'s Tool Belt', type: 'Accessory', price: 0, data: { model: 'toolbelt', slot: 'waist', color: '#7a4b2a', accent: '#b4b4b4', devOnly: true }, desc: 'For developers only. A hammer, a wrench and a lot of bricks to place.' },

@@ -806,6 +806,101 @@ const HATS = {
     g.add(M(new THREE.SphereGeometry(0.2, 12, 10), light, 0, -0.35, -1.15));
     return g;
   },
+  // ---- IGA 26: The Great Merge (event prizes)
+  // a hood with cat ears and little tentacles behind, like a famous octocat
+  octohood(d) {
+    const g = new THREE.Group();
+    const m = mat(d.color, { roughness: 0.85, side: THREE.DoubleSide });
+    // open in front (-z) so the face shows
+    const hood = M(new THREE.SphereGeometry(0.74, 24, 14, Math.PI * 1.85, Math.PI * 1.3, 0, Math.PI * 0.7), m, 0, 0.12, 0.06); hood.scale.set(1, 1.05, 1.08); g.add(hood);
+    const top = M(new THREE.SphereGeometry(0.75, 24, 8, 0, Math.PI * 2, 0, Math.PI * 0.32), m, 0, 0.12, 0.06); top.scale.set(1, 1.05, 1.08); g.add(top);
+    for (const sx of [-1, 1]) {
+      const ear = M(new THREE.ConeGeometry(0.2, 0.42, 4), m, sx * 0.4, 0.78, 0.02, 0, Math.PI / 4, -sx * 0.35); g.add(ear);
+      g.add(M(new THREE.ConeGeometry(0.1, 0.24, 4), mat(d.accent), sx * 0.4, 0.76, -0.06, 0, Math.PI / 4, -sx * 0.35));
+    }
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 4 - 0.5) * 1.4;
+      const t = M(new THREE.CylinderGeometry(0.07, 0.035, 0.75, 8), m, Math.sin(a) * 0.45, -0.45, 0.62 + Math.cos(a) * 0.05, 0.5, 0, -a * 0.6); g.add(t);
+    }
+    return g;
+  },
+  // a crown of green commit cubes floating around the head
+  commitcrown(d) {
+    const g = new THREE.Group();
+    g.add(M(new THREE.TorusGeometry(0.62, 0.06, 8, 32), mat(d.accent, { metalness: 0.8, roughness: 0.25 }), 0, 0.62, 0, Math.PI / 2, 0, 0));
+    const ring = new THREE.Group();
+    ring.position.y = 0.95; ring.rotation.x = Math.PI / 2;
+    const greens = ['#0e4429', '#006d32', '#26a641', '#39d353'];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), new THREE.MeshStandardMaterial({ color: greens[i % 4], emissive: greens[i % 4], emissiveIntensity: 0.6, roughness: 0.4 }));
+      c.position.set(Math.cos(a) * 0.62, Math.sin(a) * 0.62, (i % 2) * 0.12);
+      c.rotation.set(0.6, 0.6, 0);
+      ring.add(c);
+    }
+    g.add(ring);
+    g.userData.spin = ring;
+    return g;
+  },
+  // five golden stars circling above the head
+  starhalo(d) {
+    const g = new THREE.Group();
+    const ring = new THREE.Group();
+    ring.position.y = 1.05; ring.rotation.x = Math.PI / 2;
+    const shape = new THREE.Shape();
+    for (let i = 0; i < 10; i++) { const r = i % 2 ? 0.09 : 0.22, a = (i / 10) * Math.PI * 2 - Math.PI / 2; if (i) shape.lineTo(Math.cos(a) * r, Math.sin(a) * r); else shape.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.06, bevelEnabled: false });
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const st = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: d.color, emissive: d.color, emissiveIntensity: 0.7, metalness: 0.6, roughness: 0.3 }));
+      st.position.set(Math.cos(a) * 0.55, Math.sin(a) * 0.55, 0);
+      st.rotation.set(Math.PI / 2, 0, 0); // stand up (the ring lies flat)
+      ring.add(st);
+    }
+    g.add(ring);
+    g.userData.spin = ring;
+    return g;
+  },
+  // Merge Conflict visor: red and green diff lines over the eyes
+  glitchvisor(d) {
+    const g = new THREE.Group();
+    const [c, ctx] = makeCanvas(128, 32);
+    ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, 128, 32);
+    ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = '#f85149'; ctx.fillText('<<<<<<< HEAD', 4, 12);
+    ctx.fillStyle = '#3fb950'; ctx.fillText('>>>>>>> main', 4, 27);
+    const face = new THREE.MeshStandardMaterial({ map: toTexture(c), roughness: 0.2, metalness: 0.3, emissive: '#ffffff', emissiveMap: toTexture(c), emissiveIntensity: 0.35 });
+    const frame = mat(d.color, { metalness: 0.7, roughness: 0.3 });
+    g.add(M(new THREE.BoxGeometry(1.32, 0.34, 0.08), [frame, frame, frame, frame, frame, face], 0, 0.14, -0.66));
+    for (const sx of [-1, 1]) g.add(M(new THREE.BoxGeometry(0.06, 0.12, 0.7), frame, sx * 0.66, 0.16, -0.32));
+    return g;
+  },
+  // a cape with a contribution graph on it
+  graphcape(d) {
+    const g = new THREE.Group();
+    const [c, ctx] = makeCanvas(104, 150);
+    ctx.fillStyle = d.color; ctx.fillRect(0, 0, 104, 150);
+    const greens = ['#161b22', '#0e4429', '#006d32', '#26a641', '#39d353'];
+    let s = 26;
+    const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    for (let x = 0; x < 7; x++) for (let y = 0; y < 10; y++) { ctx.fillStyle = greens[Math.floor(r() * 5)]; ctx.fillRect(6 + x * 14, 6 + y * 14, 11, 11); }
+    const tex = toTexture(c);
+    const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, side: THREE.DoubleSide });
+    g.add(M(new THREE.BoxGeometry(1.95, 2.9, 0.06), [mat(d.color), mat(d.color), mat(d.color), mat(d.color), m, m], 0, -0.45, 0.62, 0.1, 0, 0));
+    g.add(M(new THREE.BoxGeometry(2.05, 0.18, 0.7), mat(d.accent), 0, 1.0, 0.25));
+    return g;
+  },
+  // the rubber duck every coder talks to, on the shoulder
+  duck(d) {
+    const g = new THREE.Group();
+    const y = mat(d.color, { roughness: 0.3 });
+    const b = M(new THREE.SphereGeometry(0.26, 16, 12), y, 1.5, 1.24, 0.05); b.scale.set(0.95, 0.78, 1.25); g.add(b);
+    g.add(M(new THREE.SphereGeometry(0.17, 14, 10), y, 1.5, 1.52, -0.17));
+    g.add(M(new THREE.BoxGeometry(0.16, 0.05, 0.16), mat(d.accent, { roughness: 0.4 }), 1.5, 1.49, -0.36));
+    for (const sx of [-1, 1]) g.add(M(new THREE.SphereGeometry(0.03, 6, 6), mat('#111'), 1.5 + sx * 0.08, 1.58, -0.3));
+    g.add(M(new THREE.ConeGeometry(0.07, 0.14, 6), y, 1.5, 1.33, 0.38, -1.2, 0, 0));
+    return g;
+  },
   // ---- developer items
   hardhat(d) {
     const g = new THREE.Group();
@@ -1323,6 +1418,27 @@ function buildKart(color) {
 // Small blocky companions. They face -Z like avatars; the feet are at y = 0.
 // userData: fly (hovers), parts to animate (tail, wings, ears).
 const PETS = {
+  // IGA 26: Copilot, a little drone with four spinning rotors and a glowing eye
+  drone(d) {
+    const g = new THREE.Group();
+    const body = mat(d.color, { metalness: 0.5, roughness: 0.35 });
+    const glow = new THREE.MeshStandardMaterial({ color: d.accent, emissive: d.accent, emissiveIntensity: 1 });
+    const core = M(new THREE.SphereGeometry(0.42, 18, 12), body, 0, 0.6, 0); core.scale.set(1, 0.7, 1); g.add(core);
+    g.add(M(new THREE.SphereGeometry(0.15, 12, 10), glow, 0, 0.62, -0.38));
+    const rotors = [];
+    for (const [x, z] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]) {
+      g.add(M(new THREE.BoxGeometry(0.08, 0.06, 0.62), body, x / 2, 0.66, z / 2, 0, Math.atan2(x, z), 0));
+      g.add(M(new THREE.CylinderGeometry(0.08, 0.08, 0.14, 10), body, x, 0.68, z));
+      const r = new THREE.Group();
+      r.position.set(x, 0.78, z);
+      r.add(M(new THREE.BoxGeometry(0.62, 0.02, 0.08), mat('#e6edf3', { roughness: 0.4 })));
+      r.add(M(new THREE.BoxGeometry(0.08, 0.02, 0.62), mat('#e6edf3', { roughness: 0.4 })));
+      g.add(r);
+      rotors.push(r);
+    }
+    g.userData = { fly: true, rotors };
+    return g;
+  },
   golem(d) {
     const g = new THREE.Group();
     const rock = mat(d.color, { roughness: 1 });
@@ -1539,6 +1655,7 @@ export function animatePet(pet, dt, moving) {
   if (u.sway) pet.rotation.z = Math.sin(t * 1.5) * 0.08;
   if (u.head) u.head.rotation.x = Math.sin(t * 1.3) * 0.06;
   if (u.jet) u.jet.scale.y = 0.8 + Math.sin(t * 30) * 0.2;
+  if (u.rotors) u.rotors.forEach((r, i) => { r.rotation.y += dt * (i % 2 ? 28 : -28); });
   return body;
 }
 
@@ -1596,6 +1713,40 @@ class AvatarAnimator {
       } else if (e === 'laugh') {
         targets.h[0] = -0.2 + Math.sin(k * 20) * 0.08; targets.la[0] = 0.3; targets.ra[0] = 0.3;
         if (k > 2) this.emote = null;
+      // ---- 2020 catalog emotes
+      } else if (e === 'salute') {
+        targets.ra = [2.4, 0, 0.9]; targets.h[0] = -0.05;
+        if (k > 2.2) this.emote = null;
+      } else if (e === 'shrug') {
+        const up = Math.min(1, k * 4) * (k > 1.6 ? Math.max(0, 1 - (k - 1.6) * 4) : 1);
+        targets.la = [0.5 * up, 0, -0.9 * up]; targets.ra = [0.5 * up, 0, 0.9 * up]; targets.h[2] = 0.2 * up;
+        if (k > 2) this.emote = null;
+      } else if (e === 'tilt') {
+        targets.h[2] = Math.sin(Math.min(k, 1.2) * 2.6) * 0.45; targets.la[2] = -0.15; targets.ra[2] = 0.15;
+        if (k > 2) this.emote = null;
+      } else if (e === 'applaud') {
+        const c = Math.abs(Math.sin(k * 14));
+        targets.la = [1.3, 0, -0.35 - c * 0.35]; targets.ra = [1.3, 0, 0.35 + c * 0.35];
+        if (k > 2.6) this.emote = null;
+      } else if (e === 'stadium') {
+        const w = Math.sin(k * 3.2);
+        targets.la[0] = Math.PI * 0.95; targets.ra[0] = Math.PI * 0.95; targets.la[2] = -0.4 + w * 0.3; targets.ra[2] = 0.4 + w * 0.3; targets.h[0] = -0.15;
+        if (k > 3) this.emote = null;
+      } else if (e === 'zombie') {
+        const s2 = Math.sin(k * 3);
+        targets.la[0] = Math.PI / 2 + s2 * 0.1; targets.ra[0] = Math.PI / 2 - s2 * 0.1; targets.h = [0.25, 0, s2 * 0.15]; targets.ll[0] = Math.max(0, s2) * 0.3;
+      } else if (e === 'robot') {
+        const step = Math.floor(k * 2.5) % 4;
+        const P = [[1.5, 0, 0, -0.3], [0, 1.5, 0.3, 0], [1.5, 1.5, 0, 0], [0.4, 0.4, -0.3, 0.3]][step];
+        targets.la[0] = P[0]; targets.ra[0] = P[1]; targets.h[1] = P[2] + P[3];
+      } else if (e === 'hype') {
+        const s3 = Math.sin(k * 11), s4 = Math.sin(k * 5.5);
+        targets.la = [Math.PI * 0.6 + s3 * 0.5, 0, -0.5]; targets.ra = [Math.PI * 0.6 - s3 * 0.5, 0, 0.5]; targets.ll[0] = Math.max(0, s4) * 0.7; targets.rl[0] = Math.max(0, -s4) * 0.7; targets.h[1] = s4 * 0.35;
+      } else if (e === 'mergedance') {
+        // IGA 26: two arms (branches) swing apart and back together (merge!)
+        const m2 = Math.abs(Math.sin(k * 2.4));
+        targets.la = [Math.PI * 0.75, 0, -0.2 - m2 * 1.1]; targets.ra = [Math.PI * 0.75, 0, 0.2 + m2 * 1.1]; targets.h[1] = Math.sin(k * 4.8) * 0.25;
+        targets.ll[2] = -m2 * 0.2; targets.rl[2] = m2 * 0.2;
       } else this.emote = null;
     } else {
       const s = Math.sin(t * 1.6) * 0.06;

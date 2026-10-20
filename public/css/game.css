@@ -317,3 +317,4 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .ew-item:hover { background: rgba(0,162,255,.8); border-color: #fff; }
 .ew-item .ico { font-size: 28px; line-height: 1; }
 .ew-item .nm { font-size: 11px; margin-top: 2px; }
+.ew-item.owned { border-color: #ffc400; }

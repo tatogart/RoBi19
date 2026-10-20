@@ -141,6 +141,23 @@ export function avatarFullBody(avatar, size = 420, opts = {}) {
 // Catalog item preview: the item on a neutral grey mannequin.
 export function itemThumbnail(item, size = 200) {
   return schedule('item:' + size + item.id + JSON.stringify(item.data), async () => {
+    // an emote (2020): a coloured card with its icon, like the catalog had then
+    if (item.type === 'Emote') {
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      const col = (item.data && item.data.color) || '#00a2ff';
+      const g = ctx.createRadialGradient(size / 2, size * 0.4, size * 0.1, size / 2, size / 2, size * 0.75);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(1, col);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, size, size);
+      ctx.font = `${Math.round(size * 0.48)}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText((item.data && item.data.icon) || '⭐', size / 2, size * 0.46);
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, size * 0.82, size, size * 0.18);
+      ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(size * 0.09)}px Arial, sans-serif`;
+      ctx.fillText('EMOTE', size / 2, size * 0.91);
+      return c.toDataURL('image/png');
+    }
     if (item.type === 'Pet') {
       const scene = new THREE.Scene();
       studioLights(scene);

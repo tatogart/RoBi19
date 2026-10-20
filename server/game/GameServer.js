@@ -1187,6 +1187,15 @@ export class GameServer {
   }
 
   // ------------------------------------------------------------ network input
+  // free emotes for everyone; the catalog ones (data.emote) need the item
+  _mayEmote(session, emote) {
+    const D = this.manager && this.manager.db && this.manager.db.data;
+    if (!D || session.bot) return true;
+    const items = Object.values(D.items).filter((i) => i.type === 'Emote' && i.data && i.data.emote === emote);
+    if (!items.length) return true;
+    const inv = D.inventory[session.user.id] || [];
+    return items.some((i) => inv.includes(i.id));
+  }
   handle(session, msg) {
     switch (msg.t) {
       case 'move': {
@@ -1208,7 +1217,10 @@ export class GameServer {
         const text = String(msg.text || '').slice(0, 200).trim();
         if (!text) return;
         if (text.startsWith('/e ')) {
-          this.broadcast({ t: 'emote', userId: session.user.id, emote: text.slice(3).trim().toLowerCase() });
+          const emote = text.slice(3).trim().toLowerCase();
+          // catalog emotes (2020) only for the players who own them
+          if (!this._mayEmote(session, emote)) { this.send(session, { t: 'sys', text: 'You don\'t own this emote yet. Get it in the Catalog -> Emotes!' }); return; }
+          this.broadcast({ t: 'emote', userId: session.user.id, emote });
           return;
         }
         if (text[0] === ':' && this.adminCommand(session, text)) return;
