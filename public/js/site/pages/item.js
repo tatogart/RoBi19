@@ -2,7 +2,7 @@ import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
 import { confetti } from '../fun.js';
 import { wishButton, giftDialog, salePrice, countdown } from '../gifts.js';
-import { el, icon, fmtFull, fmtDate, qs, modal, toast, userLink, headshotImg } from '../ui.js';
+import { el, icon, fmtFull, fmtDate, qs, modal, toast, userLink, headshotImg, specialPlate } from '../ui.js';
 import { itemThumbnail } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'catalog', requireAuth: false });
@@ -14,6 +14,13 @@ const thumb = el('div', { class: 'item-big-thumb' });
 itemThumbnail(item, 420).then((u) => thumb.append(el('img', { src: u, alt: item.name })));
 const buyArea = el('div');
 function renderBuy() {
+  // special items: only the admins give them, nobody can buy them
+  if (item.special) {
+    buyArea.replaceChildren(item.owned
+      ? el('div', { class: 'row wrap' }, el('span', { class: 'pill', text: '✓ You own this item' }), item.type === 'Emote' ? null : el('a', { class: 'btn', href: '/avatar', text: 'Wear it' }))
+      : el('div', { class: 'dev-lock special-lock' }, el('b', { text: 'Not for sale' }), el('div', { class: 'small', text: 'A special item: only the Robis team can give it. It can\'t be bought, traded or gifted.' })));
+    return;
+  }
   buyArea.replaceChildren(...[
     el('div', { class: 'price-line' }, el('span', { class: 'muted', text: 'Price' }),
       item.price ? el('span', { class: 'big-price' }, icon('robits', 'robits-icon'), fmtFull(item.price)) : el('span', { class: 'big-price', text: 'Free' }), salePrice(item)),
@@ -151,9 +158,10 @@ if (item.limited) {
 app.append(el('div', { class: 'panel item-page' }, thumb,
   el('div', { class: 'item-info' },
     el('h1', { text: item.name }),
+    item.special ? el('div', { style: { margin: '4px 0 6px' } }, specialPlate(item.special, true)) : null,
     el('div', { class: 'muted' }, 'By ', item.creator ? userLink(item.creator) : 'Robis'),
     item.limited ? el('span', { class: 'pill', style: { background: '#02b757', color: '#fff', marginTop: '8px' }, text: item.stock ? 'LIMITED U' : 'LIMITED' }) : null,
-    me && (me.perms || []).includes('limiteds')
+    me && !item.special && (me.perms || []).includes('limiteds')
       ? el('button', { class: 'btn btn-small', style: { marginTop: '10px', marginLeft: '8px' }, text: item.limited ? 'Limited settings' : 'Make Limited', onclick: limitedDialog }) : null,
     item.custom ? el('span', { class: 'pill', style: { background: '#6b327c', color: '#fff', marginTop: '8px' }, text: 'Made by a player' }) : null,
     item.custom && me && (item.creator?.id === me.id || me.isAdmin || (me.perms || []).includes('moderator'))

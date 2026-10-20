@@ -20,6 +20,7 @@ export function installAdminTools(api, ctx) {
   const inbox = (to, subject, body) => {
     D.messages.push({ id: db.nextId('message'), from: official()?.id || 0, to, subject, body, created: Date.now(), read: false, system: true });
   };
+  if (ctx.hooks) ctx.hooks.inbox = inbox;
   // a live message to a player who is in a game right now
   const live = (uid, msg) => {
     const f = manager.findUser(uid);
@@ -53,6 +54,7 @@ export function installAdminTools(api, ctx) {
     const u = target(req, res); if (!u) return;
     const ids = [...new Set((Array.isArray(req.body?.itemIds) ? req.body.itemIds : []).map((x) => +x))].filter((id) => D.items[id]).slice(0, 100);
     if (!ids.length) return bad(res, 'Pick at least one item.');
+    if (!req.user.isAdmin && ids.some((id) => D.items[id].special)) return bad(res, 'Only admins can give special items.', 403);
     const inv = D.inventory[u.id] || (D.inventory[u.id] = []);
     const given = [];
     for (const id of ids) {

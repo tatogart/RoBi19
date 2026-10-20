@@ -161,11 +161,17 @@ export function avatarCard(user) {
     el('div', { class: 'presence', text: presenceText(user.presence) }));
 }
 
+// the plate of a special item (made and given only by the admins)
+export function specialPlate(sp, big = false) {
+  return el('span', { class: 'limited-tag special-tag no-i18n' + (big ? ' big' : ''), style: { background: sp.color || '#8e44ff' }, title: 'Special item: given by the Robis team, can\'t be bought', text: '★ ' + (sp.label || 'EXCLUSIVE') });
+}
+
 export function itemCard(it, opts = {}) {
   const thumb = el('div', { class: 'thumb' });
   itemThumbnail(it).then((u) => thumb.append(el('img', { src: u, alt: it.name })));
   const card = el(opts.onClick ? 'div' : 'a', { class: 'item-card', href: opts.onClick ? null : `/item?id=${it.id}`, title: it.name, onclick: opts.onClick },
-    it.limited || it.devOnly ? el('span', { class: 'card-tags' },
+    it.limited || it.devOnly || it.special ? el('span', { class: 'card-tags' },
+      it.special ? specialPlate(it.special) : null,
       it.limited ? el('span', { class: 'limited-tag', text: it.stock ? 'LIMITED U' : 'LIMITED' }) : null,
       it.devOnly ? el('span', { class: 'limited-tag dev-tag', text: 'DEV' }) : null) : null,
     it.owned && !opts.onClick && !it.serial ? el('span', { class: 'owned-tag', text: 'Owned' }) : null,
@@ -173,7 +179,7 @@ export function itemCard(it, opts = {}) {
     thumb,
     el('div', { class: 'info' },
       el('div', { class: 'name no-i18n', text: it.name }),
-      opts.hidePrice ? null : it.limited && it.remaining === 0
+      opts.hidePrice ? null : it.special ? el('div', { class: 'price special-price', text: 'Not for sale' }) : it.limited && it.remaining === 0
         // sold out: the cheapest copy players are selling
         ? el('div', { class: 'price' + (it.bestPrice ? '' : ' free') }, it.bestPrice ? [icon('robits', 'robits-icon'), fmtNum(it.bestPrice)] : 'Sold out')
         : el('div', { class: 'price' + (it.price ? '' : ' free') }, it.price ? [icon('robits', 'robits-icon'), fmtNum(it.price), it.sale ? el('s', { class: 'was', text: fmtNum(it.sale.was) }) : null] : 'Free')));

@@ -2556,3 +2556,33 @@ test('IGA 26: bots never take part; the reset takes the prizes back from everyon
     await s2.close();
   } finally { fs.rmSync(d2, { recursive: true, force: true }); }
 });
+
+test('special items: only admins make and give them, nobody can buy or trade them', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = await call('POST', '/auth/signup', { username: 'SpecialKid', password: 'secret123' });
+  const other = await call('POST', '/auth/signup', { username: 'SpecialOther', password: 'secret123' });
+  assert.equal((await call('GET', '/admin/special', null, kid.cookie)).status, 403);
+  const sp = (await call('GET', '/admin/special', null, admin)).data;
+  assert.ok(sp.types.includes('Hat') && sp.looks.Hat.length > 3);
+  const look = sp.looks.Hat[0];
+  assert.equal((await call('POST', '/admin/special', { name: 'Seek Crown', type: 'Hat', templateId: look.id, label: 'for player', labelColor: '#00a2ff' }, kid.cookie)).status, 403);
+  const r = await call('POST', '/admin/special', { name: 'Seek Crown', type: 'Hat', templateId: look.id, color: '#ff0000', label: 'for player', labelColor: '#00a2ff', giveTo: 'SpecialKid, nobody_here' }, admin);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.data.given, ['SpecialKid']);
+  const id = r.data.item.id;
+  assert.equal(r.data.item.data.color, '#ff0000');
+  // the plate shows on the item, it can't be bought
+  const it = (await call('GET', `/catalog/${id}`, null, other.cookie)).data.item;
+  assert.deepEqual(it.special, { label: 'FOR PLAYER', color: '#00a2ff' });
+  assert.equal((await call('POST', `/catalog/${id}/buy`, {}, other.cookie)).status, 400);
+  assert.ok(!(await call('GET', '/catalog?type=Accessories', null, other.cookie)).data.items.some((x) => x.id === id));
+  // the kid owns it; it can't be traded
+  assert.ok((await call('GET', `/catalog/${id}`, null, kid.cookie)).data.item.owned);
+  const t = await call('POST', '/trades', { toUserId: other.data.user.id, give: [id], get: [] }, kid.cookie);
+  assert.notEqual(t.status, 200);
+  // edit, give with the usual tool, delete
+  assert.equal((await call('PATCH', `/admin/special/${id}`, { label: 'Legendary' }, admin)).data.item.special.label, 'LEGENDARY');
+  assert.equal((await call('POST', `/admin/users/${other.data.user.id}/give`, { itemIds: [id] }, admin)).data.given[0], 'Seek Crown');
+  assert.equal((await call('DELETE', `/admin/special/${id}`, null, admin)).status, 200);
+  assert.equal((await call('GET', `/catalog/${id}`, null, kid.cookie)).status, 404);
+});

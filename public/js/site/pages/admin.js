@@ -6,7 +6,7 @@ import { api } from '../api.js';
 import { tr } from '../../i18n.js';
 import { el, fmtFull, fmtNum, headshotImg, toast, modal, timeAgo, spinner, nameBadges, itemCard, presenceText } from '../ui.js';
 import { BADGE_SVG, BADGE_TITLE } from '../../badges.js';
-import { avatarHeadshot } from '../../render/thumbs.js';
+import { avatarHeadshot, itemThumbnail } from '../../render/thumbs.js';
 
 const me = await initPage({ active: 'admin' });
 const app = document.getElementById('app');
@@ -1863,7 +1863,10 @@ async function drawGames() {
 async function drawItems() {
   body.replaceChildren(spinner());
   const { items } = await api.get('/admin/items');
+  const special = me.isAdmin ? await api.get('/admin/special').catch(() => null) : null;
   body.replaceChildren(
+    special ? specialBox(special) : null,
+    el('h3', { text: 'Limited & player items' }),
     el('p', { class: 'small muted', text: 'Limited items and items made by players. Open an item to change its Limited settings or see its owners.' }),
     items.length ? el('div', { class: 'admin-items' }, items.map((it) => el('div', { class: 'admin-item' },
       itemCard(it),
@@ -1875,6 +1878,105 @@ async function drawItems() {
         try { await api.del(`/catalog/${it.id}`); toast('Item deleted', 'success'); drawItems(); } catch (e) { toast(e.message, 'error'); }
       } }) : null)))
       : el('div', { class: 'empty', text: 'No items yet.' }));
+}
+
+// ---------------------------------------------------------------- special items
+// Items only the admins make and give: never for sale, can't be traded or
+// gifted, with a plate on the card (EXCLUSIVE, CUSTOM, FOR PLAYER...).
+function specialBox(sp) {
+  return el('div', { class: 'panel', style: { marginBottom: '16px' } },
+    el('div', { class: 'row', style: { justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' } },
+      el('h3', { style: { margin: 0 }, text: `★ Special items (${sp.items.length})` }),
+      el('button', { class: 'btn btn-green', text: '+ Create a special item', onclick: () => specialEditor(sp) })),
+    el('p', { class: 'small muted', text: 'Only admins make and give these. Players can\'t buy, trade or gift them; the card shows its plate.' }),
+    sp.items.length ? el('div', { class: 'admin-items' }, sp.items.map((it) => el('div', { class: 'admin-item' },
+      itemCard({ ...it, special: it.special }),
+      el('div', { class: 'small muted no-i18n', text: it.owners.length ? `${it.owners.length}: ${it.owners.slice(0, 5).join(', ')}${it.owners.length > 5 ? '…' : ''}` : 'nobody has it yet' }),
+      el('div', { class: 'row wrap', style: { gap: '4px' } },
+        el('button', { class: 'btn btn-small btn-green', text: 'Give', onclick: () => giveToPlayerDialog(it) }),
+        el('button', { class: 'btn btn-small', text: 'Edit', onclick: () => specialEditor(sp, it) }),
+        el('button', { class: 'btn btn-small btn-red', text: 'Delete', onclick: async () => {
+          if (!confirm(`Delete ${it.name}? Everyone who has it will lose it.`)) return;
+          try { await api.del(`/admin/special/${it.id}`); toast('Deleted', 'success'); drawItems(); } catch (e) { toast(e.message, 'error'); }
+        } })))))
+      : el('div', { class: 'empty', text: 'No special items yet.' }));
+}
+function specialEditor(sp, cur) {
+  const st = {
+    type: cur ? cur.type : 'Hat', templateId: null, color: cur?.data?.color || '#8e44ff', accent: cur?.data?.accent || '#ffffff',
+    label: cur ? cur.special.label : 'EXCLUSIVE', labelColor: cur ? cur.special.color : '#8e44ff',
+  };
+  const name = el('input', { class: 'input', maxlength: 50, value: cur ? cur.name : '', placeholder: 'e.g. Golden Crown of Seek' });
+  const desc = el('input', { class: 'input', maxlength: 300, value: cur ? cur.description : '', placeholder: 'What it is, who it is for' });
+  const type = el('select', { class: 'input', disabled: !!cur }, sp.types.filter((t) => sp.looks[t]).map((t) => el('option', { value: t, text: t, selected: t === st.type })));
+  const looks = el('div', { class: 'looks' });
+  const color = el('input', { type: 'color', value: st.color });
+  const accent = el('input', { type: 'color', value: st.accent });
+  const labelIn = el('input', { class: 'input', maxlength: 18, value: st.label, placeholder: 'Your own word' });
+  const labelColor = el('input', { type: 'color', value: st.labelColor });
+  const plates = el('div', { class: 'plates' });
+  const giveTo = el('input', { class: 'input', placeholder: 'Player names, comma separated (optional)', list: 'adm-names2' });
+  const names = el('datalist', { id: 'adm-names2' }, data.users.map((u) => el('option', { value: u.username })));
+  const preview = el('div', { class: 'adm-special-preview' });
+  const PLATE_COLORS = { EXCLUSIVE: '#8e44ff', CUSTOM: '#e67e22', 'FOR PLAYER': '#00a2ff', 'ONE OF A KIND': '#e8413c', 'STAFF GIFT': '#1b2a35', LEGENDARY: '#d4a017' };
+  const template = () => (sp.looks[st.type] || []).find((l) => l.id === st.templateId);
+  const lookData = () => {
+    const t = template();
+    const d = JSON.parse(JSON.stringify(t ? t.data : (cur ? cur.data : {})));
+    if (st.type !== 'Face') d.color = st.color;
+    if (d.accent !== undefined) d.accent = st.accent;
+    return d;
+  };
+  const drawPreview = () => preview.replaceChildren(
+    itemCard({ id: cur ? cur.id : 0, name: name.value.trim() || 'Special item', type: st.type, data: lookData(), special: { label: st.label, color: st.labelColor } }, { onClick: () => {} }),
+    el('div', { class: 'small muted', text: 'This is how players see it: in the catalog page, the inventory and on profiles. Nobody can buy it.' }));
+  const drawLooks = () => {
+    const list = sp.looks[st.type] || [];
+    if (!cur && !list.some((l) => l.id === st.templateId)) st.templateId = list[0] ? list[0].id : null;
+    looks.replaceChildren(...list.map((l) => {
+      const b = el('button', { class: 'look' + (l.id === st.templateId ? ' on' : ''), title: l.name, onclick: () => { st.templateId = l.id; drawLooks(); drawPreview(); } });
+      itemThumbnail({ id: l.id, type: st.type, data: l.data }, 120).then((u) => b.prepend(el('img', { src: u, alt: '' })));
+      b.append(el('span', { class: 'no-i18n', text: l.name }));
+      return b;
+    }));
+  };
+  const drawPlates = () => plates.replaceChildren(...Object.entries(PLATE_COLORS).map(([t, c]) => el('button', { class: 'limited-tag special-tag big' + (st.label === t ? ' on' : ''), style: { background: c }, text: '★ ' + t, onclick: () => {
+    st.label = t; st.labelColor = c; labelIn.value = t; labelColor.value = c; drawPlates(); drawPreview();
+  } })));
+  type.onchange = () => { st.type = type.value; drawLooks(); drawPreview(); };
+  color.oninput = () => { st.color = color.value; drawPreview(); };
+  accent.oninput = () => { st.accent = accent.value; drawPreview(); };
+  labelIn.oninput = () => { st.label = labelIn.value.trim().toUpperCase() || 'EXCLUSIVE'; drawPlates(); drawPreview(); };
+  labelColor.oninput = () => { st.labelColor = labelColor.value; drawPreview(); };
+  name.oninput = drawPreview;
+  drawLooks(); drawPlates(); drawPreview();
+  modal({
+    title: cur ? `Edit ${cur.name}` : 'Create a special item', width: 720,
+    body: el('div', { class: 'adm-special-form' },
+      preview,
+      el('label', { class: 'field' }, 'Name', name),
+      el('label', { class: 'field' }, 'Description', desc),
+      el('label', { class: 'field' }, 'Kind', type),
+      el('div', { class: 'field' }, el('span', { text: cur ? 'Look (pick one to change it)' : 'Look' }), looks),
+      el('div', { class: 'row wrap', style: { gap: '14px', margin: '8px 0' } },
+        el('label', { class: 'row', style: { gap: '6px' } }, 'Color', color),
+        el('label', { class: 'row', style: { gap: '6px' } }, 'Second color', accent)),
+      el('div', { class: 'field' }, el('span', { text: 'Plate' }), plates),
+      el('div', { class: 'row', style: { gap: '8px', marginTop: '6px' } }, labelIn, labelColor),
+      cur ? null : el('label', { class: 'field' }, 'Give it right away to', giveTo), names),
+    buttons: [{ text: cur ? 'Save' : 'Create', cls: 'btn-green', onClick: async () => {
+      const b = { name: name.value, description: desc.value, color: st.color, accent: st.accent, label: st.label, labelColor: st.labelColor, templateId: st.templateId };
+      try {
+        if (cur) { await api.patch(`/admin/special/${cur.id}`, b); toast('Saved', 'success'); }
+        else {
+          const r = await api.post('/admin/special', { ...b, type: st.type, giveTo: giveTo.value });
+          toast(r.given.length ? `Created and given to ${r.given.join(', ')}` : 'Created! Give it with the Give button.', 'success');
+        }
+        drawItems();
+      } catch (e) { toast(e.message, 'error'); return false; }
+      return undefined;
+    } }, { text: 'Cancel' }],
+  });
 }
 
 // ---------------------------------------------------------------- log

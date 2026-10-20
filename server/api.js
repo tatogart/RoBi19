@@ -20,6 +20,7 @@ import { installControl } from './control.js';
 import { installAwards } from './awards.js';
 import { installClassic } from './classic.js';
 import { installProgress, levelOf } from './progress.js';
+import { installSpecial } from './special.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -460,6 +461,7 @@ export function createApi(db, manager, opts = {}) {
       id: it.id, name: it.name, type: it.type, price: hooks.salePrice(it), basePrice: it.price, sale: hooks.saleInfo(it), data: it.data, description: it.description,
       creator: creator ? { id: creator.id, username: creator.username, flags: userFlags(creator) } : null,
       created: it.created, sales: it.sales, offsale: !!it.offsale, limited: !!it.limited, remaining: it.remaining ?? null, stock: it.stock ?? null, custom: !!it.custom,
+      special: it.special || null,
       devOnly: !!(it.data && it.data.devOnly), canGet: it.data && it.data.devOnly ? isDeveloper(user) : true,
       owned: user ? (D.inventory[user.id] || []).includes(it.id) : false, wished: user ? (user.wishlist || []).includes(it.id) : false,
       serial: user ? serialOf(it, user.id) : null, lastSerial: it.limited ? it.lastSerial || 0 : null,
@@ -2459,6 +2461,7 @@ export function createApi(db, manager, opts = {}) {
     const u = target(req, res); if (!u) return;
     const ids = req.body?.all ? Object.keys(D.items).filter((k) => !D.items[k].offsale).map(Number) : [toInt(req.body?.itemId)].filter((i) => D.items[i]);
     if (!ids.length) return bad(res, 'Item not found.');
+    if (!req.user.isAdmin && !req.body?.all && D.items[ids[0]].special) return bad(res, 'Only admins can give special items.', 403);
     D.inventory[u.id] = [...new Set([...(D.inventory[u.id] || []), ...ids])];
     for (const id of ids) giveSerial(D.items[id], u.id);
     db.save();
@@ -2686,6 +2689,7 @@ export function createApi(db, manager, opts = {}) {
   installDiscordStatus(api, { db, manager, requireUser, bad, presence, siteSettings });
   installProgress(api, { db, manager, requireUser, requireAdmin, bad, log, hooks });
   installClassic(api, { db, manager, requireAdmin, requirePerm, bad, log, hooks, adminUser, deleteAccount, isBanned, STARTER: { items: STARTER_ITEMS, wearing: STARTER_WEARING, body: STARTER_BODY } });
+  installSpecial(api, { db, requireAdmin, bad, giveSerial, hooks });
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS, hooks });
 
   api.use((req, res) => bad(res, 'Not found', 404));
