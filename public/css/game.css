@@ -144,7 +144,7 @@
 .game-root.touch .name-tag .nt-name { font-size: 13px; }
 .game-root.touch .bubble { font-size: 13px; max-width: 180px; }
 .game-root.touch .healthbar { right: calc(10px + env(safe-area-inset-right)); width: 130px; }
-@media (orientation: portrait) { .game-root.touch .rotate-hint { display: flex; } .game-root.touch .chat { width: 62vw; } }
+@media (orientation: portrait) { .game-root.touch .rotate-hint { display: flex; } .game-root.touch:not(.force-landscape) .chat { width: 62vw; } }
 @media (max-width: 760px), (max-height: 500px) {
   .esc-panel { width: 100%; max-width: 100%; height: 100%; max-height: 100%; border-radius: 0; }
   .esc-tabs button { padding: 10px; font-size: 15px; }
@@ -205,7 +205,7 @@ body:has(.game-root.touch) .room-hint { display: none; }
 /* Landscape phones: the bottom middle is free (stick left, jump right). */
 @media (orientation: landscape) { .game-root.touch .hotbar { bottom: calc(10px + env(safe-area-inset-bottom)); } }
 /* Portrait: above the thumbstick and jump button. */
-@media (orientation: portrait) { .game-root.touch .hotbar { bottom: calc(200px + env(safe-area-inset-bottom)); } }
+@media (orientation: portrait) { .game-root.touch:not(.force-landscape) .hotbar { bottom: calc(200px + env(safe-area-inset-bottom)); } }
 .crosshair.touch-aim { top: 43%; }
 .use-btn { display: none; position: absolute; right: calc(36px + env(safe-area-inset-right)); bottom: calc(140px + env(safe-area-inset-bottom)); width: 70px; height: 70px; border-radius: 50%; border: 2px solid rgba(255,255,255,.55); background: rgba(196,40,28,.45); color: #fff; font-size: 30px; touch-action: none; }
 .use-btn.down { background: rgba(255,255,255,.4); transform: scale(.94); }
@@ -350,3 +350,11 @@ body:has(.game-root.touch) .room-hint { display: none; }
   .esc-actions button { flex: 1 1 28%; padding: 10px 4px; font-size: 14px; }
 }
 @media (max-height: 420px) { .esc-tabs button { padding: 8px 4px; } .esc-tabs .tn { font-size: 12px; } }
+
+/* "Landscape" (the game turned inside an upright phone): the page is still
+   portrait for the browser, so the landscape layout is set here, not by
+   @media (orientation) */
+.game-root.touch.force-landscape .hotbar { bottom: 10px; }
+.game-root.touch.force-landscape .chat { width: min(320px, 45%); }
+.game-root.force-landscape .use-btn { right: 130px; bottom: 28px; }
+.game-root.force-landscape .fly-down-btn { right: 210px; bottom: 28px; }
