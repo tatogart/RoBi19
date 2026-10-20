@@ -149,7 +149,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     const pr = HUNT_PRESETS[key];
     try {
       D.huntCustom['prep_' + key] = {
-        name: key === 'github' ? pr.title : 'The Hunt: ' + pr.title, description: pr.story, kind: 'quests', hub: key, robits: 25, teamGoal: 30,
+        name: key === 'github' ? pr.title : 'The Hunt: ' + pr.title, description: pr.story, kind: 'quests', hub: key, robits: 25, teamGoal: key === 'github' ? 100 : 30,
         prizes: pr.prizes.map((r, i) => ({ ...cleanPrize(r), id: i + 1 })), teamPrize: cleanPrize(pr.team, false), hubPrize: cleanPrize(pr.hub, false), quests: {}, prepared: true,
       };
       D.huntPrepared.push(key);
@@ -228,6 +228,26 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     }
   };
   makePrizes();
+  // IGA 26 reset (once): bots had done hundreds of quests, opened the team goal
+  // and won prizes. Every IGA 26 prize is taken back from everyone and the
+  // event starts over, now only for players (and a bigger team goal).
+  if (H.current === 'prep_github' && !H.igaReset1) {
+    H.igaReset1 = true;
+    const ids = new Set(Object.keys(allPrizes()).map((k) => H.rewards[k]).filter(Boolean));
+    let taken = 0;
+    for (const [uid, inv] of Object.entries(D.inventory)) {
+      const before = inv.length;
+      D.inventory[uid] = inv.filter((id) => !ids.has(id));
+      taken += before - D.inventory[uid].length;
+      const u = D.users[uid];
+      if (u && u.avatar && Array.isArray(u.avatar.wearing)) u.avatar.wearing = u.avatar.wearing.filter((id) => !ids.has(id));
+    }
+    for (const id of ids) delete D.serials?.[id];
+    Object.assign(H, { progress: {}, rewarded: {}, fragments: {}, hubDone: {}, riftOpen: false, riftGoal: 100 });
+    if (D.huntCustom.prep_github) D.huntCustom.prep_github.teamGoal = 100;
+    log(official()?.id || 0, 0, `IGA 26 reset: ${taken} prize(s) taken back, progress cleared`);
+    db.save();
+  }
   if (H._igaRefresh) {
     delete H._igaRefresh;
     if (H.current === 'prep_github') {
@@ -261,7 +281,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     return { id: it.id, name: it.name };
   };
   // Finds by everyone together; at the goal the team prize goes to every finder.
-  const globalFinds = () => Object.values(H.progress).reduce((n, l) => n + l.length, 0);
+  const globalFinds = () => Object.entries(H.progress).reduce((n, [uid, l]) => n + (D.users[uid] && !D.users[uid].bot ? l.length : 0), 0);
   const teamCheck = (uid) => {
     if (!live()) return null;
     if (!H.riftOpen && globalFinds() >= teamGoal()) H.riftOpen = true;
@@ -305,7 +325,11 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     return { games: list, count, total: list.length };
   };
   // force: given by an admin (works while the event is private too)
+  // bots play games like people, but they never take part in an event (they
+  // used to finish quests, open the team goal and win the prizes)
+  const notPlayer = (uid) => { const u = D.users[uid]; return !u || u.bot || u.system; };
   const collect = (uid, gameId, force = false) => {
+    if (notPlayer(uid)) return null;
     if (!force && !eligible(uid)) return null;
     const games = eventGames();
     if (!games.some((g) => g.id === gameId)) return null;
@@ -326,7 +350,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   };
   // Shards event: star fragments in the hub. n = 0 only asks.
   const fragment = (uid, n, gameId) => {
-    if (!eligible(uid) || gameId !== H.hubId || !ev().fragments) return null;
+    if (notPlayer(uid) || !eligible(uid) || gameId !== H.hubId || !ev().fragments) return null;
     const total = ev().fragments;
     const have = H.fragments[uid] || (H.fragments[uid] = []);
     let isNew = false, prize = null;

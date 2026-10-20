@@ -2449,3 +2449,40 @@ test('2020 emotes: bought in the catalog, used in games only when owned', async 
   assert.ok(!put.data.avatar.wearing.includes(robot.id));
   c.ws.close();
 });
+
+test('IGA 26: bots never take part; the reset takes the prizes back from everyone', async () => {
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'robis-iga-'));
+  try {
+    let s2 = createServer({ dataDir: d2, quiet: true });
+    await new Promise((r) => s2.server.listen(0, r));
+    const b2 = `http://127.0.0.1:${s2.server.address().port}`;
+    const c2 = async (m, u, body, cookie) => { const r = await fetch(b2 + '/api' + u, { method: m, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined }); return { status: r.status, data: await r.json().catch(() => null), cookie: r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ') }; };
+    const admin = (await c2('POST', '/auth/signup', { username: 'IgaBoss', password: 'secret123' })).cookie;
+    assert.equal((await c2('POST', '/admin/hunt/control', { action: 'launch', key: 'prep_github', public: true }, admin)).status, 200);
+    const D = s2.db.data;
+    const H = D.hunt;
+    const gid = Object.values(D.games).find((g) => g.seedKey === 'crossroads').id;
+    // a bot finishing a quest counts for nothing
+    const bot = Object.values(D.users).find((u) => u.username === 'IgaBoss');
+    const botUser = { ...bot };
+    const botId = s2.db.nextId('user');
+    D.users[botId] = { ...botUser, id: botId, username: 'IgaBot', bot: true };
+    assert.equal(s2.manager.hunt.collect(botId, gid), null);
+    // a player does: gets a prize; then the reset takes it back
+    const pl = (await c2('POST', '/auth/signup', { username: 'IgaPlayer', password: 'secret123' })).data.user.id;
+    const r = s2.manager.hunt.collect(pl, gid);
+    assert.ok(r && r.new);
+    const prizeId = H.rewards[Object.keys(H.rewards).find((k) => H.rewarded[pl]?.includes(k))];
+    assert.ok(prizeId && D.inventory[pl].includes(prizeId));
+    delete H.igaReset1;
+    s2.db.save();
+    await s2.close();
+    s2 = createServer({ dataDir: d2, quiet: true });
+    const E = s2.db.data;
+    assert.ok(!E.inventory[pl].includes(prizeId), 'the prize was taken back');
+    assert.deepEqual(E.hunt.progress, {});
+    assert.equal(E.hunt.riftOpen, false);
+    assert.equal(E.hunt.riftGoal, 100);
+    await s2.close();
+  } finally { fs.rmSync(d2, { recursive: true, force: true }); }
+});
