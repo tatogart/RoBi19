@@ -14,6 +14,16 @@ import { installServices } from './services.js';
 import { filterChat } from './chatfilter.js';
 import { findHuntSpot } from './huntspot.js';
 import { RUNE_TIME } from '../huntquests.js';
+
+// What each quest kind puts in the map (see _runesEnsure).
+const QUEST_OBJECTS = {
+  runes: { folder: 'HuntRunes', apart: 40, parts: () => ['I', 'II', 'III'].map((label) => ({ name: 'Rune', size: [2.4, 3.6, 1], color: '#5bd6a0', label })) },
+  orbs: { folder: 'HuntOrbs', apart: 25, parts: (d) => Array.from({ length: Math.min(12, d.target || 6) }, () => ({ name: 'HuntOrb', size: [2, 2, 2], shape: 'Ball', color: '#ffd23f' })) },
+  delivery: { folder: 'HuntDelivery', apart: 60, parts: () => [
+    { name: 'HuntPackage', size: [2, 2, 2], color: '#a0703c', material: 'Wood', label: '📦 Package' },
+    { name: 'HuntMailbox', size: [2, 4, 2], color: '#2f6fd6', material: 'Metal', label: '📫 Mailbox' }] },
+  beacon: { folder: 'HuntBeacon', apart: 0, parts: () => [{ name: 'HuntBeacon', size: [8, 0.6, 8], color: '#ffc94a', label: '⭐ Beacon' }] },
+};
 import { AntiCheat } from './anticheat.js';
 
 const TICK_HZ = 30;
@@ -440,8 +450,9 @@ export class GameServer {
     if (!def) return;
     const p = h.progress(session.user.id);
     const done = !!(p && p.games.some((g) => g.id === this.gameId && g.found));
-    session.quest = { def, done, readyAt: Date.now() + 4000, last: {}, gained: 0, best: 0, visited: new Set(), clicked: new Set(), rune: 0, runeStart: 0, hudAt: 0 };
-    if (def.type === 'runes' && !done) this._runesEnsure();
+    session.quest = { def, done, readyAt: Date.now() + 4000, last: {}, gained: 0, best: 0, visited: new Set(), clicked: new Set(), rune: 0, runeStart: 0, hudAt: 0,
+      orbs: new Set(), carrying: false, held: 0, dist: 0, jumps: 0, emotes: new Set(), played: 0, movedAt: Date.now() };
+    if (QUEST_OBJECTS[def.type] && !done) { this.questObjDef = def; this._runesEnsure(); }
     if (!this.questTimer) this.questTimer = setInterval(() => { try { this._questTick(); } catch (e) { this.log('warn', 'The Hunt: ' + e.message); } }, 1000);
     setTimeout(() => {
       if (this.sessions.get(session.user.id) !== session) return;
@@ -450,6 +461,27 @@ export class GameServer {
         ? `The Hunt: you already have the relic of this game (${p.count}/${p.total}).`
         : `The Hunt quest: ${def.text}` });
     }, 1500);
+  }
+
+  // run / jump quests (and "not AFK" for playtime), from the player's moves
+  _questMove(session, before) {
+    const q = session.quest;
+    const d = q.def;
+    if (!before || !before.p) return;
+    const [x0, , z0] = before.p, [x1, , z1] = session.state.p;
+    const step = Math.hypot(x1 - x0, z1 - z0);
+    if (step > 0.3) q.movedAt = Date.now();
+    if (d.type === 'distance' && step > 0.05 && step < 12) { // not teleports
+      const was = Math.floor(q.dist / 50);
+      q.dist += step;
+      if (q.dist >= d.target) return this._questComplete(session);
+      if (Math.floor(q.dist / 50) !== was) this._questHud(session);
+    }
+    if (d.type === 'jumps' && session.state.a === 'jump' && before.a !== 'jump') {
+      q.jumps++;
+      if (q.jumps >= d.target) return this._questComplete(session);
+      this._questHud(session, true);
+    }
   }
 
   _questStatValue(session, name) {
@@ -477,6 +509,13 @@ export class GameServer {
       else if (d.type === 'badge' && d.stat) { const v = this._questStatValue(session, d.stat); if (v !== null) progress = `${d.stat}: ${v}`; }
       else if (d.type === 'click') progress = `${q.clicked.size} / ${this._questButtons().length} buttons`;
       else if (d.type === 'visit') progress = (d.names || d.parts).map((n, i) => (q.visited.has(d.parts[i]) ? '✓ ' : '• ') + n).join('   ');
+      else if (d.type === 'orbs') progress = `Orbs: ${q.orbs.size} / ${d.target}`;
+      else if (d.type === 'delivery') progress = q.carrying ? '📦 Got it! Now find the 📫 mailbox' : 'Find the 📦 package';
+      else if (d.type === 'beacon') progress = `On the beacon: ${q.held} / ${d.target}s`;
+      else if (d.type === 'distance') progress = `${Math.min(d.target, Math.floor(q.dist)).toLocaleString('en-US')} / ${d.target.toLocaleString('en-US')} studs`;
+      else if (d.type === 'jumps') progress = `Jumps: ${Math.min(d.target, q.jumps)} / ${d.target}`;
+      else if (d.type === 'emotes') progress = `Emotes: ${Math.min(d.target, q.emotes.size)} / ${d.target}`;
+      else if (d.type === 'playtime') { const t = Math.min(d.target, q.played); progress = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} / ${Math.floor(d.target / 60)}:${String(d.target % 60).padStart(2, '0')}`; }
       else if (d.type === 'runes') {
         progress = `Runes lit: ${q.rune} / 3`;
         if (q.rune > 0) left = Math.max(0, Math.ceil((q.runeStart + RUNE_TIME * 1000 - now) / 1000));
@@ -588,6 +627,21 @@ export class GameServer {
           this._questHud(s, true);
         }
       }
+      if (d.type === 'beacon' && s.character && this.runes && this.runes[0] && !this.runes[0]._destroyed) {
+        const [x, y, z] = s.state.p;
+        const [a, b] = partAABB(this.runes[0]);
+        const dx = Math.max(a.X - x, 0, x - b.X), dy = Math.max(a.Y - y, 0, y - b.Y), dz = Math.max(a.Z - z, 0, z - b.Z);
+        if (Math.hypot(dx, dy, dz) < 4) {
+          q.held++;
+          if (q.held >= d.target) { this._questComplete(s); continue; }
+          this._questHud(s, true);
+        }
+      }
+      if (d.type === 'playtime' && s.character && now - q.movedAt < 30000) {
+        q.played++;
+        if (q.played >= d.target) { this._questComplete(s); continue; }
+        if (q.played % 5 === 0) this._questHud(s);
+      }
       if (d.type === 'runes' && q.rune > 0 && now - q.runeStart > RUNE_TIME * 1000) {
         q.rune = 0;
         this.send(s, { t: 'sys', text: 'The Hunt: too slow! The runes went dark. Start again from rune I.' });
@@ -597,22 +651,29 @@ export class GameServer {
     if (this.runes) this._runesEnsure();
   }
 
-  // Three rune stones, far from the spawn and from each other. They move if
-  // what they stand on goes away (maps built while the game runs).
+  // The things a quest puts in the map (QUEST_OBJECTS): rune stones, orbs,
+  // the package and the mailbox, the beacon. Far from the spawn and from each
+  // other; they move if what they stand on goes away (maps built while the
+  // game runs). this.runes holds them all (in order).
   _runesEnsure() {
-    const ok = (r) => r && !r._destroyed && this._huntSupported(r.Position.sub(new Vector3(0, 1.8, 0)));
-    if (this.runes && this.runes.every(ok)) return;
+    const def = this.questObjDef;
+    const spec = def && QUEST_OBJECTS[def.type];
+    if (!spec) return;
+    const list = spec.parts(def);
+    const lift = (i) => list[i].size[1] / 2;
+    const ok = (r, i) => r && !r._destroyed && this._huntSupported(r.Position.sub(new Vector3(0, lift(i), 0)));
+    if (this.runes && this.runes.length === list.length && this.runes.every(ok)) return;
     if (this.runesAt && Date.now() - this.runesAt < 15000 && this.runes) return;
     this.runesAt = Date.now();
-    const keep = (this.runes || []).map((r) => (ok(r) ? r : (r && !r._destroyed && (r.Parent || r).Destroy(), null)));
-    let folder = this.game.Workspace.FindFirstChild('HuntRunes');
-    if (!folder) { folder = createInstance('Folder'); folder.Name = 'HuntRunes'; folder.Parent = this.game.Workspace; }
+    const keep = list.map((_, i) => { const r = (this.runes || [])[i]; return ok(r, i) ? r : (r && !r._destroyed && (r.Parent || r).Destroy(), null); });
+    let folder = this.game.Workspace.FindFirstChild(spec.folder);
+    if (!folder) { folder = createInstance('Folder'); folder.Name = spec.folder; folder.Parent = this.game.Workspace; }
     const taken = keep.filter(Boolean).map((r) => r.Position);
-    const ROMAN = ['I', 'II', 'III'];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < list.length; i++) {
       if (keep[i]) continue;
+      const it = list[i];
       let pos = null;
-      for (const [minDist, apart] of [[45, 40], [30, 25], [20, 12], [0, 0]]) {
+      for (const [minDist, apart] of [[45, spec.apart], [30, spec.apart * 0.6], [20, 12], [0, 0]]) {
         for (let k = 0; k < 12 && !pos; k++) {
           let p = null;
           try { p = findHuntSpot(this.game.Workspace, Math.random, { minDist }); } catch { p = null; }
@@ -623,19 +684,22 @@ export class GameServer {
       if (!pos) { try { pos = findHuntSpot(this.game.Workspace, Math.random, { minDist: 0, ground: true }); } catch { pos = null; } }
       if (!pos) continue;
       const r = createInstance('Part');
-      r.Name = 'Rune';
-      r.Size = new Vector3(2.4, 3.6, 1);
-      r.Material = 'Neon';
-      r.Color = Color3.fromHex('#5bd6a0');
+      r.Name = it.name;
+      r.Size = new Vector3(...it.size);
+      if (it.shape) r.Shape = it.shape;
+      r.Material = it.material || 'Neon';
+      r.Color = Color3.fromHex(it.color);
       r.Anchored = true;
-      r.CanCollide = false;
-      r.CFrame = CFrame.fromPosition(new Vector3(pos.X, pos.Y + 1.8, pos.Z));
-      const label = createInstance('BillboardText');
-      label.Text = ROMAN[i];
-      label.StudsOffset = new Vector3(0, 3, 0);
-      label.Parent = r;
+      r.CanCollide = !!it.solid;
+      r.CFrame = CFrame.fromPosition(new Vector3(pos.X, pos.Y + lift(i), pos.Z));
+      if (it.label) {
+        const label = createInstance('BillboardText');
+        label.Text = it.label;
+        label.StudsOffset = new Vector3(0, it.size[1] / 2 + 1.6, 0);
+        label.Parent = r;
+      }
       const glow = createInstance('PointLight');
-      glow.Color = Color3.fromHex('#5bd6a0');
+      glow.Color = Color3.fromHex(it.color);
       glow.Range = 10;
       glow.Brightness = 0.8;
       glow.Parent = r;
@@ -644,6 +708,30 @@ export class GameServer {
       taken.push(r.Position);
     }
     this.runes = keep;
+  }
+
+  // a quest thing was touched
+  _questObjTouched(session, idx) {
+    const q = session.quest;
+    if (!q || q.done) return;
+    const d = q.def;
+    if (d.type === 'runes') return this._runeTouched(session, idx);
+    if (d.type === 'orbs') {
+      if (q.orbs.has(idx)) return;
+      q.orbs.add(idx);
+      if (q.orbs.size >= d.target) return this._questComplete(session);
+      this._questHud(session, true);
+    }
+    if (d.type === 'delivery') {
+      if (idx === 0 && !q.carrying) {
+        q.carrying = true;
+        this.send(session, { t: 'sys', text: 'The Hunt: you picked up the package! Now bring it to the 📫 mailbox.' });
+        this._questHud(session, true);
+      } else if (idx === 1) {
+        if (q.carrying) return this._questComplete(session);
+        if (Date.now() - (q.warnAt || 0) > 3000) { q.warnAt = Date.now(); this.send(session, { t: 'sys', text: 'The Hunt: the mailbox is waiting... find the 📦 package first.' }); }
+      }
+    }
   }
 
   _runeTouched(session, idx) {
@@ -1205,7 +1293,9 @@ export class GameServer {
         const [x, y, z] = msg.p.map(Number);
         if (![x, y, z].every(Number.isFinite)) return;
         if (!this.isTest && !this.privateId) this.anticheat.check(session, x, y, z);
+        const before = session.state;
         session.state = { p: [x, y, z], ry: +msg.ry || 0, a: String(msg.a || 'idle').slice(0, 16), v: msg.v || [0, 0, 0] };
+        if (session.quest && !session.quest.done) this._questMove(session, before);
         if (hum && hum.Health > 0) {
           this._posing = true;
           poseCharacter(ch, rootCFrame(x, y, z, session.state.ry));
@@ -1221,6 +1311,12 @@ export class GameServer {
           // catalog emotes (2020) only for the players who own them
           if (!this._mayEmote(session, emote)) { this.send(session, { t: 'sys', text: 'You don\'t own this emote yet. Get it in the Catalog -> Emotes!' }); return; }
           this.broadcast({ t: 'emote', userId: session.user.id, emote });
+          const q = session.quest;
+          if (q && !q.done && q.def.type === 'emotes' && /^[a-z0-9]{2,20}$/.test(emote) && !q.emotes.has(emote)) {
+            q.emotes.add(emote);
+            if (q.emotes.size >= q.def.target) this._questComplete(session);
+            else this._questHud(session, true);
+          }
           return;
         }
         if (text[0] === ':' && this.adminCommand(session, text)) return;
@@ -1447,7 +1543,7 @@ export class GameServer {
         const rune = this.runes.includes(a) ? a : b;
         const limb = rune === a ? b : a;
         const who = limb._parent && limb._parent._isCharacter && [...this.sessions.values()].find((x) => x.character === limb._parent);
-        if (who) this._runeTouched(who, this.runes.indexOf(rune));
+        if (who) this._questObjTouched(who, this.runes.indexOf(rune));
       }
       if (this.huntToken && (a === this.huntToken || b === this.huntToken)) {
         const limb = a === this.huntToken ? b : a;

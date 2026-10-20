@@ -247,8 +247,16 @@ body:has(.game-root.touch) .room-hint { display: none; }
 @keyframes hunt-in { from { transform: translateX(-50%) scale(.6); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
 @keyframes hunt-spin { from { transform: scaleX(1); } to { transform: scaleX(.35); } }
 .hunt-robits { margin-left: 10px; color: #7dffb0; }
-.hunt-quest { position: absolute; top: 34%; right: 12px; width: 230px; padding: 10px 12px; border-radius: 10px; background: rgba(28, 22, 10, .82); border: 2px solid #c8a165; color: #f5ead2; z-index: 30; pointer-events: none; font-size: 13px; }
-.hunt-quest .hq-title { font-weight: 900; letter-spacing: 1px; font-size: 11px; color: #ffc94a; }
+.hunt-quest { position: absolute; top: 34%; right: 12px; width: 230px; padding: 8px 12px 10px; border-radius: 10px; background: rgba(28, 22, 10, .82); border: 2px solid #c8a165; color: #f5ead2; z-index: 4; pointer-events: none; font-size: 13px; transition: width .2s; }
+.hunt-quest .hq-head { pointer-events: auto; display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; padding: 2px 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.hunt-quest .hq-title { font-weight: 900; letter-spacing: 1px; font-size: 11px; color: #ffc94a; flex: 1; }
+.hunt-quest .hq-mini { display: none; color: #9be6c2; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hunt-quest .hq-arrow { font-size: 14px; color: #ffc94a; transition: transform .2s; padding: 0 2px; }
+.hunt-quest.folded { width: auto; max-width: 220px; padding: 4px 10px; }
+.hunt-quest.folded .hq-body { display: none; }
+.hunt-quest.folded .hq-mini { display: inline; }
+.hunt-quest.folded .hq-title { flex: none; }
+.hunt-quest.folded .hq-arrow { transform: rotate(-90deg); }
 .hunt-quest .hq-text { margin: 4px 0; font-weight: 700; line-height: 1.25; }
 .hunt-quest .hq-progress { color: #9be6c2; font-size: 12px; }
 .hunt-quest .hq-timer { color: #ffb347; font-weight: 800; margin-top: 3px; }
@@ -257,7 +265,7 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .hunt-banner.relic { background: linear-gradient(135deg, #2a1f0aee, #4a3a14ee); border-color: #ffc94a; box-shadow: 0 6px 30px rgba(255,201,74,.4); }
 .hunt-banner.relic .hunt-token { background: linear-gradient(135deg, #fff1c4, #ffc94a 45%, #8a6a1e); box-shadow: 0 0 22px #ffc94a; }
 .hunt-banner.relic .hunt-title { color: #ffd27a; text-shadow: 0 0 12px #c8a165; }
-@media (max-width: 700px) { .hunt-quest { width: 170px; font-size: 11px; top: 30%; } }
+@media (max-width: 700px), (max-height: 500px) { .hunt-quest { width: 190px; font-size: 11px; top: calc(80px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); } }
 .big-message { position: absolute; top: 30%; left: 50%; transform: translateX(-50%); font-size: 52px; font-weight: 900; letter-spacing: 2px; text-align: center; text-shadow: 0 4px 0 rgba(0,0,0,.55), 0 0 24px rgba(0,0,0,.6); z-index: 36; pointer-events: none; animation: big-in .35s cubic-bezier(.2,1.5,.4,1); transition: opacity .5s; max-width: 90vw; }
 .big-message.out { opacity: 0; }
 @keyframes big-in { from { transform: translateX(-50%) scale(.4); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
@@ -291,13 +299,7 @@ body:has(.game-root.touch) .room-hint { display: none; }
 }
 
 /* ---- 2020: backpack and emote menu ---- */
-.hud-round { position: absolute; bottom: calc(14px + env(safe-area-inset-bottom)); width: 40px; height: 40px; border-radius: 8px; border: 0; background: rgba(31,31,31,.6); color: #fff; font-size: 20px; cursor: pointer; z-index: 5; }
-.hud-round:hover { background: rgba(31,31,31,.8); }
-.bag-btn { left: 14px; }
-.emote-btn { left: 60px; }
-.game-root.touch .bag-btn, .game-root.touch .emote-btn { bottom: auto; top: calc(52px + env(safe-area-inset-top)); }
-.game-root.touch .bag-btn { left: auto; right: calc(60px + env(safe-area-inset-right)); }
-.game-root.touch .emote-btn { left: auto; right: calc(106px + env(safe-area-inset-right)); }
+.topbar .bag-btn, .topbar .emote-btn { font-size: 17px; }
 .backpack { position: absolute; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(560px, 92vw); max-height: 52vh; display: flex; flex-direction: column; background: rgba(31,31,31,.88); border-radius: 8px; color: #fff; z-index: 20; padding: 10px; }
 .bp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .bp-head b { font-size: 16px; }
@@ -323,3 +325,28 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .game-root.force-landscape { right: auto; bottom: auto; transform-origin: 0 0; transform: rotate(90deg) translateY(-100%); }
 .game-root.force-landscape .rotate-hint { display: none !important; }
 .rotate-hint .rot-land { font-size: 13px; background: #00a2ff; border-radius: 10px; padding: 3px 9px; font-weight: 700; }
+
+/* 2020 HUD tidy-up: phones get a smaller jump button, the chat box only when opened */
+.game-root.touch .chat.closed .bar { display: none; }
+.game-root.touch .chat.closed .log { max-height: 66px; pointer-events: none; }
+.game-root.touch .jump-btn { width: 72px; height: 72px; padding: 16px; }
+.game-root.touch .hint { font-size: 13px; padding: 3px; }
+.esc-menu { background: rgba(0, 0, 0, .7); }
+.esc-panel { background: rgba(24, 24, 24, .96); }
+.esc-tabs button { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.esc-tabs .ti { font-size: 18px; }
+.esc-setting { padding: 9px 4px; }
+.esc-toggle { width: 48px; height: 26px; border-radius: 13px; border: 0; background: #555; position: relative; cursor: pointer; transition: background .15s; flex: none; }
+.esc-toggle i { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s; }
+.esc-toggle.on { background: #00b06f; }
+.esc-toggle.on i { left: 25px; }
+.esc-seg { display: flex; border: 1px solid #666; border-radius: 6px; overflow: hidden; }
+.esc-seg button { background: transparent; color: #ddd; border: 0; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+.esc-seg button + button { border-left: 1px solid #666; }
+.esc-seg button.on { background: #fff; color: #222; font-weight: 700; }
+.hud .esc-menu.open ~ .hunt-quest { display: none; }
+@media (max-width: 760px), (max-height: 500px) {
+  .esc-tabs .tn { font-size: 13px; }
+  .esc-actions button { flex: 1 1 28%; padding: 10px 4px; font-size: 14px; }
+}
+@media (max-height: 420px) { .esc-tabs button { padding: 8px 4px; } .esc-tabs .tn { font-size: 12px; } }

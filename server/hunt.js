@@ -17,7 +17,7 @@ import { buildRelicsHub } from './seed/hunt2.js';
 import { buildThemedHub, HUB_THEMES } from './seed/hunt3.js';
 import { HUNT_PRESETS } from './huntpresets.js';
 import { officialAccount } from './seed/seed.js';
-import { questFor, RUNES_TEXT } from './huntquests.js';
+import { questFor, RUNES_TEXT, GENERIC } from './huntquests.js';
 
 // ---------------------------------------------------------------- the events
 // Prize ladder: count = a number of finds, share = a part of all of them.
@@ -78,7 +78,7 @@ export const PRIZE_MODELS = {
 const ACCESSORY_SLOT = { glitchvisor: 'face', graphcape: 'back', duck: 'shoulder', bee: 'shoulder', parrot: 'shoulder', cape: 'back', jetpack: 'back', backpack: 'back' };
 const EMOTE_ICON = { mergedance: '🔀', hype: '🔥', robot: '🤖', stadium: '🏟️' };
 // What an admin can set for a game's quest (see server/huntquests.js).
-export const QUEST_TYPES = ['default', 'runes', 'stat', 'gain', 'below', 'badge', 'visit', 'click', 'script'];
+export const QUEST_TYPES = ['default', 'runes', 'orbs', 'delivery', 'beacon', 'distance', 'jumps', 'emotes', 'playtime', 'stat', 'gain', 'below', 'badge', 'visit', 'click', 'script'];
 const HEX = /^#[0-9a-f]{6}$/i;
 const cleanText = (v, max = 200) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, max);
 // A quest set by an admin, checked and cleaned (null = use the game's own quest).
@@ -89,6 +89,13 @@ export function cleanQuest(q) {
   const name = cleanText(q.name, 60);
   if (q.type === 'runes') return { type: 'runes', text: text || RUNES_TEXT };
   if (q.type === 'script') return { type: 'script', text: text || 'Complete the quest of this game' };
+  // the quests for any game (target optional: the usual one)
+  const gen = GENERIC.find((x) => x.type === q.type);
+  if (gen) {
+    if (gen.target === undefined) return { ...gen, text: text || gen.text };
+    const t = +q.target > 0 ? Math.min(q.type === 'distance' ? 100000 : 1000, target) : gen.target;
+    return { ...gen, target: t, text: text || gen.text.replace(String(gen.target === 1500 ? '1,500' : gen.target === 240 ? '4' : gen.target), q.type === 'playtime' ? String(Math.max(1, Math.round(t / 60))) : t.toLocaleString('en-US')) };
+  }
   if (!name) throw new Error('Write the name of the leaderstat, badge, part or model.');
   if (['stat', 'gain', 'below'].includes(q.type)) return { type: q.type, stat: name, target, text: text || (q.type === 'gain' ? `Get ${target} more ${name}` : q.type === 'below' ? `Get ${name} of ${target} or less` : `Reach ${target} ${name}`) };
   if (q.type === 'badge') return { type: 'badge', badge: name, text: text || `Earn the badge "${name}"` };
@@ -314,7 +321,7 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
   const overrides = () => (ev().custom ? ev().quests : (H.questOverrides[H.current] || {}));
   const quest = (gameId) => {
     if (ev().kind !== 'quests') return null;
-    return overrides()[gameId] || questFor(D.games[gameId], (id) => db.readPlace(id), questCache);
+    return overrides()[gameId] || questFor(D.games[gameId], (id) => db.readPlace(id), questCache, H.current);
   };
   const questText = (g) => quest(g.id)?.text || '';
   const progress = (uid) => {

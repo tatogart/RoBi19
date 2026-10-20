@@ -126,6 +126,12 @@ export class CharacterView {
     this.av.setKart(driving ? this.anim.slice(6) || '#c4281c' : '');
     const state = driving ? 'sit' : this.anim === 'walk' && this.speed < 0.5 && !this.isLocal ? 'idle' : this.anim;
     this.av.animate(state, dt, this.isLocal ? this.speed : Math.max(this.speed, state === 'walk' ? 12 : 0));
+    // the emote's whole-body motion (a hop, a sway, a turn)
+    const off = this.av.offset;
+    if (off) {
+      this.group.position.y += off.y * this.scale;
+      this.group.rotation.set(off.rx, this.ry + off.ry, off.rz, 'YXZ');
+    }
     if (this.forceField) this.forceField.material.opacity = 0.14 + Math.sin(performance.now() / 150) * 0.06;
     this.updatePet(dt);
   }

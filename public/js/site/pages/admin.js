@@ -970,7 +970,8 @@ function testersBox(h) {
 }
 
 const QUEST_TYPE_LABEL = {
-  default: 'The game\'s own quest (default)', runes: 'Find 3 runes in order (any game)', stat: 'Reach a leaderstat (e.g. 40 Coins)', gain: 'Get more of a leaderstat (e.g. 2 Wins)',
+  default: 'The game\'s own quest (default)', runes: 'Find 3 runes in order (any game)', orbs: 'Collect golden orbs (any game)', delivery: 'Deliver the lost package (any game)', beacon: 'Stand on the beacon N seconds (any game)',
+  distance: 'Run N studs (any game)', jumps: 'Jump N times (any game)', emotes: 'Do N different emotes (any game)', playtime: 'Play N seconds, no AFK (any game)', stat: 'Reach a leaderstat (e.g. 40 Coins)', gain: 'Get more of a leaderstat (e.g. 2 Wins)',
   below: 'A leaderstat at or below a number (e.g. Time 40)', badge: 'Earn a badge of the game', visit: 'Reach parts by name', click: 'Press every button in a model', script: 'The game\'s scripts call HuntService:CompleteQuest',
 };
 const QUEST_NAME_HINT = { stat: 'Leaderstat name (e.g. Coins)', gain: 'Leaderstat name (e.g. Wins)', below: 'Leaderstat name (e.g. Time)', badge: 'Badge name (e.g. Door 25)', visit: 'Part names, comma separated', click: 'Model name (e.g. Buttons)' };
@@ -987,7 +988,7 @@ function questEditor(h, g) {
     const t = type.value;
     nameRow.style.display = QUEST_NAME_HINT[t] ? '' : 'none';
     nameRow.firstChild.textContent = QUEST_NAME_HINT[t] || '';
-    targetRow.style.display = ['stat', 'gain', 'below'].includes(t) ? '' : 'none';
+    targetRow.style.display = ['stat', 'gain', 'below', 'orbs', 'beacon', 'distance', 'jumps', 'emotes', 'playtime'].includes(t) ? '' : 'none';
   };
   type.addEventListener('change', sync);
   sync();

@@ -10,6 +10,15 @@
 //   visit  - stand on / reach each part named in `parts`
 //   runes  - find 3 rune stones hidden in the map and touch them in order in time
 //   script - the game's own scripts call HuntService:CompleteQuest(player)
+// Quests that work in any game (games without a quest of their own get one of
+// these, a different one per game; see GENERIC):
+//   orbs     - collect `target` golden orbs scattered over the map (any order)
+//   delivery - find the lost package and bring it to the mailbox
+//   beacon   - stand on the glowing beacon for `target` seconds
+//   distance - run `target` studs
+//   jumps    - jump `target` times
+//   emotes   - do `target` different emotes (/e dance, the emote menu...)
+//   playtime - play (not AFK) for `target` seconds
 export const QUESTS = {
   crossroads: { type: 'visit', parts: ['Flag Pole'], text: 'Climb the ramps of the town tower and touch the flag pole on the roof' },
   obby: { type: 'badge', badge: 'Obby Champion', stat: 'Stage', text: 'Beat the Mega Fun Obby - reach the finish' },
@@ -27,22 +36,39 @@ export const QUESTS = {
   minigames: { type: 'gain', stat: 'Wins', target: 1, text: 'Win a round of Minigame Mania' },
   themepark: { type: 'visit', parts: ['Disc', 'Cabin', 'DropPlatform'], names: ['the carousel', 'the Ferris wheel', 'the Drop Tower'], text: 'Ride the carousel, the Ferris wheel and the Drop Tower' },
   doors: { type: 'badge', badge: 'Door 25', text: 'Take the elevator down and reach Door 25 in the hotel' },
-  // games that need other players get the rune quest, so everyone can do it alone
-  freezetag: { type: 'runes' },
-  brickbattle: { type: 'runes' },
-  speeddraw: { type: 'runes' },
-  mm2: { type: 'runes' },
+  // games that need other players get a quest anyone can do alone
+  freezetag: { type: 'generic' },
+  brickbattle: { type: 'generic' },
+  speeddraw: { type: 'generic' },
+  mm2: { type: 'generic' },
 };
 export const RUNES_TEXT = 'Find the 3 ancient runes hidden in this game and touch them in order (I, II, III) within 3 minutes';
 export const RUNE_TIME = 180;
+// a mix of "find / collect" and "do something" quests
+export const GENERIC = [
+  { type: 'runes', text: RUNES_TEXT },
+  { type: 'delivery', text: 'Find the lost package and deliver it to the mailbox' },
+  { type: 'emotes', target: 3, text: 'Do 3 different emotes in this game (the 😀 button or /e dance)' },
+  { type: 'orbs', target: 6, text: 'Collect the 6 golden orbs scattered around this game' },
+  { type: 'jumps', target: 30, text: 'Jump 30 times' },
+  { type: 'beacon', target: 20, text: 'Find the glowing beacon and stand on it for 20 seconds' },
+  { type: 'distance', target: 1500, text: 'Explore: run 1,500 studs around this game' },
+  { type: 'playtime', target: 240, text: 'Play this game for 4 minutes (no AFK!)' },
+];
+// the same game always gets the same quest (in one event), games next to each other different ones
+const pick = (id, salt = '') => {
+  let h = 0;
+  for (const ch of String(salt)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return GENERIC[((+id || 0) + h) % GENERIC.length];
+};
 
 // The quest of a game. Player games: their own (scripts that call
-// HuntService:CompleteQuest, text from HuntService:SetQuestText) or the runes.
-export function questFor(game, readPlace, cache = new Map()) {
+// HuntService:CompleteQuest, text from HuntService:SetQuestText) or one of GENERIC.
+export function questFor(game, readPlace, cache = new Map(), salt = '') {
   if (!game) return null;
   const q = game.seedKey && QUESTS[game.seedKey];
-  if (q) return q.type === 'runes' ? { type: 'runes', text: RUNES_TEXT } : q;
-  const key = game.id + ':' + (game.updated || 0);
+  if (q) return q.type === 'generic' ? pick(game.id, salt) : q;
+  const key = game.id + ':' + (game.updated || 0) + ':' + salt;
   if (cache.has(key)) return cache.get(key);
   let own = null;
   try {
@@ -52,7 +78,7 @@ export function questFor(game, readPlace, cache = new Map()) {
       own = { type: 'script', text: m ? m[1] : `Complete the quest made by the creator of ${game.name}` };
     }
   } catch { /* no place file */ }
-  const quest = own || { type: 'runes', text: RUNES_TEXT };
+  const quest = own || pick(game.id, salt);
   cache.set(key, quest);
   return quest;
 }

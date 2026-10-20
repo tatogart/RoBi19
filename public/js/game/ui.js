@@ -42,7 +42,7 @@ export class HUD {
     root.classList.toggle('touch', this.touch);
     this.menuBtn.onclick = () => this.toggleMenu();
     this.chatBtn.onclick = () => {
-      const open = this.chat.classList.toggle('hidden') === false;
+      const open = this.touch ? this.chat.classList.toggle('closed') === false : this.chat.classList.toggle('hidden') === false;
       this.chatBtn.classList.toggle('on', open);
       // On phones opening the chat goes straight to the keyboard.
       if (open && this.touch) this.focusChat();
@@ -63,6 +63,8 @@ export class HUD {
     bar.append(this.chatInput);
     this.chat.append(this.chatLog, bar);
     this.el.append(this.chat);
+    // phones: the chat box opens with the chat button (new messages still show for a moment)
+    if (this.touch) { this.chat.classList.add('closed'); this.chatBtn.classList.remove('on'); }
     bar.onsubmit = (e) => {
       e.preventDefault();
       const t = this.chatInput.value.trim();
@@ -96,13 +98,15 @@ export class HUD {
     this.el.append(this.hotbar);
     this._toolsKey = '';
     // 2020: the backpack (` key) with every tool, and the emote menu (. key)
-    this.bagBtn = h('button', 'hud-round bag-btn', '🎒');
+    // (in the top bar, next to the menu and the chat: nothing floats over the game)
+    this.bagBtn = h('button', 'bag-btn', '🎒');
     this.bagBtn.title = 'Backpack (`)';
     this.bagBtn.onclick = (e) => { e.stopPropagation(); this.toggleBackpack(); };
-    this.emoteBtn = h('button', 'hud-round emote-btn', '😀');
+    this.emoteBtn = h('button', 'emote-btn', '😀');
     this.emoteBtn.title = 'Emotes (.)';
     this.emoteBtn.onclick = (e) => { e.stopPropagation(); this.toggleEmotes(); };
-    this.el.append(this.bagBtn, this.emoteBtn);
+    this.topbar.insertBefore(this.emoteBtn, this.lockBtn);
+    this.topbar.insertBefore(this.bagBtn, this.emoteBtn);
     this.bag = null;
     this.emotes = null;
     this._allTools = [];
@@ -369,8 +373,9 @@ export class HUD {
     this.el.append(this.menu);
     this.menu.addEventListener('mousedown', (e) => { if (e.target === this.menu) this.toggleMenu(false); });
     const tabs = { Players: () => this._playersTab(), Store: () => this._storeTab(), Settings: () => this._settingsTab(), Help: () => this._helpTab() };
+    const TAB_ICON = { Players: '👥', Store: '🛒', Settings: '⚙️', Help: '❔' };
     for (const [name, fn] of Object.entries(tabs)) {
-      const b = h('button', '', name);
+      const b = h('button', '', `<span class="ti">${TAB_ICON[name]}</span><span class="tn">${name}</span>`);
       b.onclick = () => { [...this.menuTabs.children].forEach((x) => x.classList.toggle('active', x === b)); this.menuBody.dataset.tab = name; this._restoreActions(); fn(); };
       this.menuTabs.append(b);
     }
@@ -383,9 +388,9 @@ export class HUD {
       b.onclick = fn;
       this.menuActions.append(b);
     };
-    mk('Reset Character', 'R', () => this.confirmReset());
-    mk('Leave Game', 'L', () => this.confirmLeave());
-    mk('Resume Game', 'ESC', () => this.toggleMenu(false), true);
+    mk('↺ Reset Character', 'R', () => this.confirmReset());
+    mk('🚪 Leave Game', 'L', () => this.confirmLeave());
+    mk('▶ Resume Game', 'ESC', () => this.toggleMenu(false), true);
   }
 
   toggleMenu(force) {
@@ -480,26 +485,30 @@ export class HUD {
     const c = this.client;
     this.menuBody.innerHTML = '';
     const row = (label, control) => { const r = h('div', 'esc-setting'); r.append(h('span', '', label), control); this.menuBody.append(r); };
+    // an On/Off switch
+    const toggle = (on, set) => {
+      const t = h('button', 'esc-toggle' + (on ? ' on' : ''), '<i></i>');
+      t.onclick = () => { const v = !t.classList.contains('on'); t.classList.toggle('on', v); set(v); };
+      return t;
+    };
     const sens = h('input'); sens.type = 'range'; sens.min = 0.2; sens.max = 3; sens.step = 0.1; sens.value = c.cam.sensitivity;
     sens.oninput = () => { c.cam.sensitivity = +sens.value; c.saveSettings(); };
     row('Camera Sensitivity', sens);
     const vol = h('input'); vol.type = 'range'; vol.min = 0; vol.max = 1; vol.step = 0.05; vol.value = getVolume();
     vol.oninput = () => { setVolume(+vol.value); c.saveSettings(); };
     row('Volume', vol);
-    const gfx = h('select', '', ['Low', 'Medium', 'High'].map((q) => `<option ${c.settings.quality === q ? 'selected' : ''}>${q}</option>`).join(''));
-    gfx.onchange = () => { c.setQuality(gfx.value); c.saveSettings(); };
-    row('Graphics Quality', gfx);
-    const lock = h('select', '', `<option value="1">On</option><option value="0" ${c.settings.shiftLockEnabled ? '' : 'selected'}>Off</option>`);
-    lock.onchange = () => { c.settings.shiftLockEnabled = lock.value === '1'; c.saveSettings(); };
-    row('Shift Lock Switch', lock);
-    if (c.isTouch) {
-      const land = h('select', '', `<option value="0">Off</option><option value="1" ${c.settings.landscape ? 'selected' : ''}>On</option>`);
-      land.onchange = () => c.setLandscape(land.value === '1');
-      row('Landscape (turn the game)', land);
-    }
-    const fps = h('select', '', `<option value="0">Off</option><option value="1" ${c.settings.showFps ? 'selected' : ''}>On</option>`);
-    fps.onchange = () => { c.settings.showFps = fps.value === '1'; c.saveSettings(); };
-    row('Show FPS', fps);
+    const gfx = h('div', 'esc-seg', ['Low', 'Medium', 'High'].map((q) => `<button data-q="${q}" class="${c.settings.quality === q ? 'on' : ''}">${q}</button>`).join(''));
+    gfx.onclick = (e) => {
+      const q = e.target.dataset && e.target.dataset.q;
+      if (!q) return;
+      gfx.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === e.target));
+      c.setQuality(q); c.saveSettings();
+    };
+    row('Graphics', gfx);
+    if (!c.isTouch) row('Shift Lock Switch', toggle(c.settings.shiftLockEnabled, (v) => { c.settings.shiftLockEnabled = v; c.saveSettings(); }));
+    if (c.isTouch) row('Landscape (turn the game)', toggle(!!c.settings.landscape, (v) => c.setLandscape(v)));
+    row('Footsteps', toggle(c.settings.footsteps !== false, (v) => { c.settings.footsteps = v; c.saveSettings(); }));
+    row('Show FPS', toggle(!!c.settings.showFps, (v) => { c.settings.showFps = v; c.saveSettings(); }));
   }
 
   // The Hunt: a big banner when you find a token.
@@ -521,13 +530,24 @@ export class HUD {
   // along you are; a countdown while the runes are lit.
   huntQuest(m) {
     if (!this.quest) {
-      this.quest = h('div', 'hunt-quest', '<div class="hq-title">THE HUNT QUEST</div><div class="hq-text"></div><div class="hq-progress"></div><div class="hq-timer"></div>');
-      this.root.append(this.quest);
+      // the arrow folds it into a small line (remembered; on phones it folds by itself after a while)
+      this.quest = h('div', 'hunt-quest', '<button class="hq-head"><span class="hq-title">THE HUNT QUEST</span><span class="hq-mini"></span><span class="hq-arrow">▾</span></button><div class="hq-body"><div class="hq-text"></div><div class="hq-progress"></div><div class="hq-timer"></div></div>');
+      this.el.append(this.quest);
+      let folded = null;
+      try { folded = localStorage.getItem('robis.questFolded'); } catch { /* private mode */ }
+      const fold = (on, save = true) => {
+        this.quest.classList.toggle('folded', on);
+        if (save) try { localStorage.setItem('robis.questFolded', on ? '1' : '0'); } catch { /* private mode */ }
+      };
+      this.quest.querySelector('.hq-head').onclick = (e) => { e.stopPropagation(); fold(!this.quest.classList.contains('folded')); };
+      if (folded === '1') fold(true, false);
+      else if (folded === null && this.touch) setTimeout(() => this.quest && fold(true, false), 9000);
     }
     const q = this.quest;
     q.classList.toggle('done', !!m.done);
     q.querySelector('.hq-text').textContent = m.text;
     q.querySelector('.hq-progress').textContent = m.done ? '✓ Relic found!' : m.progress || '';
+    q.querySelector('.hq-mini').textContent = m.done ? '✓' : (m.progress || '').split('   ')[0].slice(0, 28);
     clearInterval(this.questTimer);
     const timer = q.querySelector('.hq-timer');
     timer.textContent = '';

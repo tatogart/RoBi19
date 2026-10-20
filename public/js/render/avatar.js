@@ -1381,6 +1381,7 @@ export function buildAvatar(avatar, opts = {}) {
     get driving() { return !!kart; },
     animate: (state, dt, speed) => anim.update(state, dt, speed),
     setEmote: (e) => anim.setEmote(e),
+    get offset() { return anim.offset; },
     dispose() {
       root.traverse((o) => {
         if (o.geometry && o.geometry !== HEAD_GEO) o.geometry.dispose();
@@ -1668,15 +1669,23 @@ class AvatarAnimator {
     this.root = root;
     this.emote = null;
     this.emoteT = 0;
+    this.badT = 0;
+    // whole-body motion of the emote (the game adds it to the character)
+    this.offset = { y: 0, ry: 0, rz: 0, rx: 0 };
   }
-  setEmote(e) { this.emote = e; this.emoteT = 0; }
+  setEmote(e) { this.emote = e; this.emoteT = 0; this.badT = 0; }
   update(state, dt, speed = 0) {
     this.t += dt;
     const { lArm, rArm, lLeg, rLeg, head } = this.p;
     const t = this.t;
     const targets = { la: [0, 0, 0], ra: [0, 0, 0], ll: [0, 0, 0], rl: [0, 0, 0], h: [0, 0, 0] };
-    if (state !== 'idle' && state !== 'walk') this.emote = null;
-    if (speed > 0.5 && this.emote) this.emote = null;
+    // a jump or walking away stops an emote; a short "fall" (a bump, a
+    // slope, standing on a moving part) doesn't
+    if (state === 'idle' || state === 'walk') this.badT = 0; else this.badT += dt;
+    if (state === 'jump' || state === 'sit' || this.badT > 0.35) this.emote = null;
+    if (speed > 1.5 && this.emote) this.emote = null;
+    const off = { y: 0, ry: 0, rz: 0, rx: 0 };
+    if (this.emote && state === 'fall') state = 'idle';
     if (state === 'walk') {
       const f = Math.min(1.2, speed / 14);
       const s = Math.sin(t * (6 + speed * 0.25)) * 0.9 * f;
@@ -1691,62 +1700,89 @@ class AvatarAnimator {
     } else if (this.emote) {
       this.emoteT += dt;
       const e = this.emote, k = this.emoteT;
+      // Emotes are seen from behind (the camera follows you): every one
+      // moves the whole body too (hop / sway / turn, see this.offset) and
+      // keeps the arms up where they show over the shoulders.
+      const end = (sec) => { if (k > sec) this.emote = null; };
+      const fade = (sec) => Math.min(1, k * 5) * Math.min(1, Math.max(0, (sec - k) * 4)); // ease in / out
       if (e === 'dance' || e === 'dance1') {
         const s = Math.sin(k * 8);
         targets.la[0] = Math.PI * 0.8 + s * 0.4; targets.ra[0] = Math.PI * 0.8 - s * 0.4;
         targets.ll[2] = s * 0.25; targets.rl[2] = s * 0.25; targets.h[1] = s * 0.3;
+        off.y = Math.abs(Math.sin(k * 8)) * 0.35; off.ry = s * 0.35;
       } else if (e === 'dance2') {
         const s = Math.sin(k * 6);
         targets.la[2] = -1.4 - s * 0.3; targets.ra[2] = 1.4 - s * 0.3; targets.ll[0] = Math.max(0, s) * 0.8; targets.rl[0] = Math.max(0, -s) * 0.8;
+        off.ry = Math.sin(k * 1.5) * 1.2; off.y = Math.abs(s) * 0.25;
       } else if (e === 'dance3') {
         const s = Math.sin(k * 10);
-        targets.ra[0] = Math.PI + s * 0.5; targets.la[0] = -0.3; targets.h[0] = s * 0.15;
+        targets.ra[0] = Math.PI + s * 0.5; targets.la[0] = -0.3; targets.la[2] = -0.6; targets.h[0] = s * 0.15;
+        off.y = Math.max(0, s) * 0.45; off.rz = Math.sin(k * 5) * 0.12;
       } else if (e === 'wave') {
-        targets.ra[2] = 2.6 + Math.sin(k * 10) * 0.35;
-        if (k > 2.4) this.emote = null;
+        const f = fade(3);
+        targets.ra = [0.3 * f, 0, (2.6 + Math.sin(k * 10) * 0.4) * f]; targets.h[2] = -0.15 * f;
+        off.rz = Math.sin(k * 5) * 0.05 * f;
+        end(3);
       } else if (e === 'point') {
-        targets.ra[0] = Math.PI / 2;
-        if (k > 2) this.emote = null;
+        const f = fade(2.6);
+        targets.ra = [2.3 * f, 0, 0.25 * f]; targets.la[2] = -0.25 * f; targets.h[0] = -0.15 * f;
+        off.rz = -0.08 * f; off.y = Math.min(1, k * 6) < 1 ? Math.sin(k * 6 * Math.PI) * 0.25 : 0;
+        end(2.6);
       } else if (e === 'cheer') {
-        targets.la[0] = Math.PI + Math.sin(k * 12) * 0.2; targets.ra[0] = Math.PI - Math.sin(k * 12) * 0.2;
-        if (k > 2) this.emote = null;
+        const f = fade(2.6);
+        targets.la = [(Math.PI + Math.sin(k * 12) * 0.25) * f, 0, -0.35 * f]; targets.ra = [(Math.PI - Math.sin(k * 12) * 0.25) * f, 0, 0.35 * f];
+        off.y = Math.abs(Math.sin(k * 6)) * 0.9 * f;
+        end(2.6);
       } else if (e === 'laugh') {
-        targets.h[0] = -0.2 + Math.sin(k * 20) * 0.08; targets.la[0] = 0.3; targets.ra[0] = 0.3;
-        if (k > 2) this.emote = null;
+        const f = fade(2.6), b = Math.sin(k * 18);
+        targets.h[0] = (-0.45 + b * 0.12) * f; targets.la = [0.6 * f, 0, -0.5 * f]; targets.ra = [0.6 * f, 0, 0.5 * f];
+        off.rx = (-0.18 + b * 0.05) * f; off.y = Math.abs(b) * 0.12 * f;
+        end(2.6);
       // ---- 2020 catalog emotes
       } else if (e === 'salute') {
-        targets.ra = [2.4, 0, 0.9]; targets.h[0] = -0.05;
-        if (k > 2.2) this.emote = null;
+        const f = fade(2.6);
+        targets.ra = [2.5 * f, 0, 1.15 * f]; targets.la[2] = -0.05; targets.h[0] = -0.1 * f;
+        off.y = k < 0.3 ? Math.sin((k / 0.3) * Math.PI) * 0.35 : 0;
+        end(2.6);
       } else if (e === 'shrug') {
-        const up = Math.min(1, k * 4) * (k > 1.6 ? Math.max(0, 1 - (k - 1.6) * 4) : 1);
-        targets.la = [0.5 * up, 0, -0.9 * up]; targets.ra = [0.5 * up, 0, 0.9 * up]; targets.h[2] = 0.2 * up;
-        if (k > 2) this.emote = null;
+        const f = fade(2.4);
+        targets.la = [0.6 * f, 0, -1.25 * f]; targets.ra = [0.6 * f, 0, 1.25 * f]; targets.h[2] = 0.35 * f;
+        off.y = f * 0.15; off.rz = 0.06 * f;
+        end(2.4);
       } else if (e === 'tilt') {
-        targets.h[2] = Math.sin(Math.min(k, 1.2) * 2.6) * 0.45; targets.la[2] = -0.15; targets.ra[2] = 0.15;
-        if (k > 2) this.emote = null;
+        const f = fade(2.6);
+        targets.h[2] = 0.6 * f; targets.la[2] = -0.5 * f; targets.ra[2] = 0.5 * f;
+        off.rz = 0.18 * f;
+        end(2.6);
       } else if (e === 'applaud') {
-        const c = Math.abs(Math.sin(k * 14));
-        targets.la = [1.3, 0, -0.35 - c * 0.35]; targets.ra = [1.3, 0, 0.35 + c * 0.35];
-        if (k > 2.6) this.emote = null;
+        const c = Math.abs(Math.sin(k * 14)), f = fade(3);
+        targets.la = [2.4 * f, 0, (-0.25 - c * 0.45) * f]; targets.ra = [2.4 * f, 0, (0.25 + c * 0.45) * f];
+        off.y = c * 0.1 * f;
+        end(3);
       } else if (e === 'stadium') {
-        const w = Math.sin(k * 3.2);
-        targets.la[0] = Math.PI * 0.95; targets.ra[0] = Math.PI * 0.95; targets.la[2] = -0.4 + w * 0.3; targets.ra[2] = 0.4 + w * 0.3; targets.h[0] = -0.15;
-        if (k > 3) this.emote = null;
+        const w = Math.sin(k * 3.2), f = fade(3.2);
+        targets.la = [Math.PI * 0.95 * f, 0, (-0.4 + w * 0.3) * f]; targets.ra = [Math.PI * 0.95 * f, 0, (0.4 + w * 0.3) * f]; targets.h[0] = -0.15 * f;
+        off.y = Math.max(0, Math.sin(k * 3.2 + 1)) * 0.6 * f; off.ry = w * 0.3 * f;
+        end(3.2);
       } else if (e === 'zombie') {
         const s2 = Math.sin(k * 3);
-        targets.la[0] = Math.PI / 2 + s2 * 0.1; targets.ra[0] = Math.PI / 2 - s2 * 0.1; targets.h = [0.25, 0, s2 * 0.15]; targets.ll[0] = Math.max(0, s2) * 0.3;
+        targets.la[0] = Math.PI / 2 + s2 * 0.1; targets.ra[0] = Math.PI / 2 - s2 * 0.1; targets.la[2] = -0.3; targets.ra[2] = 0.3; targets.h = [0.25, 0, s2 * 0.3]; targets.ll[0] = Math.max(0, s2) * 0.3;
+        off.rz = s2 * 0.12; off.rx = 0.12;
       } else if (e === 'robot') {
         const step = Math.floor(k * 2.5) % 4;
         const P = [[1.5, 0, 0, -0.3], [0, 1.5, 0.3, 0], [1.5, 1.5, 0, 0], [0.4, 0.4, -0.3, 0.3]][step];
-        targets.la[0] = P[0]; targets.ra[0] = P[1]; targets.h[1] = P[2] + P[3];
+        targets.la = [P[0], 0, -0.6]; targets.ra = [P[1], 0, 0.6]; targets.h[1] = P[2] + P[3];
+        off.ry = [0, 0.5, 0, -0.5][step];
       } else if (e === 'hype') {
         const s3 = Math.sin(k * 11), s4 = Math.sin(k * 5.5);
         targets.la = [Math.PI * 0.6 + s3 * 0.5, 0, -0.5]; targets.ra = [Math.PI * 0.6 - s3 * 0.5, 0, 0.5]; targets.ll[0] = Math.max(0, s4) * 0.7; targets.rl[0] = Math.max(0, -s4) * 0.7; targets.h[1] = s4 * 0.35;
+        off.y = Math.abs(s3) * 0.3; off.ry = s4 * 0.4;
       } else if (e === 'mergedance') {
         // IGA 26: two arms (branches) swing apart and back together (merge!)
         const m2 = Math.abs(Math.sin(k * 2.4));
         targets.la = [Math.PI * 0.75, 0, -0.2 - m2 * 1.1]; targets.ra = [Math.PI * 0.75, 0, 0.2 + m2 * 1.1]; targets.h[1] = Math.sin(k * 4.8) * 0.25;
         targets.ll[2] = -m2 * 0.2; targets.rl[2] = m2 * 0.2;
+        off.y = (1 - m2) * 0.3; off.ry = Math.sin(k * 1.2) * 0.6;
       } else this.emote = null;
     } else {
       const s = Math.sin(t * 1.6) * 0.06;
@@ -1760,6 +1796,8 @@ class AvatarAnimator {
       o.rotation.z += (v[2] - o.rotation.z) * k;
     };
     apply(lArm, targets.la); apply(rArm, targets.ra); apply(lLeg, targets.ll); apply(rLeg, targets.rl); apply(head, targets.h);
+    const ko = Math.min(1, dt * 14);
+    for (const n of ['y', 'ry', 'rz', 'rx']) this.offset[n] += (off[n] - this.offset[n]) * ko;
     if (this.root.userData.spin) this.root.userData.spin.rotation.z += dt * 1.5;
   }
 }

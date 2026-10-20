@@ -1326,7 +1326,9 @@ test('The Hunt event manager: launch a quest event, quests in games, end it', as
   assert.equal(h.count, 0);
   const g = (name) => h.games.find((x) => x.name === name);
   assert.equal(g('Quest Script Game').quest, 'Say hello to the dragon');
-  assert.match(g('Quest Rune Game').quest, /runes/);
+  // a game without its own quest gets one of the quests for any game
+  const { GENERIC } = await import('../server/huntquests.js');
+  assert.ok(GENERIC.some((x) => x.text === g('Quest Rune Game').quest));
   assert.match(g('Button Mania').quest, /button/i);
   // 1) the game's own script completes the quest
   const c1 = await join(kid, { placeId: own.id });
@@ -1351,7 +1353,8 @@ test('The Hunt event manager: launch a quest event, quests in games, end it', as
   }
   assert.equal((await c2.wait((m) => m.t === 'hunt', 5000)).count, 2);
   c2.ws.close();
-  // 3) the runes, in order
+  // 3) the runes, in order (set by an admin for this game)
+  assert.equal((await call('POST', '/admin/hunt/quest', { gameId: plain.id, quest: { type: 'runes' } }, admin)).status, 200);
   const c3 = await join(kid, { placeId: plain.id });
   await c3.wait((m) => m.t === 'huntQuest');
   const findRunes = () => {
@@ -1388,6 +1391,73 @@ test('The Hunt event manager: launch a quest event, quests in games, end it', as
   assert.equal((await call('GET', '/auth/me', null, kid)).data.user.hunt, false);
   // back to the dimension event for the other tests
   await call('POST', '/admin/hunt/control', { action: 'schedule', next: null }, admin);
+  await call('POST', '/admin/hunt/control', { action: 'launch', key: 'dimension', public: true }, admin);
+  await call('POST', '/admin/hunt', { autoPlayers: keepAuto, games: keepGames }, admin);
+});
+
+test('The Hunt quests for any game: delivery, orbs, jumps, emotes', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const kid = (await call('POST', '/auth/signup', { username: 'QuestKid2', password: 'secret123' })).cookie;
+  const maker = (await call('POST', '/auth/login', { username: 'QuestMaker', password: 'secret123' })).cookie;
+  const games = [];
+  for (const n of ['Q Delivery', 'Q Orbs', 'Q Jumps', 'Q Emotes']) {
+    const gm = (await call('POST', '/games', { name: n, template: 'obby' }, maker)).data.game;
+    await call('PATCH', `/games/${gm.id}`, { isPublic: true }, maker);
+    games.push(gm);
+  }
+  let a = (await call('POST', '/admin/hunt/control', { action: 'launch', key: 'relics', public: true }, admin)).data;
+  const keepGames = a.games, keepAuto = a.autoPlayers;
+  await call('POST', '/admin/hunt', { autoPlayers: 0, games: [...a.games, ...games.map((x) => x.id)] }, admin);
+  const set = (gm, quest) => call('POST', '/admin/hunt/quest', { gameId: gm.id, quest }, admin);
+  assert.equal((await set(games[0], { type: 'delivery' })).status, 200);
+  assert.equal((await set(games[1], { type: 'orbs', target: 3 })).status, 200);
+  assert.equal((await set(games[2], { type: 'jumps', target: 4 })).status, 200);
+  assert.equal((await set(games[3], { type: 'emotes', target: 2 })).status, 200);
+  const h = (await call('GET', '/hunt', null, kid)).data;
+  assert.match(h.games.find((x) => x.name === 'Q Orbs').quest, /3 golden orbs/);
+  const things = (c, folder, n) => {
+    for (const m of c.inbox) {
+      const nodes = m.t === 'tick' ? m.ops.filter((o) => o[0] === 'add').map((o) => o[2]) : [];
+      for (const x of nodes) if (x.c === 'Folder' && x.p.Name === folder && (x.ch || []).length === n) return x.ch;
+    }
+    return null;
+  };
+  const go = async (c, p) => { c.ws.send(JSON.stringify({ t: 'move', p: [p.p.CFrame[0], p.p.CFrame[1], p.p.CFrame[2]], ry: 0, a: 'idle' })); await new Promise((r) => setTimeout(r, 400)); };
+  // the package to the mailbox
+  let c = await join(kid, { placeId: games[0].id });
+  await c.wait((m) => m.t === 'tick' && !!things(c, 'HuntDelivery', 2));
+  await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  let parts = things(c, 'HuntDelivery', 2);
+  await go(c, parts[1]);
+  assert.ok(await c.wait((m) => m.t === 'sys' && /package first/.test(m.text)));
+  await go(c, parts[0]);
+  assert.ok(await c.wait((m) => m.t === 'sys' && /picked up the package/.test(m.text)));
+  await go(c, parts[1]);
+  assert.equal((await c.wait((m) => m.t === 'hunt', 5000)).count, 1);
+  c.ws.close();
+  // three orbs, any order
+  c = await join(kid, { placeId: games[1].id });
+  await c.wait((m) => m.t === 'tick' && !!things(c, 'HuntOrbs', 3));
+  await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  parts = things(c, 'HuntOrbs', 3);
+  for (const p of [parts[2], parts[0], parts[1]]) await go(c, p);
+  assert.equal((await c.wait((m) => m.t === 'hunt', 5000)).count, 2);
+  c.ws.close();
+  // jumps
+  c = await join(kid, { placeId: games[2].id });
+  await c.wait((m) => m.t === 'huntQuest');
+  await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  for (let i = 0; i < 4; i++) {
+    for (const st of ['jump', 'idle']) { c.ws.send(JSON.stringify({ t: 'move', p: [0, 10, 0], ry: 0, a: st })); await new Promise((r) => setTimeout(r, 60)); }
+  }
+  assert.equal((await c.wait((m) => m.t === 'hunt', 5000)).count, 3);
+  c.ws.close();
+  // two different emotes (the same one twice counts once)
+  c = await join(kid, { placeId: games[3].id });
+  await c.wait((m) => m.t === 'huntQuest');
+  for (const e of ['wave', 'wave', 'dance']) { c.ws.send(JSON.stringify({ t: 'chat', text: '/e ' + e })); await new Promise((r) => setTimeout(r, 100)); }
+  assert.equal((await c.wait((m) => m.t === 'hunt', 5000)).count, 4);
+  c.ws.close();
   await call('POST', '/admin/hunt/control', { action: 'launch', key: 'dimension', public: true }, admin);
   await call('POST', '/admin/hunt', { autoPlayers: keepAuto, games: keepGames }, admin);
 });
