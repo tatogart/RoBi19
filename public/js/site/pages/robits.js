@@ -73,6 +73,8 @@ const PERKS = {
   TurboBuildersClub: ['Daily R$60', 'Premium badge', 'Everything in Premium 450'],
   OutrageousBuildersClub: ['Daily R$85', 'Premium badge', 'Everything in Premium 1000'],
 };
+// Premium in the Telegram bot (when it's on)
+const tgBot = await api.get('/me/telegram').catch(() => null);
 const plans = el('div', { class: 'plans' }, store.memberships.map((m) => {
   const current = (me.membership || 'None') === m.id;
   return el('div', { class: 'panel plan' + (current ? ' current' : '') },
@@ -81,14 +83,20 @@ const plans = el('div', { class: 'plans' }, store.memberships.map((m) => {
     current ? el('div', { class: 'plan-tag', text: me.membershipUntil ? `Your plan until ${new Date(me.membershipUntil).toLocaleDateString()}` : 'Your plan' }) : null,
     m.id !== 'None' ? planBuy(m, current) : null);
 }));
-// Premium: bought in Telegram.
+// Premium: for Robits here, or for Telegram Stars in the bot (@Robisgame_bot)
 function planBuy(m, current) {
   const d = donate.memberships.find((x) => x.id === m.id) || {};
-  return el('div', { class: 'plan-buy' },
-    el('button', { class: 'btn btn-small btn-green', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(current ? `${m.name} (extend)` : m.name) }));
+  return el('div', { class: 'plan-buy row wrap', style: { gap: '6px' } },
+    d.cost ? el('button', { class: 'btn btn-small btn-green', onclick: async () => {
+      if (!confirm(`${m.name} for ${d.days} days: R$ ${fmtFull(d.cost)}?`)) return;
+      try { const r = await api.post('/economy/membership', { tier: m.id }); setRobits(r.robits); toast(`${m.name} is yours!`, 'success'); setTimeout(() => location.reload(), 800); } catch (e) { toast(e.message, 'error'); }
+    } }, icon('robits', 'robits-icon'), fmtFull(d.cost)) : null,
+    tgBot && tgBot.on
+      ? el('a', { class: 'btn btn-small tg-star-btn', href: `https://t.me/${tgBot.bot}?start=premium`, target: '_blank', rel: 'noopener', text: '⭐ Stars in Telegram' })
+      : el('button', { class: 'btn btn-small', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(current ? `${m.name} (extend)` : m.name) }));
 }
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Premium' }),
-  el('p', { class: 'muted small', text: 'Premium replaced Builders Club in 2020. Buy it in Telegram or get it from a promo code.' }), plans);
+  el('p', { class: 'muted small', text: 'Premium replaced Builders Club in 2020. Buy it for Robits, for Telegram Stars in our bot, or get it from a promo code.' }), plans);
 
 // ---------------------------------------------------------------- transactions
 const tx = el('div', { class: 'panel' });
@@ -106,6 +114,7 @@ loadTx();
 const style = document.createElement('style');
 style.textContent = `
 .robits-icon.big { width: 38px; height: 38px; }
+.tg-star-btn { background: #229ed9; border-color: #229ed9; color: #fff; }
 .plan + .plan { margin-top: 0; }
 .plan .btn { margin-top: 8px; }
 .plan-buy { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }

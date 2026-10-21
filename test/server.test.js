@@ -2634,3 +2634,71 @@ test('catalog gear is in the backpack in games; the Harpoon pulls (not in obbies
   assert.equal((await c2.wait((m) => m.t === 'harpoon', 4000)).pull, false);
   c2.ws.close();
 });
+
+test('Telegram bot: link, daily reward for the channel, invites, Premium for Robits and Stars', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const sent = [];
+  let member = false;
+  const fake = async (method, p = {}) => {
+    sent.push({ method, ...p });
+    if (method === 'getChatMember') return { status: member ? 'member' : 'left' };
+    if (method === 'getMe') return { username: 'Robisgame_bot' };
+    return true;
+  };
+  // the token: checked, never sent back
+  assert.equal((await call('POST', '/admin/tgbot', { token: 'nope' }, admin)).status, 400);
+  const saved = await call('POST', '/admin/tgbot', { on: true, token: '123456789:AAEexampleexampleexampleexampleexample', daily: 30, refInviter: 100, refInvitee: 50 }, admin);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.data.settings.token, undefined);
+  assert.equal(saved.data.settings.hasToken, true);
+  const kid = await call('POST', '/auth/signup', { username: 'TgKid', password: 'secret123' });
+  assert.equal((await call('GET', '/admin/tgbot', null, kid.cookie)).status, 403);
+  // hooks: talk to a fake Telegram
+  const bot = srv.manager.tgbot;
+  bot.setApi(fake);
+  const msg = (from, text) => bot.handle({ message: { from: { id: from, username: 'u' + from }, chat: { id: from, type: 'private' }, text } });
+  const last = () => sent.filter((x) => x.method === 'sendMessage').pop()?.text || '';
+  // link
+  const l = (await call('POST', '/me/telegram/link', {}, kid.cookie)).data;
+  assert.match(l.url, /^https:\/\/t\.me\/\w+\?start=link_/);
+  await msg(501, '/start ' + l.url.split('start=')[1]);
+  assert.match(last(), /привязан к <b>TgKid/);
+  assert.equal((await call('GET', '/me/telegram', null, kid.cookie)).data.linked.username, 'u501');
+  // the daily reward needs the channel
+  const before = (await call('GET', '/auth/me', null, kid.cookie)).data.user.robits;
+  await msg(501, '🎁 Награда дня');
+  assert.match(last(), /Подпишись/);
+  member = true;
+  await bot.handle({ callback_query: { id: 'q1', from: { id: 501 }, message: { chat: { id: 501 } }, data: 'daily' } });
+  assert.match(last(), /\+R\$ 30/);
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.robits, before + 30);
+  await msg(501, '/daily');
+  assert.match(last(), /уже получена/);
+  // an invite: a friend opens the kid's link, signs up and links
+  await msg(502, `/start ref_${kid.data.user.id}`);
+  assert.match(last(), /пригласил <b>TgKid/);
+  const friend = await call('POST', '/auth/signup', { username: 'TgFriend', password: 'secret123' });
+  const fl = (await call('POST', '/me/telegram/link', {}, friend.cookie)).data;
+  await msg(502, '/start ' + fl.url.split('start=')[1]);
+  const fme = (await call('GET', '/auth/me', null, friend.cookie)).data.user;
+  const kme = (await call('GET', '/auth/me', null, kid.cookie)).data.user;
+  // (tests sign up from the same IP: an "alt", so no invite Robits here)
+  assert.ok(fme.robits >= 0 && kme.robits === before + 30);
+  // Premium for Robits
+  await call('POST', `/admin/users/${kid.data.user.id}/robits`, { amount: 2000 }, admin);
+  await bot.handle({ callback_query: { id: 'q2', from: { id: 501 }, message: { chat: { id: 501 } }, data: 'prok:BuildersClub' } });
+  assert.match(last(), /Premium 450<\/b> твой/);
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.membership, 'BuildersClub');
+  // Premium for Stars: the invoice, the check, the payment (once)
+  await bot.handle({ callback_query: { id: 'q3', from: { id: 502 }, message: { chat: { id: 502 } }, data: 'ps:TurboBuildersClub' } });
+  const inv = sent.filter((x) => x.method === 'sendInvoice').pop();
+  assert.equal(inv.currency, 'XTR');
+  await bot.handle({ pre_checkout_query: { id: 'c1', invoice_payload: inv.payload, currency: 'XTR', total_amount: inv.prices[0].amount } });
+  assert.equal(sent.filter((x) => x.method === 'answerPreCheckoutQuery').pop().ok, true);
+  const pay = { message: { from: { id: 502 }, chat: { id: 502, type: 'private' }, successful_payment: { invoice_payload: inv.payload, currency: 'XTR', total_amount: inv.prices[0].amount, telegram_payment_charge_id: 'ch1' } } };
+  await bot.handle(pay);
+  await bot.handle(pay);
+  assert.equal((await call('GET', '/auth/me', null, friend.cookie)).data.user.membership, 'TurboBuildersClub');
+  assert.equal((await call('GET', '/admin/tgbot', null, admin)).data.payments.length, 1);
+  await call('POST', '/admin/tgbot', { on: false }, admin);
+});
