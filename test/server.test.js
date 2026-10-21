@@ -99,8 +99,9 @@ test('signup, login validation, avatar and purchases', async () => {
   assert.equal((await call('POST', '/economy/stipend', {}, c2)).status, 400);
   // no free Robits or memberships: players can't give themselves any
   assert.equal((await call('POST', '/economy/buy', { amount: 400 }, c2)).status, 404);
-  // Premium is sold only in Telegram (no Premium for Robits)
-  assert.equal((await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, c2)).status, 404);
+  const club = await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, c2); // costs Robits
+  assert.equal(club.status, 400);
+  assert.match(club.data.error, /more Robits/);
   // admin panel: only admins, gift Robits, ban
   assert.equal((await call('GET', '/admin/overview', null, c2)).status, 403);
   const ov = (await call('GET', '/admin/overview', null, cookie)).data;
@@ -1064,16 +1065,27 @@ test('The Hunt: private event, hidden tokens, hub portals teleport, prizes', asy
   await call('POST', '/admin/hunt', { public: false }, admin);
 });
 
-test('Premium and gift cards only in Telegram', async () => {
+test('Premium for Robits; gift cards not for Robits', async () => {
   const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
   const kid = (await call('POST', '/auth/signup', { username: 'ClubBuyer', password: 'secret123' })).cookie;
-  assert.equal((await call('POST', '/economy/membership', { tier: 'BuildersClub' }, kid)).status, 404);
+  const me = async () => (await call('GET', '/auth/me', null, kid)).data.user;
+  const id = (await me()).id;
+  assert.equal((await call('POST', '/economy/membership', { tier: 'BuildersClub' }, kid)).status, 400); // not enough Robits
+  await call('POST', `/admin/users/${id}/robits`, { amount: 20000 }, admin);
+  const before = (await me()).robits;
+  const r = await call('POST', '/economy/membership', { tier: 'BuildersClub' }, kid);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.robits, before - 1500);
+  assert.equal((await me()).membership, 'BuildersClub');
+  await call('POST', '/economy/membership', { tier: 'TurboBuildersClub' }, kid);
+  assert.equal((await me()).membership, 'TurboBuildersClub');
+  assert.equal((await call('POST', '/economy/membership', { tier: 'BuildersClub' }, kid)).status, 400); // lower plan
   // gift cards can't be bought for Robits any more; their Telegram prices still work
   assert.equal((await call('POST', '/giftcards/buy', { key: 'g1000' }, kid)).status, 404);
   await call('POST', '/admin/donate', { prices: { g1000: '199 ₽' }, telegram: 'Robis_support' }, admin);
   const { donate } = (await call('GET', '/economy/store')).data;
   assert.equal(donate.giftcards.find((g) => g.key === 'g1000').price, '199 ₽');
-  assert.equal(donate.memberships.find((m) => m.id === 'BuildersClub').cost, undefined); // no Robits price any more
+  assert.equal(donate.memberships.find((m) => m.id === 'BuildersClub').cost, 1500);
 });
 
 test('The Hunt: admins give and take a player\'s tokens', async () => {
@@ -2618,100 +2630,68 @@ test('catalog gear is in the backpack in games; the Harpoon pulls (not in obbies
 });
 
 
-test('Telegram shop: an order, the bot answers as the seller, "+" gives it', async () => {
-  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
-  const buyer = await call('POST', '/auth/signup', { username: 'ShopBuyer', password: 'secret123' });
-  const sent = [];
-  const shop = srv.manager.tgshop;
-  shop.setApi(async (method, p) => { sent.push({ method, ...p }); return true; });
-  assert.equal((await call('POST', '/admin/tgshop', { token: 'bad' }, admin)).status, 400);
-  const st = await call('POST', '/admin/tgshop', { on: true, token: '123456789:AAEexampleexampleexampleexampleexample', payText: 'Pay to card 1234' }, admin);
-  assert.equal(st.data.settings.hasToken, true);
-  assert.equal(st.data.settings.token, undefined);
-  // orders: Robits, Premium, a gift card
-  const o1 = (await call('POST', '/economy/order', { key: 'r1000' }, buyer.cookie)).data;
-  assert.match(o1.order.code, /^RB-\d{5}$/);
-  assert.match(decodeURIComponent(o1.url), new RegExp(o1.order.code));
-  assert.equal((await call('POST', '/economy/order', { key: 'r1000' }, buyer.cookie)).data.order.code, o1.order.code); // the same open order
-  assert.equal((await call('POST', '/economy/order', { key: 'nope' }, buyer.cookie)).status, 400);
-  // the seller's account connects the bot (Chat automation)
-  await shop.handle({ business_connection: { id: 'bc1', user: { id: 900, username: 'seller' }, user_chat_id: 900, is_enabled: true, rights: { can_reply: true } } });
-  const msg = (from, text, extra = {}) => shop.handle({ business_message: { business_connection_id: 'bc1', chat: { id: 77, type: 'private' }, from: { id: from, username: from === 900 ? 'seller' : 'buyer' }, text, ...extra } });
-  // a friend's message without an order number: the bot stays quiet
-  await msg(77, 'привет, как дела?');
-  assert.equal(sent.length, 0);
-  await msg(77, o1.text);
-  assert.equal(sent[0].business_connection_id, 'bc1');
-  assert.match(sent[0].text, /принят/);
-  assert.match(sent[0].text, /Pay to card 1234/);
-  await msg(77, '', { photo: [{ file_id: 'x' }] });
-  assert.match(sent[1].text, /Проверяю/);
-  const before = (await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits;
-  // the buyer can't give it to themselves
-  await msg(77, '+');
-  assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before);
-  // the seller writes "+"
-  await msg(900, '+');
-  assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before + 1000);
-  assert.match(sent[sent.length - 1].text, /выполнен/);
-  await msg(900, '+'); // nothing open any more
-  assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before + 1000);
-  // Premium and a gift card, given from Control Center
-  const o2 = (await call('POST', '/economy/order', { key: 'BuildersClub' }, buyer.cookie)).data.order;
-  const o3 = (await call('POST', '/economy/order', { key: 'g400' }, buyer.cookie)).data.order;
-  assert.equal((await call('POST', `/admin/tgshop/orders/${o2.code}`, { op: 'give' }, buyer.cookie)).status, 403);
-  await call('POST', `/admin/tgshop/orders/${o2.code}`, { op: 'give' }, admin);
-  assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.membership, 'BuildersClub');
-  await call('POST', `/admin/tgshop/orders/${o3.code}`, { op: 'give' }, admin);
-  const mine = (await call('GET', '/economy/orders', null, buyer.cookie)).data.orders;
-  const gift = mine.find((x) => x.code === o3.code);
-  assert.equal(gift.status, 'done');
-  assert.match(gift.giftCode, /^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-  // a cancelled order can't be given
-  const o4 = (await call('POST', '/economy/order', { key: 'r400' }, buyer.cookie)).data.order;
-  await call('POST', `/admin/tgshop/orders/${o4.code}`, { op: 'cancel' }, admin);
-  assert.equal((await call('POST', `/admin/tgshop/orders/${o4.code}`, { op: 'give' }, admin)).status, 400);
-  await call('POST', '/admin/tgshop', { on: false }, admin);
-});
 
-test('Shop: online payment with Lolz Market, given by itself', async () => {
+test('Telegram bot: link, Premium for Robits and Stars, Robits for Stars; a bad update never stops it', async () => {
   const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
-  const buyer = await call('POST', '/auth/signup', { username: 'PayBuyer', password: 'secret123' });
-  const shop = srv.manager.tgshop;
-  const calls = [];
-  let paid = false;
-  shop.setPayApi(async (url, init) => {
-    calls.push({ url, body: init.body ? JSON.parse(init.body) : {}, headers: init.headers, method: init.method });
-    if (url.endsWith('/invoice') && init.method === 'POST') return { json: async () => ({ invoice: { invoice_id: 77, url: 'https://lzt.market/invoice/77/', status: 'not_paid' } }) };
-    if (url.includes('/invoice?')) return { json: async () => ({ invoice: { invoice_id: 77, status: paid ? 'paid' : 'not_paid' } }) };
-    return { json: async () => ({}) };
-  });
-  // nothing set up: no online payment
-  assert.equal((await call('GET', '/economy/pay-options')).data.methods.length, 0);
-  const st = await call('POST', '/admin/tgshop', { lzt: { token: 'lzt-token', merchantId: 7 }, amounts: { r1000: { rub: 199 }, BuildersClub: { rub: 99 } } }, admin);
-  assert.equal(st.data.settings.lzt.hasToken, true);
-  assert.equal(st.data.settings.lzt.token, undefined);
-  const opts = (await call('GET', '/economy/pay-options')).data;
-  assert.deepEqual(opts.methods.map((m) => m.id), ['lzt']);
-  assert.equal(opts.amounts.r1000.lzt, 199);
-  assert.equal(opts.amounts.r400.lzt, 0);
-  assert.equal((await call('POST', '/economy/order', { key: 'r400', method: 'lzt' }, buyer.cookie)).status, 400); // no price
-  assert.equal((await call('POST', '/economy/order', { key: 'r1000', method: 'crypto' }, buyer.cookie)).status, 400); // no crypto any more
-  const o1 = (await call('POST', '/economy/order', { key: 'r1000', method: 'lzt' }, buyer.cookie)).data;
-  assert.equal(o1.pay.url, 'https://lzt.market/invoice/77/');
-  const li = calls.find((c) => c.url.endsWith('/invoice'));
-  assert.equal(li.body.amount, 199);
-  assert.equal(li.body.currency, 'rub');
-  assert.equal(li.body.merchant_id, 7);
-  assert.equal(li.headers.Authorization, 'Bearer lzt-token');
-  const before = (await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits;
-  await shop.checkPayments();
-  assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before); // not paid yet
-  paid = true;
-  await shop.checkPayments();
-  assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before + 1000);
-  await shop.checkPayments(); // once
-  assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before + 1000);
-  assert.equal((await call('GET', '/economy/orders', null, buyer.cookie)).data.orders[0].status, 'done');
-  await call('POST', '/admin/tgshop', { lzt: { clearToken: true } }, admin);
+  const sent = [];
+  const fake = async (method, p = {}) => { sent.push({ method, ...p }); if (method === 'getMe') return { username: 'Robisgamebot' }; return true; };
+  assert.equal((await call('POST', '/admin/tgbot', { token: 'nope' }, admin)).status, 400);
+  const saved = await call('POST', '/admin/tgbot', { on: true, token: '123456789:AAEexampleexampleexampleexampleexample', robitsStars: { r1000: 100 } }, admin);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.data.settings.token, undefined);
+  const bot = srv.manager.tgbot;
+  bot.setApi(fake);
+  await call('POST', '/admin/tgbot/test', {}, admin);
+  const kid = await call('POST', '/auth/signup', { username: 'TgKid', password: 'secret123' });
+  assert.equal((await call('GET', '/admin/tgbot', null, kid.cookie)).status, 403);
+  const msg = (from, text) => bot.handle({ message: { from: { id: from, username: 'u' + from }, chat: { id: from, type: 'private' }, text } });
+  const cb = (from, data) => bot.handle({ callback_query: { id: 'q', from: { id: from }, message: { chat: { id: from } }, data } });
+  const last = () => sent.filter((x) => x.method === 'sendMessage').pop()?.text || '';
+  // not linked: the bot asks to link
+  await msg(501, '💎 Купить Robits');
+  assert.match(last(), /привяжи аккаунт/);
+  // link
+  const l = (await call('POST', '/me/telegram/link', {}, kid.cookie)).data;
+  assert.match(l.url, /^https:\/\/t\.me\/Robisgamebot\?start=link_/);
+  await msg(501, '/start ' + l.url.split('start=')[1]);
+  assert.match(last(), /привязан к <b>TgKid/);
+  const tgv = (await call('GET', '/me/telegram', null, kid.cookie)).data;
+  assert.equal(tgv.linked.username, 'u501');
+  assert.ok(tgv.shop.robits.some((p) => p.robits === 1000 && p.stars === 100));
+  // Premium for Robits: not enough, then enough
+  await cb(501, 'prok:BuildersClub');
+  assert.match(last(), /❌/);
+  await call('POST', `/admin/users/${kid.data.user.id}/robits`, { amount: 2000 }, admin);
+  await cb(501, 'pr:BuildersClub');
+  assert.match(last(), /Купить <b>Premium 450/);
+  await cb(501, 'prok:BuildersClub');
+  assert.match(last(), /Premium 450<\/b> твой/);
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.membership, 'BuildersClub');
+  // Robits for Stars: the invoice, the check, the payment (once)
+  await msg(501, '💎 Купить Robits');
+  await cb(501, 'rs:1000');
+  const inv = sent.filter((x) => x.method === 'sendInvoice').pop();
+  assert.equal(inv.currency, 'XTR');
+  assert.equal(inv.prices[0].amount, 100);
+  await bot.handle({ pre_checkout_query: { id: 'c1', invoice_payload: inv.payload, currency: 'XTR', total_amount: 100 } });
+  assert.equal(sent.filter((x) => x.method === 'answerPreCheckoutQuery').pop().ok, true);
+  await bot.handle({ pre_checkout_query: { id: 'c2', invoice_payload: inv.payload, currency: 'XTR', total_amount: 1 } });
+  assert.equal(sent.filter((x) => x.method === 'answerPreCheckoutQuery').pop().ok, false);
+  const before = (await call('GET', '/auth/me', null, kid.cookie)).data.user.robits;
+  const pay = { message: { from: { id: 501 }, chat: { id: 501, type: 'private' }, successful_payment: { invoice_payload: inv.payload, currency: 'XTR', total_amount: 100, telegram_payment_charge_id: 'ch1' } } };
+  await bot.handle(pay);
+  await bot.handle(pay);
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.robits, before + 1000);
+  // Premium for Stars
+  await cb(501, 'ps:TurboBuildersClub');
+  const inv2 = sent.filter((x) => x.method === 'sendInvoice').pop();
+  await bot.handle({ message: { from: { id: 501 }, chat: { id: 501, type: 'private' }, successful_payment: { invoice_payload: inv2.payload, currency: 'XTR', total_amount: inv2.prices[0].amount, telegram_payment_charge_id: 'ch2' } } });
+  assert.equal((await call('GET', '/auth/me', null, kid.cookie)).data.user.membership, 'TurboBuildersClub');
+  // broken updates and a failing Telegram don't throw
+  bot.setApi(async () => { throw new Error('network down'); });
+  await bot.handle({ callback_query: { id: 'x', from: { id: 501 }, data: 'prok:BuildersClub' } });
+  await bot.handle({ message: { from: { id: 9 }, chat: null, text: '/start' } });
+  await bot.handle({ pre_checkout_query: { id: 'z', invoice_payload: null } });
+  assert.equal((await call('GET', '/admin/tgbot', null, admin)).data.payments.length, 2);
+  await call('POST', '/admin/tgbot', { on: false }, admin);
 });

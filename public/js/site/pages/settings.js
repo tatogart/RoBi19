@@ -22,6 +22,45 @@ const drawAppearance = (theme) => {
 drawAppearance(THEME);
 app.append(appearance);
 
+// ---------------------------------------------------------------- Telegram
+// The Robis bot: Premium and Robits for Telegram Stars (server/tgbot.js).
+// Linking: a one-time link that opens the bot.
+const tgPanel = el('div', { class: 'panel tg-panel' });
+app.append(tgPanel);
+async function drawTelegram() {
+  let st;
+  try { st = await api.get('/me/telegram'); } catch { tgPanel.remove(); return; }
+  if (!st.on) { tgPanel.remove(); return; }
+  const botUrl = `https://t.me/${st.bot}`;
+  tgPanel.replaceChildren(
+    el('h3', {}, el('span', { class: 'tg-logo', text: '✈' }), el('span', { text: 'Telegram' })),
+    el('p', { text: 'Link Telegram to buy Premium and Robits for Telegram Stars in our bot.' }),
+    me.guest ? el('p', { class: 'small muted', text: 'Sign up to link Telegram.' })
+      : st.linked
+        ? el('div', { class: 'row wrap', style: { gap: '8px' } },
+          el('span', { class: 'pill online-pill no-i18n', text: `✓ ${st.linked.username ? '@' + st.linked.username : st.linked.name || 'Telegram'}` }),
+          el('a', { class: 'btn btn-primary tg-btn', href: botUrl, target: '_blank', rel: 'noopener', text: 'Open the bot' }),
+          el('button', { class: 'btn btn-small', text: 'Unlink', onclick: async () => {
+            if (!confirm('Unlink Telegram from this account?')) return;
+            try { await api.post('/me/telegram/unlink'); toast('Telegram unlinked', 'success'); drawTelegram(); } catch (e) { toast(e.message, 'error'); }
+          } }))
+        : el('button', { class: 'btn btn-primary tg-btn', text: 'Link Telegram', onclick: async () => {
+          const w = window.open('', '_blank'); // right on the click (Safari blocks it later)
+          if (w) w.opener = null;
+          try {
+            const r = await api.post('/me/telegram/link');
+            if (w) w.location.href = r.url; else location.href = r.url;
+            toast('Press START in Telegram, then come back here', 'success');
+            const t0 = Date.now();
+            const poll = setInterval(async () => {
+              const x = await api.get('/me/telegram').catch(() => null);
+              if ((x && x.linked) || Date.now() - t0 > 15 * 60e3) { clearInterval(poll); drawTelegram(); }
+            }, 3000);
+          } catch (e) { if (w) w.close(); toast(e.message, 'error'); }
+        } }));
+}
+drawTelegram();
+
 // ---------------------------------------------------------------- Discord
 // "Playing Robis" in your Discord profile: a small helper app for Windows
 // shows what you play (see server/discordstatus.js).
@@ -129,6 +168,9 @@ style.textContent = `
 .seg { display: flex; gap: 6px; }
 .panel h4 { margin: 16px 0 6px; }
 .discord-panel h3 { display: flex; align-items: center; gap: 8px; }
+.tg-panel h3 { display: flex; align-items: center; gap: 8px; }
+.tg-logo { width: 28px; height: 28px; border-radius: 50%; background: #229ed9; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+.tg-btn { background: #229ed9; border-color: #229ed9; }
 .discord-logo { width: 28px; height: 28px; border-radius: 8px; background: #5865f2; display: inline-flex; padding: 4px; }
 .discord-logo svg { width: 100%; height: 100%; }
 .discord-preview { background: #232428; color: #dbdee1; border-radius: 8px; padding: 10px 12px; max-width: 340px; margin: 10px 0; }
