@@ -124,6 +124,7 @@ const TABS = {
   spin: { label: 'Daily Spin', group: 'Economy', icon: 'wheel', draw: drawSpin, admin: true },
   sales: { label: 'Sales', group: 'Economy', icon: 'tag', draw: drawSales, admin: true },
   economy: { label: 'Economy', group: 'Economy', icon: 'coins', draw: drawEconomy, admin: true },
+  tgshop: { label: 'Telegram Shop', group: 'Economy', icon: 'megaphone', draw: drawTgShop, admin: true },
   progress: { label: 'Quests & Levels', group: 'Economy', icon: 'star', draw: drawProgress, admin: true },
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
@@ -1617,6 +1618,55 @@ async function drawSettings() {
         } }) : null,
         discordSteps)),
     el('button', { class: 'btn btn-primary btn-large', text: 'Save settings', onclick: save }));
+}
+
+// ---------------------------------------------------------------- Telegram shop
+// Buyers pay in the seller's private chat; a bot connected to the seller's
+// account (Telegram Business -> Chat automation) answers by order number and
+// gives the order when the seller writes "+" (server/tgshop.js).
+const ORDER_LABEL = { new: ['New', ''], waiting: ['Waiting for payment', 'orange'], check: ['Receipt sent', 'blue'], done: ['Done', 'green'], cancelled: ['Cancelled', ''], expired: ['Expired', ''] };
+async function drawTgShop() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/tgshop'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const S = r.settings, c = r.connection;
+  const on = el('input', { type: 'checkbox', checked: S.on });
+  const token = el('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: S.hasToken ? 'The token is saved (paste a new one to change it)' : 'Token of the NEW bot from @BotFather' });
+  const pay = el('textarea', { class: 'input no-i18n', rows: 3 });
+  pay.value = S.payText;
+  const section = (title, hint, ...kids) => el('div', { class: 'settings-section' }, el('h3', { text: title }), hint ? el('p', { class: 'small muted', text: hint }) : null, ...kids);
+  const save = async (extra = {}) => {
+    try { await api.post('/admin/tgshop', { on: on.checked, token: token.value, payText: pay.value, ...extra }); toast('Saved', 'success'); drawTgShop(); } catch (e) { toast(e.message, 'error'); }
+  };
+  const act = async (o, op) => {
+    if (op === 'give' && !confirm(`Give ${o.item} to ${o.username}? (only after the payment came)`)) return;
+    try { await api.post(`/admin/tgshop/orders/${o.code}`, { op }); toast(op === 'give' ? 'Given' : 'Cancelled', 'success'); drawTgShop(); } catch (e) { toast(e.message, 'error'); }
+  };
+  const status = c ? (c.enabled ? `Connected to ${c.username ? '@' + c.username : c.name}${c.canReply ? '' : ' - but it may not reply: allow "Reply to messages" in Chat automation'}` : 'Turned off in Telegram (Chat automation)') : 'Not connected yet';
+  body.replaceChildren(
+    section('Bot', `${S.botName ? '@' + S.botName + ' · ' : ''}${r.running ? 'running' : 'stopped'} · ${status}${r.lastError ? ' · last error: ' + r.lastError : ''}`,
+      el('label', { class: 'perm-row' }, on, el('b', { text: 'The Telegram shop bot is on' })),
+      token,
+      S.hasToken ? el('button', { class: 'btn btn-small btn-red', style: { marginTop: '6px' }, text: 'Delete the token', onclick: () => confirm('Delete the token? The bot stops.') && save({ clearToken: true, token: '' }) }) : null,
+      el('ol', { class: 'discord-steps' },
+        el('li', { text: '@BotFather -> /newbot: make a new bot, copy its token here and save. Don\'t send the token to anyone.' }),
+        el('li', { text: '@BotFather -> /mybots -> the bot -> Bot Settings -> Business Mode: turn it on.' }),
+        el('li', {}, 'On your account ', el('b', { class: 'no-i18n', text: '@' + S.seller }), ' (Telegram Premium needed): Settings -> Telegram Business -> Chat automation -> the bot\'s @name, "All private chats", allow it to reply. The buyers write to this account (Robits page; change it in Promo Codes / donate settings).'),
+        el('li', { text: 'Done. The bot answers only messages with an order number (RB-12345). When the money came, write "+" in that chat: the order is given. "-" cancels it.' }))),
+    section('How to pay', 'The bot sends this to every buyer with the order and its price.', pay),
+    el('button', { class: 'btn btn-primary btn-large', text: 'Save', onclick: () => save() }),
+    section(`Orders (${r.orders.length})`, 'You can also give or cancel orders here, without the bot.',
+      r.orders.length ? el('table', { class: 'adm-table' }, el('tbody', {}, r.orders.map((o) => el('tr', {},
+        el('td', { class: 'no-i18n', text: o.code }),
+        el('td', { class: 'no-i18n', text: o.username }),
+        el('td', { text: o.item }),
+        el('td', { class: 'no-i18n', text: [o.price, o.tgUser].filter(Boolean).join(' · ') }),
+        el('td', {}, el('span', { class: 'pill ' + (ORDER_LABEL[o.status] || ['', ''])[1] + '-pill', text: (ORDER_LABEL[o.status] || [o.status])[0] })),
+        el('td', { class: 'small muted', text: timeAgo(o.created) }),
+        el('td', {}, ['new', 'waiting', 'check'].includes(o.status) ? el('div', { class: 'row', style: { gap: '4px' } },
+          el('button', { class: 'btn btn-small btn-green', text: 'Give', onclick: () => act(o, 'give') }),
+          el('button', { class: 'btn btn-small', text: 'Cancel', onclick: () => act(o, 'cancel') })) : (o.giftCode ? el('span', { class: 'no-i18n small', text: o.giftCode }) : null))))))
+        : el('div', { class: 'muted small', text: 'No orders yet.' })));
 }
 
 // Admins give other players rights (see PERMISSIONS in server/api.js), and

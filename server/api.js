@@ -21,6 +21,7 @@ import { installAwards } from './awards.js';
 import { installClassic } from './classic.js';
 import { installProgress, levelOf } from './progress.js';
 import { installSpecial } from './special.js';
+import { installTgShop } from './tgshop.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
 
@@ -1552,14 +1553,13 @@ export function createApi(db, manager, opts = {}) {
     { key: 'g5000', name: '5,000 Robits', robits: 5000, color: '#ff4d8d' },
     { key: 'gbc', name: 'Builders Club · 30 days', membership: 'BuildersClub', days: 30, color: '#f5a300' },
   ];
-  // Builders Club for Robits, 30 days per purchase (the only thing sold for Robits here).
-  const MEMBERSHIP_COST = { BuildersClub: 1500, TurboBuildersClub: 3500, OutrageousBuildersClub: 7500 };
+  // Premium is sold only in Telegram (server/tgshop.js), 30 days per purchase.
   const MEMBERSHIP_DAYS = 30;
   if (!D.donate) D.donate = {};
   const donateInfo = () => ({
     telegram: D.donate.telegram || 'Robis_support',
     packs: DONATE_PACKS.map((robits) => ({ robits, price: D.donate.prices?.['r' + robits] || '' })),
-    memberships: Object.keys(MEMBERSHIPS).filter((id) => id !== 'None').map((id) => ({ id, price: D.donate.prices?.[id] || '', cost: MEMBERSHIP_COST[id], days: MEMBERSHIP_DAYS })),
+    memberships: Object.keys(MEMBERSHIPS).filter((id) => id !== 'None').map((id) => ({ id, price: D.donate.prices?.[id] || '', days: MEMBERSHIP_DAYS })),
     giftcards: GIFT_CARDS.map((g) => ({ ...g, price: D.donate.prices?.[g.key] || '' })),
   });
   api.get('/economy/store', (req, res) => {
@@ -1569,30 +1569,6 @@ export function createApi(db, manager, opts = {}) {
       donate: donateInfo(),
     });
   });
-  // Premium for Robits (the site and the Telegram bot)
-  hooks.buyMembership = (u, tier) => {
-    const cost = MEMBERSHIP_COST[tier];
-    if (!cost) return { error: 'Unknown membership.' };
-    if (u.guest) return { error: 'Guests can\'t buy Premium. Sign up first!' };
-    checkMembership(u);
-    const order = Object.keys(MEMBERSHIPS);
-    const cur = u.membership || 'None';
-    if (order.indexOf(cur) > order.indexOf(tier)) return { error: `You already have ${MEMBERSHIPS[cur].name}.` };
-    if (cur === tier && !u.membershipUntil) return { error: `You already have ${MEMBERSHIPS[cur].name} for good.` };
-    if (u.robits < cost) return { error: `You need ${cost - u.robits} more Robits for ${MEMBERSHIPS[tier].name}.` };
-    u.robits -= cost;
-    const r = giveMembership(u, tier, MEMBERSHIP_DAYS);
-    log(u.id, -cost, `${MEMBERSHIPS[tier].name} (${MEMBERSHIP_DAYS} days)`);
-    db.save();
-    return { until: r.until || u.membershipUntil };
-  };
-  api.post('/economy/membership', requireUser, (req, res) => {
-    const r = hooks.buyMembership(req.user, String(req.body?.tier || ''));
-    if (r.error) return bad(res, r.error);
-    const u = req.user;
-    res.json({ robits: u.robits, membership: u.membership, until: r.until });
-  });
-
   api.post('/admin/donate', requirePerm('economy'), requireOpt('economy', 'donate'), (req, res) => {
     const b = req.body || {};
     const prices = {};
@@ -2302,6 +2278,12 @@ export function createApi(db, manager, opts = {}) {
       if (!D.promocodes[c]) return c;
     }
   };
+  // a one-time code (gift cards sold in the Telegram shop)
+  hooks.makePromo = ({ robits = 0, membership = '', memberDays = 0, note = '' }) => {
+    const c = newCode();
+    D.promocodes[c] = { code: c, robits, items: [], membership, memberDays, maxUses: 1, usedBy: [], expires: 0, active: true, created: Date.now(), by: 0, byName: 'Telegram shop', note };
+    return c;
+  };
   const promoState = (p) => (!p.active ? 'off' : p.expires && Date.now() > p.expires ? 'expired' : p.maxUses && p.usedBy.length >= p.maxUses ? 'used up' : 'active');
   const publicPromo = (p) => ({
     code: p.code, robits: p.robits, membership: p.membership || '', membershipName: p.membership ? MEMBERSHIPS[p.membership]?.name : '', memberDays: p.memberDays || 0,
@@ -2697,6 +2679,8 @@ export function createApi(db, manager, opts = {}) {
   installClassic(api, { db, manager, requireAdmin, requirePerm, bad, log, hooks, adminUser, deleteAccount, isBanned, STARTER: { items: STARTER_ITEMS, wearing: STARTER_WEARING, body: STARTER_BODY } });
   installSpecial(api, { db, requireAdmin, bad, giveSerial, hooks });
   hooks.giveMembership = (u, tier, days) => giveMembership(u, tier, days);
+  installTgShop(api, { db, requireUser, requireAdmin, bad, log, hooks, MEMBERSHIPS, DONATE_PACKS, GIFT_CARDS });
+  if (manager) manager.tgshop = hooks.tgshop;
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS, hooks });
 
   api.use((req, res) => bad(res, 'Not found', 404));

@@ -1,7 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
 import { el, icon, fmtFull, timeAgo, toast } from '../ui.js';
-import { LANG } from '../../i18n.js';
 
 const me = await initPage({ active: 'robits' });
 const app = document.getElementById('app');
@@ -26,29 +25,41 @@ app.append(el('h1', { text: 'Robits' }),
     claim));
 
 // ---------------------------------------------------------------- donate
-// "Buy" copies a ready message and opens support in Telegram; the admins hand
-// out what was bought.
+// "Buy" makes an order (RB-12345) and opens the seller's chat in Telegram with
+// a ready message; a bot answers there for the seller (server/tgshop.js).
 const donate = store.donate;
 const tgUrl = `https://t.me/${donate.telegram}`;
-async function buy(what) {
-  const msg = LANG === 'ru'
-    ? `Привет! Хочу купить ${what} в Robis. Мой ник: ${me.username}`
-    : `Hi! I'd like to buy ${what} on Robis. My username: ${me.username}`;
-  let copied = false;
-  try { await navigator.clipboard.writeText(msg); copied = true; } catch { /* no clipboard */ }
-  window.open(tgUrl, '_blank', 'noopener');
-  toast(copied ? 'Message copied - paste it in the Telegram chat' : `Write to @${donate.telegram} in Telegram`, 'success');
+async function buy(key) {
+  // the tab opens right on the click (Safari blocks it after waiting for the server)
+  const w = window.open('', '_blank');
+  if (w) w.opener = null;
+  let r;
+  try { r = await api.post('/economy/order', { key }); } catch (e) { if (w) w.close(); toast(e.message, 'error'); return; }
+  try { await navigator.clipboard.writeText(r.text); } catch { /* no clipboard */ }
+  if (w) w.location.href = r.url; else location.href = r.url;
+  toast(`Order ${r.order.code}: send the message in Telegram (it's copied too)`, 'success');
+  loadOrders();
 }
+// my orders: what was bought in Telegram and what is still waiting
+const ordersBox = el('div', { class: 'orders-box' });
+const ORDER_STATUS = { new: 'Send the message in Telegram', waiting: 'Waiting for payment', check: 'Checking the payment', done: 'Done', cancelled: 'Cancelled', expired: 'Expired' };
+async function loadOrders() {
+  const { orders } = await api.get('/economy/orders').catch(() => ({ orders: [] }));
+  ordersBox.replaceChildren(...(orders.length ? [el('h3', { text: 'My orders' }), el('table', { class: 'list' }, orders.map((o) => el('tr', {},
+    el('td', { class: 'no-i18n', text: o.code }), el('td', { text: o.item }), el('td', { class: 'no-i18n', text: o.price || '' }),
+    el('td', { class: 'order-' + o.status, text: ORDER_STATUS[o.status] || o.status }), el('td', { class: 'no-i18n', text: o.giftCode || '' }))))] : []));
+}
+loadOrders();
 const priceTag = (p) => el('div', { class: 'donate-price', text: p || 'Price in Telegram' });
 const packs = el('div', { class: 'donate-packs' }, donate.packs.map((p, i) => el('div', { class: 'panel donate-pack' + (i === 2 ? ' best' : '') },
   i === 2 ? el('div', { class: 'donate-tag', text: 'Popular' }) : null,
   el('div', { class: 'donate-amount' }, icon('robits', 'robits-icon'), el('span', { text: fmtFull(p.robits) })),
   priceTag(p.price),
-  el('button', { class: 'btn btn-green', text: 'Buy', onclick: () => buy(`${fmtFull(p.robits)} Robits`) }))));
+  el('button', { class: 'btn btn-green', text: 'Buy', onclick: () => buy('r' + p.robits) }))));
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Buy Robits' }),
   el('p', { class: 'muted small' }, 'Support Robis! Press Buy: we open ', el('a', { href: tgUrl, target: '_blank', rel: 'noopener', class: 'no-i18n', text: '@' + donate.telegram }),
-    ' in Telegram with a ready message. Pay there and you get your Robits.'),
-  packs);
+    ' in Telegram with a ready message and an order number. Pay there and you get your Robits.'),
+  packs, ordersBox);
 
 // ---------------------------------------------------------------- gift cards
 // Sold only in Telegram: support sends the buyer the card's code.
@@ -61,7 +72,7 @@ const giftBox = el('div', { class: 'gift-grid' }, donate.giftcards.map((g) => el
     el('div', { class: 'gift-ribbon', text: 'GIFT CARD' })),
   el('div', { class: 'gift-buy' },
     g.price ? el('div', { class: 'donate-price', style: { textAlign: 'center' }, text: g.price }) : null,
-    el('button', { class: 'btn btn-green', text: 'Buy in Telegram', onclick: () => buy(`a gift card: ${g.name}`) })))));
+    el('button', { class: 'btn btn-green', text: 'Buy in Telegram', onclick: () => buy(g.key) })))));
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Gift Cards' }),
   el('p', { class: 'muted small', text: 'Give Robits or Premium to a friend. Gift cards are sold in Telegram: you get a code, your friend redeems it on the Promo Codes page.' }),
   giftBox);
@@ -81,18 +92,14 @@ const plans = el('div', { class: 'plans' }, store.memberships.map((m) => {
     current ? el('div', { class: 'plan-tag', text: me.membershipUntil ? `Your plan until ${new Date(me.membershipUntil).toLocaleDateString()}` : 'Your plan' }) : null,
     m.id !== 'None' ? planBuy(m, current) : null);
 }));
-// Premium: for Robits here, or bought in Telegram (the support chat)
+// Premium: bought only in Telegram
 function planBuy(m, current) {
   const d = donate.memberships.find((x) => x.id === m.id) || {};
-  return el('div', { class: 'plan-buy row wrap', style: { gap: '6px' } },
-    d.cost ? el('button', { class: 'btn btn-small btn-green', onclick: async () => {
-      if (!confirm(`${m.name} for ${d.days} days: R$ ${fmtFull(d.cost)}?`)) return;
-      try { const r = await api.post('/economy/membership', { tier: m.id }); setRobits(r.robits); toast(`${m.name} is yours!`, 'success'); setTimeout(() => location.reload(), 800); } catch (e) { toast(e.message, 'error'); }
-    } }, icon('robits', 'robits-icon'), fmtFull(d.cost)) : null,
-    el('button', { class: 'btn btn-small', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(current ? `${m.name} (extend)` : m.name) }));
+  return el('div', { class: 'plan-buy' },
+    el('button', { class: 'btn btn-small btn-green', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(m.id) }));
 }
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Premium' }),
-  el('p', { class: 'muted small', text: 'Premium replaced Builders Club in 2020. Buy it for Robits, in Telegram or get it from a promo code.' }), plans);
+  el('p', { class: 'muted small', text: 'Premium replaced Builders Club in 2020. Buy it in Telegram or get it from a promo code.' }), plans);
 
 // ---------------------------------------------------------------- transactions
 const tx = el('div', { class: 'panel' });
@@ -110,6 +117,11 @@ loadTx();
 const style = document.createElement('style');
 style.textContent = `
 .robits-icon.big { width: 38px; height: 38px; }
+.orders-box { margin-top: 14px; }
+.orders-box h3 { margin: 6px 0; }
+.order-done { color: #02b757; font-weight: 700; }
+.order-cancelled, .order-expired { color: #999; }
+.order-waiting, .order-check { color: #f5a300; font-weight: 700; }
 .plan + .plan { margin-top: 0; }
 .plan .btn { margin-top: 8px; }
 .plan-buy { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
