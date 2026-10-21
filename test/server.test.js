@@ -53,7 +53,7 @@ function join(cookie, msg) {
 
 test('seeded world is available', async () => {
   const { data } = await call('GET', '/stats');
-  assert.equal(data.games, 24); // 23 showcase games + The Hunt hub
+  assert.equal(data.games, 28); // 27 showcase games + The Hunt hub
   const games = (await call('GET', '/games?sort=popular')).data.games;
   assert.ok(games.some((g) => g.name === 'Mega Fun Obby'));
   const cat = (await call('GET', '/catalog?type=Hat')).data.items;
@@ -2694,4 +2694,38 @@ test('Telegram bot: link, Premium for Robits and Stars, Robits for Stars; a bad 
   await bot.handle({ pre_checkout_query: { id: 'z', invoice_payload: null } });
   assert.equal((await call('GET', '/admin/tgbot', null, admin)).data.payments.length, 2);
   await call('POST', '/admin/tgbot', { on: false }, admin);
+});
+
+test('more classics: Sword Fight on the Heights, Mining Simulator, The Robis Elevator, Cops and Robbers run', async () => {
+  const p = await call('POST', '/auth/signup', { username: 'ClassicFan', password: 'secret123' });
+  const games = (await call('GET', '/games?sort=popular')).data.games;
+  for (const name of ['Sword Fight on the Heights', 'Mining Simulator', 'The Robis Elevator', 'Cops and Robbers']) {
+    const g = games.find((x) => x.name === name);
+    assert.ok(g, name);
+    const c = await join(p.cookie, { placeId: g.id });
+    const w = await c.wait((m) => m.t === 'welcome', 8000);
+    assert.ok(w, name);
+    await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'), 5000);
+    // the tools work: equip and use the game's tool (sword / pickaxe / handcuffs)
+    const findTool = () => {
+      let found = null;
+      const walk = (n) => { if (!n || found) return; if (n.c === 'Tool') { found = n.id; return; } for (const k of n.ch || []) walk(k); };
+      for (const m of c.inbox) {
+        if (m.t === 'welcome') for (const n of m.snapshot) walk(n);
+        if (m.t === 'tick') for (const o of m.ops) if (o[0] === 'add') walk(o[2]);
+      }
+      return found;
+    };
+    await new Promise((r) => setTimeout(r, 800));
+    const toolId = findTool();
+    if (toolId) {
+      c.ws.send(JSON.stringify({ t: 'equip', id: toolId }));
+      await new Promise((r) => setTimeout(r, 200));
+      c.ws.send(JSON.stringify({ t: 'activate', id: toolId, p: [0, -3, 25] }));
+    }
+    await new Promise((r) => setTimeout(r, 1200));
+    const errors = c.inbox.filter((m) => m.t === 'log' && m.level === 'error');
+    assert.equal(errors.length, 0, name + ': ' + JSON.stringify(errors.slice(0, 3)));
+    c.ws.close();
+  }
 });
