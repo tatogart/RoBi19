@@ -29,10 +29,10 @@ app.append(el('h1', { text: 'Robits' }),
 // a ready message; a bot answers there for the seller (server/tgshop.js).
 const donate = store.donate;
 const tgUrl = `https://t.me/${donate.telegram}`;
-// online payment (Lolz Market in rubles, CryptoBot in dollars) when it's set up
+// online payment (Lolz Market, rubles) when it's set up
 const payOpts = await api.get('/economy/pay-options').catch(() => ({ methods: [], amounts: {} }));
 const waysFor = (key) => payOpts.methods.filter((m) => (payOpts.amounts[key] || {})[m.id] > 0);
-const money = (m, a) => (m.id === 'crypto' ? `$${(+a).toFixed(2)}` : `${fmtFull(a)} ₽`);
+const money = (m, a) => `${fmtFull(a)} ₽`;
 async function buy(key) {
   const ways = waysFor(key);
   if (ways.length) {
@@ -150,7 +150,6 @@ style.textContent = `
 .pay-ways { display: flex; flex-direction: column; gap: 10px; }
 .pay-way { display: flex; justify-content: space-between; align-items: center; width: 100%; color: #fff; }
 .pay-lzt { background: #1f8f4e; border-color: #1f8f4e; }
-.pay-crypto { background: #229ed9; border-color: #229ed9; }
 .orders-box h3 { margin: 6px 0; }
 .order-done { color: #02b757; font-weight: 700; }
 .order-cancelled, .order-expired { color: #999; }

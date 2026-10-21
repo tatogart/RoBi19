@@ -11,9 +11,8 @@
 // The bot only answers messages with an order number; every other chat of
 // the seller is left alone. Orders can also be given from Control Center
 // (without the bot).
-// Paying online instead of to card details: Lolz Market (lzt.market, rubles)
-// and CryptoBot (Crypto Pay, priced in US dollars, paid in USDT/TON/...).
-// "Buy" -> pick how to pay -> the invoice page; the server checks the
+// Paying online instead of to card details: Lolz Market (lzt.market, rubles).
+// "Buy" -> the invoice page; the server checks the
 // invoices every 20 seconds and gives a paid order by itself.
 //   GET  /economy/pay-options    the ways to pay and the prices
 //   POST /economy/order          { key, method? } -> the order and its invoice (or its message)
@@ -35,8 +34,8 @@ export function installTgShop(api, { db, requireUser, requireAdmin, bad, log, ho
   if (!D.orders) D.orders = {};
   if (!S.offset) S.offset = 0;
   if (!S.lzt) S.lzt = { token: '', merchantId: 0, test: false };
-  if (!S.cryptopay) S.cryptopay = { token: '', testnet: false };
-  if (!S.amounts) S.amounts = {}; // key -> { rub, usd }
+  if (!S.amounts) S.amounts = {}; // key -> { rub }
+  delete S.cryptopay; // CryptoBot was here (removed)
   const testing = !!process.env.NODE_TEST_CONTEXT;
   const state = { gen: 0, running: false, lastError: '' };
   const prices = () => (D.donate && D.donate.prices) || {};
@@ -75,9 +74,8 @@ export function installTgShop(api, { db, requireUser, requireAdmin, bad, log, ho
   const INVOICE_LIFE = 43200; // seconds (12 hours, the longest Lolz Market allows)
   const methods = () => [
     S.lzt.token && S.lzt.merchantId ? { id: 'lzt', name: 'Lolz Market', currency: 'RUB', sign: '₽' } : null,
-    S.cryptopay.token ? { id: 'crypto', name: 'CryptoBot', currency: 'USD', sign: '$' } : null,
   ].filter(Boolean);
-  const amountOf = (key, m) => { const a = S.amounts[key] || {}; return Math.round((m === 'lzt' ? +a.rub : +a.usd) * 100) / 100 || 0; };
+  const amountOf = (key, m) => { const a = S.amounts[key] || {}; return m === 'lzt' ? Math.round(+a.rub) || 0 : 0; };
   const getJson = async (url, init) => {
     const r = await payFetch(url, init);
     const j = typeof r.json === 'function' ? await r.json().catch(() => null) : r;
@@ -93,12 +91,6 @@ export function installTgShop(api, { db, requireUser, requireAdmin, bad, log, ho
     if (j.errors || j.error) throw new Error('Lolz Market: ' + [].concat(j.errors || j.error).join(', '));
     return j.invoice || j.data || j;
   }
-  async function crypto(method, params) {
-    const base = S.cryptopay.testnet ? 'https://testnet-pay.crypt.bot/api/' : 'https://pay.crypt.bot/api/';
-    const j = await getJson(base + method, { method: 'POST', headers: { 'Crypto-Pay-API-Token': S.cryptopay.token, 'Content-Type': 'application/json' }, body: JSON.stringify(params) });
-    if (!j.ok) throw new Error('CryptoBot: ' + (j.error && (j.error.name || j.error.code) || 'error'));
-    return j.result;
-  }
   const site = () => S.siteUrl || '';
   // an invoice for the order (a fresh one when the old one ran out)
   async function invoice(o, m) {
@@ -108,22 +100,13 @@ export function installTgShop(api, { db, requireUser, requireAdmin, bad, log, ho
     const old = o.invoices[m];
     if (old && old.amount === amount && Date.now() - old.at < (INVOICE_LIFE - 600) * 1000) return old;
     const n = (o.tries = (o.tries || 0) + 1);
-    let inv;
-    if (m === 'lzt') {
-      const payId = `${o.code}-${n}`;
-      const r = await lzt('POST', '/invoice', {
-        currency: 'rub', amount, payment_id: payId, comment: `Robis: ${o.item} (${o.username}) ${o.code}`, merchant_id: S.lzt.merchantId,
-        url_success: site() ? site() + '/robits' : undefined, lifetime: INVOICE_LIFE, is_test: S.lzt.test ? true : undefined,
-      });
-      const id = r.invoice_id || r.id;
-      inv = { id, payId, url: r.url || r.invoice_url || r.payment_url || (id ? `https://lzt.market/invoice/${id}/` : '') };
-    } else {
-      const r = await crypto('createInvoice', {
-        currency_type: 'fiat', fiat: 'USD', amount: amount.toFixed(2), description: `Robis: ${o.item} (${o.username})`, payload: o.code, expires_in: INVOICE_LIFE,
-        ...(site().startsWith('https://') ? { paid_btn_name: 'callback', paid_btn_url: site() + '/robits' } : {}),
-      });
-      inv = { id: r.invoice_id, url: r.bot_invoice_url || r.pay_url || r.mini_app_invoice_url || r.web_app_invoice_url };
-    }
+    const payId = `${o.code}-${n}`;
+    const r = await lzt('POST', '/invoice', {
+      currency: 'rub', amount, payment_id: payId, comment: `Robis: ${o.item} (${o.username}) ${o.code}`, merchant_id: S.lzt.merchantId,
+      url_success: site() ? site() + '/robits' : undefined, lifetime: INVOICE_LIFE, is_test: S.lzt.test ? true : undefined,
+    });
+    const id = r.invoice_id || r.id;
+    const inv = { id, payId, url: r.url || r.invoice_url || r.payment_url || (id ? `https://lzt.market/invoice/${id}/` : '') };
     if (!inv.url) throw new Error('The payment service gave no payment link.');
     o.invoices[m] = { ...inv, amount, at: Date.now() };
     if (o.status === 'new') o.status = 'waiting';
@@ -134,16 +117,6 @@ export function installTgShop(api, { db, requireUser, requireAdmin, bad, log, ho
   async function checkPayments() {
     expire();
     const list = Object.values(D.orders).filter((o) => open(o) && o.invoices);
-    const crypt = list.filter((o) => o.invoices.crypto);
-    if (crypt.length && S.cryptopay.token) {
-      try {
-        const r = await crypto('getInvoices', { invoice_ids: crypt.map((o) => o.invoices.crypto.id).join(','), count: 1000 });
-        for (const it of r.items || []) {
-          const o = crypt.find((x) => String(x.invoices.crypto.id) === String(it.invoice_id));
-          if (o && it.status === 'paid' && open(o)) { o.paidWith = 'CryptoBot'; give(o, 'CryptoBot'); }
-        }
-      } catch (e) { state.payError = e.message; }
-    }
     if (S.lzt.token) {
       for (const o of list.filter((x) => x.invoices.lzt)) {
         try {
@@ -223,7 +196,7 @@ export function installTgShop(api, { db, requireUser, requireAdmin, bad, log, ho
       db.save();
       const ways = methods().filter((x) => amountOf(o.key, x.id));
       if (ways.length) {
-        return Promise.all(ways.map((x) => invoice(o, x.id).then((inv) => `${x.name}: ${x.id === 'lzt' ? inv.amount + ' ₽' : '$' + inv.amount.toFixed(2)}\n${inv.url}`).catch(() => '')))
+        return Promise.all(ways.map((x) => invoice(o, x.id).then((inv) => `${x.name}: ${x.id === 'lzt' ? inv.amount + ' ₽' : inv.amount}\n${inv.url}`).catch(() => '')))
           .then((lines) => say(o, `Заказ ${o.code} принят ✅\nТовар: ${o.item}\nАккаунт: ${o.username}\n\nОплати по ссылке:\n\n${lines.filter(Boolean).join('\n\n')}\n\nПосле оплаты заказ выдаётся сам, за минуту.`));
       }
       return say(o, `Заказ ${o.code} принят ✅\nТовар: ${o.item}\nАккаунт: ${o.username}${o.price ? `\nЦена: ${o.price}` : ''}\n\n${S.payText}\n\nПосле оплаты пришли сюда скриншот чека — выдам сразу после проверки.`);
@@ -310,7 +283,7 @@ export function installTgShop(api, { db, requireUser, requireAdmin, bad, log, ho
     expire();
     return {
       settings: { on: !!S.on, hasToken: !!S.token, payText: S.payText, botName: S.botName || '', seller: (D.donate && D.donate.telegram) || 'Robis_support',
-        lzt: { hasToken: !!S.lzt.token, merchantId: S.lzt.merchantId || '', test: !!S.lzt.test }, cryptopay: { hasToken: !!S.cryptopay.token, testnet: !!S.cryptopay.testnet }, amounts: S.amounts },
+        lzt: { hasToken: !!S.lzt.token, merchantId: S.lzt.merchantId || '', test: !!S.lzt.test }, amounts: S.amounts },
       products: Object.entries(catalog()).map(([key, it]) => ({ key, name: it.name })), payError: state.payError || '',
       connection: S.conn || null, running: state.running, lastError: state.lastError,
       orders: Object.values(D.orders).sort((a, b) => b.created - a.created).slice(0, 100),
@@ -335,20 +308,13 @@ export function installTgShop(api, { db, requireUser, requireAdmin, bad, log, ho
       if (b.lzt.merchantId !== undefined) S.lzt.merchantId = Math.max(0, Math.trunc(+b.lzt.merchantId || 0));
       if (b.lzt.test !== undefined) S.lzt.test = !!b.lzt.test;
     }
-    if (b.cryptopay) {
-      const t = String(b.cryptopay.token || '').trim();
-      if (t) { if (!/^\d+:[A-Za-z0-9_-]{20,80}$/.test(t)) return bad(res, 'That doesn\'t look like a Crypto Pay token (@CryptoBot -> Crypto Pay -> My Apps).'); S.cryptopay.token = t; }
-      if (b.cryptopay.clearToken) S.cryptopay.token = '';
-      if (b.cryptopay.testnet !== undefined) S.cryptopay.testnet = !!b.cryptopay.testnet;
-    }
     if (b.amounts && typeof b.amounts === 'object') {
       const keys = Object.keys(catalog());
       for (const k of keys) {
         const a = b.amounts[k];
         if (!a) continue;
         const rub = Math.max(0, Math.min(1e6, Math.round(+a.rub || 0)));
-        const usd = Math.max(0, Math.min(1e5, Math.round((+a.usd || 0) * 100) / 100));
-        S.amounts[k] = { rub, usd };
+        S.amounts[k] = { rub };
       }
     }
     db.save();

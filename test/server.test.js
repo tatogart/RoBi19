@@ -2674,62 +2674,44 @@ test('Telegram shop: an order, the bot answers as the seller, "+" gives it', asy
   await call('POST', '/admin/tgshop', { on: false }, admin);
 });
 
-test('Shop: online payment with CryptoBot (dollars) and Lolz Market (rubles), given by itself', async () => {
+test('Shop: online payment with Lolz Market, given by itself', async () => {
   const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
   const buyer = await call('POST', '/auth/signup', { username: 'PayBuyer', password: 'secret123' });
   const shop = srv.manager.tgshop;
   const calls = [];
-  const paid = new Set();
+  let paid = false;
   shop.setPayApi(async (url, init) => {
-    const body = init.body ? JSON.parse(init.body) : {};
-    calls.push({ url, body, headers: init.headers });
-    if (url.includes('createInvoice')) return { json: async () => ({ ok: true, result: { invoice_id: 555, status: 'active', bot_invoice_url: 'https://t.me/CryptoBot?start=IV555' } }) };
-    if (url.includes('getInvoices')) return { json: async () => ({ ok: true, result: { items: [{ invoice_id: 555, status: paid.has('crypto') ? 'paid' : 'active' }] } }) };
+    calls.push({ url, body: init.body ? JSON.parse(init.body) : {}, headers: init.headers, method: init.method });
     if (url.endsWith('/invoice') && init.method === 'POST') return { json: async () => ({ invoice: { invoice_id: 77, url: 'https://lzt.market/invoice/77/', status: 'not_paid' } }) };
-    if (url.includes('/invoice?')) return { json: async () => ({ invoice: { invoice_id: 77, status: paid.has('lzt') ? 'paid' : 'not_paid' } }) };
+    if (url.includes('/invoice?')) return { json: async () => ({ invoice: { invoice_id: 77, status: paid ? 'paid' : 'not_paid' } }) };
     return { json: async () => ({}) };
   });
-  // nothing set up: no online ways to pay
+  // nothing set up: no online payment
   assert.equal((await call('GET', '/economy/pay-options')).data.methods.length, 0);
-  assert.equal((await call('POST', '/admin/tgshop', { cryptopay: { token: 'bad' } }, admin)).status, 400);
-  const st = await call('POST', '/admin/tgshop', {
-    cryptopay: { token: '12345:AAexampleexampleexample' }, lzt: { token: 'lzt-token', merchantId: 7 },
-    amounts: { r1000: { rub: 199, usd: 2.49 }, BuildersClub: { rub: 99 } },
-  }, admin);
-  assert.equal(st.data.settings.cryptopay.hasToken, true);
-  assert.equal(st.data.settings.cryptopay.token, undefined);
+  const st = await call('POST', '/admin/tgshop', { lzt: { token: 'lzt-token', merchantId: 7 }, amounts: { r1000: { rub: 199 }, BuildersClub: { rub: 99 } } }, admin);
+  assert.equal(st.data.settings.lzt.hasToken, true);
+  assert.equal(st.data.settings.lzt.token, undefined);
   const opts = (await call('GET', '/economy/pay-options')).data;
-  assert.deepEqual(opts.methods.map((m) => m.id), ['lzt', 'crypto']);
-  assert.equal(opts.amounts.r1000.crypto, 2.49);
-  assert.equal(opts.amounts.BuildersClub.crypto, 0);
-  // no dollar price for Premium: can't pay it with CryptoBot
-  assert.equal((await call('POST', '/economy/order', { key: 'BuildersClub', method: 'crypto' }, buyer.cookie)).status, 400);
-  // CryptoBot: an invoice in dollars
-  const o1 = (await call('POST', '/economy/order', { key: 'r1000', method: 'crypto' }, buyer.cookie)).data;
-  assert.equal(o1.pay.url, 'https://t.me/CryptoBot?start=IV555');
-  const ci = calls.find((c) => c.url.includes('createInvoice'));
-  assert.equal(ci.headers['Crypto-Pay-API-Token'], '12345:AAexampleexampleexample');
-  assert.equal(ci.body.fiat, 'USD');
-  assert.equal(ci.body.amount, '2.49');
+  assert.deepEqual(opts.methods.map((m) => m.id), ['lzt']);
+  assert.equal(opts.amounts.r1000.lzt, 199);
+  assert.equal(opts.amounts.r400.lzt, 0);
+  assert.equal((await call('POST', '/economy/order', { key: 'r400', method: 'lzt' }, buyer.cookie)).status, 400); // no price
+  assert.equal((await call('POST', '/economy/order', { key: 'r1000', method: 'crypto' }, buyer.cookie)).status, 400); // no crypto any more
+  const o1 = (await call('POST', '/economy/order', { key: 'r1000', method: 'lzt' }, buyer.cookie)).data;
+  assert.equal(o1.pay.url, 'https://lzt.market/invoice/77/');
+  const li = calls.find((c) => c.url.endsWith('/invoice'));
+  assert.equal(li.body.amount, 199);
+  assert.equal(li.body.currency, 'rub');
+  assert.equal(li.body.merchant_id, 7);
+  assert.equal(li.headers.Authorization, 'Bearer lzt-token');
   const before = (await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits;
   await shop.checkPayments();
   assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before); // not paid yet
-  paid.add('crypto');
+  paid = true;
   await shop.checkPayments();
   assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before + 1000);
   await shop.checkPayments(); // once
   assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.robits, before + 1000);
-  // Lolz Market: Premium in rubles
-  const o2 = (await call('POST', '/economy/order', { key: 'BuildersClub', method: 'lzt' }, buyer.cookie)).data;
-  assert.equal(o2.pay.url, 'https://lzt.market/invoice/77/');
-  const li = calls.find((c) => c.url.endsWith('/invoice'));
-  assert.equal(li.body.amount, 99);
-  assert.equal(li.body.merchant_id, 7);
-  assert.equal(li.headers.Authorization, 'Bearer lzt-token');
-  paid.add('lzt');
-  await shop.checkPayments();
-  assert.equal((await call('GET', '/auth/me', null, buyer.cookie)).data.user.membership, 'BuildersClub');
-  const mine = (await call('GET', '/economy/orders', null, buyer.cookie)).data.orders;
-  assert.ok(mine.every((o) => o.status === 'done'));
-  await call('POST', '/admin/tgshop', { cryptopay: { clearToken: true }, lzt: { clearToken: true } }, admin);
+  assert.equal((await call('GET', '/economy/orders', null, buyer.cookie)).data.orders[0].status, 'done');
+  await call('POST', '/admin/tgshop', { lzt: { clearToken: true } }, admin);
 });
