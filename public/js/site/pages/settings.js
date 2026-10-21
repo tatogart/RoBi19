@@ -22,49 +22,6 @@ const drawAppearance = (theme) => {
 drawAppearance(THEME);
 app.append(appearance);
 
-// ---------------------------------------------------------------- Telegram
-// The Robis bot: daily Robits for following the channel, Premium, invites
-// (see server/tgbot.js). Linking: a one-time link that opens the bot.
-const tgPanel = el('div', { class: 'panel tg-panel' });
-app.append(tgPanel);
-async function drawTelegram() {
-  let st;
-  try { st = await api.get('/me/telegram'); } catch { tgPanel.remove(); return; }
-  if (!st.on) { tgPanel.remove(); return; }
-  const botUrl = `https://t.me/${st.bot}`;
-  tgPanel.replaceChildren(
-    el('h3', {}, el('span', { class: 'tg-logo', text: '✈' }), el('span', { text: 'Telegram bot' })),
-    el('p', { text: `@${st.bot}: R$ ${st.daily} every day for following our channel and VK group, Premium for Robits or Telegram Stars, and Robits for inviting friends.` }),
-    me.guest ? el('p', { class: 'small muted', text: 'Sign up to link Telegram.' })
-      : st.linked
-        ? el('div', {},
-          el('div', { class: 'row wrap', style: { gap: '8px' } },
-            el('span', { class: 'pill online-pill no-i18n', text: `✓ ${st.linked.username ? '@' + st.linked.username : st.linked.name || 'Telegram'}` }),
-            el('a', { class: 'btn btn-primary tg-btn', href: botUrl, target: '_blank', rel: 'noopener', text: 'Open the bot' }),
-            el('button', { class: 'btn btn-small', text: 'Unlink', onclick: async () => {
-              if (!confirm('Unlink Telegram from this account?')) return;
-              try { await api.post('/me/telegram/unlink'); toast('Telegram unlinked', 'success'); drawTelegram(); } catch (e) { toast(e.message, 'error'); }
-            } })),
-          el('div', { class: 'tg-invite' },
-            el('div', { class: 'small', text: `Invite friends: you get R$ ${st.refInviter}, they get R$ ${st.refInvitee} (invited: ${st.refCount})` }),
-            el('div', { class: 'row', style: { gap: '6px' } },
-              el('input', { class: 'input no-i18n', readonly: true, value: st.invite, onclick: (e) => e.target.select() }),
-              el('button', { class: 'btn btn-small', text: 'Copy', onclick: () => { navigator.clipboard?.writeText(st.invite); toast('Copied!', 'success'); } }))))
-        : el('button', { class: 'btn btn-primary tg-btn', text: 'Link Telegram', onclick: async () => {
-          try {
-            const r = await api.post('/me/telegram/link');
-            window.open(r.url, '_blank', 'noopener');
-            toast('Press START in Telegram, then come back here', 'success');
-            const t0 = Date.now();
-            const poll = setInterval(async () => {
-              const x = await api.get('/me/telegram').catch(() => null);
-              if ((x && x.linked) || Date.now() - t0 > 15 * 60e3) { clearInterval(poll); drawTelegram(); }
-            }, 3000);
-          } catch (e) { toast(e.message, 'error'); }
-        } }));
-}
-drawTelegram();
-
 // ---------------------------------------------------------------- Discord
 // "Playing Robis" in your Discord profile: a small helper app for Windows
 // shows what you play (see server/discordstatus.js).
@@ -172,10 +129,6 @@ style.textContent = `
 .seg { display: flex; gap: 6px; }
 .panel h4 { margin: 16px 0 6px; }
 .discord-panel h3 { display: flex; align-items: center; gap: 8px; }
-.tg-panel h3 { display: flex; align-items: center; gap: 8px; }
-.tg-logo { width: 28px; height: 28px; border-radius: 50%; background: #229ed9; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
-.tg-btn { background: #229ed9; border-color: #229ed9; }
-.tg-invite { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; max-width: 520px; }
 .discord-logo { width: 28px; height: 28px; border-radius: 8px; background: #5865f2; display: inline-flex; padding: 4px; }
 .discord-logo svg { width: 100%; height: 100%; }
 .discord-preview { background: #232428; color: #dbdee1; border-radius: 8px; padding: 10px 12px; max-width: 340px; margin: 10px 0; }

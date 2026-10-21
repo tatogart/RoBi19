@@ -1647,8 +1647,3 @@ html[data-theme="dark"] .lvl-bar { background: #555; }
 .adm-special-form .plates button.on { outline: 2px solid #222; outline-offset: 1px; }
 .adm-special-preview { display: flex; gap: 12px; align-items: flex-start; }
 .adm-special-preview .item-card { width: 150px; flex: none; }
-/* Telegram bot (Control Center) */
-.adm-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
-.adm-stat { background: var(--panel, #fff); border: 1px solid var(--border, #e3e3e3); border-radius: 6px; padding: 8px 14px; display: flex; flex-direction: column; min-width: 110px; }
-.adm-stat b { font-size: 22px; }
-.adm-stat span { font-size: 12px; color: var(--text-light, #777); }

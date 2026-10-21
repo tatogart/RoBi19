@@ -137,7 +137,6 @@ const TABS = {
   schedule: { label: 'Scheduler', group: 'Live', icon: 'clock', draw: drawSchedule, admin: true },
   tools: { label: 'Site Tools', group: 'System', icon: 'bolt', draw: drawSiteTools, admin: true },
   settings: { label: 'Settings', group: 'System', icon: 'gear', draw: drawSettings, admin: true },
-  tgbot: { label: 'Telegram Bot', group: 'System', icon: 'megaphone', draw: drawTgBot, admin: true },
   switches: { label: 'Switches', group: 'System', icon: 'toggle', draw: drawSwitches, admin: true },
   console: { label: 'Console', group: 'System', icon: 'terminal', draw: drawConsole, admin: true },
   log: { label: 'Admin Log', group: 'System', icon: 'list', draw: drawLog },
@@ -1618,59 +1617,6 @@ async function drawSettings() {
         } }) : null,
         discordSteps)),
     el('button', { class: 'btn btn-primary btn-large', text: 'Save settings', onclick: save }));
-}
-
-// ---------------------------------------------------------------- Telegram bot
-// @Robisgame_bot runs inside the server (server/tgbot.js). The token and the
-// VK key are never shown again after saving.
-async function drawTgBot() {
-  body.replaceChildren(spinner());
-  let r;
-  try { r = await api.get('/admin/tgbot'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
-  const S = r.settings;
-  const on = el('input', { type: 'checkbox', checked: !!S.on });
-  const token = el('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: S.hasToken ? 'The token is saved (paste a new one to change it)' : 'Bot token from @BotFather (123456:ABC...)' });
-  const vkToken = el('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: S.hasVkToken ? 'The VK key is saved (paste a new one to change it)' : 'VK service key (to check the VK group)' });
-  const num = (v) => el('input', { class: 'input', type: 'number', min: 0, value: v, style: { width: '120px' } });
-  const daily = num(S.daily), refInviter = num(S.refInviter), refInvitee = num(S.refInvitee), refDayCap = num(S.refDayCap);
-  const stars = Object.fromEntries(r.tiers.map((t) => [t.id, num(S.stars[t.id])]));
-  const field = (label, input) => el('label', { class: 'row', style: { gap: '8px', margin: '4px 0' } }, el('span', { style: { minWidth: '220px' }, text: label }), input);
-  const section = (title, hint, ...kids) => el('div', { class: 'settings-section' }, el('h3', { text: title }), hint ? el('p', { class: 'small muted', text: hint }) : null, ...kids);
-  const save = async (extra = {}) => {
-    try {
-      await api.post('/admin/tgbot', {
-        on: on.checked, token: token.value, vkToken: vkToken.value, daily: +daily.value, refInviter: +refInviter.value, refInvitee: +refInvitee.value, refDayCap: +refDayCap.value,
-        stars: Object.fromEntries(Object.entries(stars).map(([k, i]) => [k, +i.value])), ...extra,
-      });
-      toast('Saved', 'success'); drawTgBot();
-    } catch (e) { toast(e.message, 'error'); }
-  };
-  const st = r.stats;
-  body.replaceChildren(
-    el('div', { class: 'adm-stats' }, ...[['Linked', st.linked], ['Invited', st.invited], ['Daily today', st.dailyToday], ['⭐ Stars earned', st.stars]].map(([k, v]) => el('div', { class: 'adm-stat' }, el('b', { class: 'no-i18n', text: fmtFull(v) }), el('span', { text: k })))),
-    section('Bot', `@${S.username} · ${r.running ? 'running' : 'stopped'}${r.lastError ? ' · last error: ' + r.lastError : ''}`,
-      el('label', { class: 'perm-row' }, on, el('b', { text: 'The bot is on' })),
-      token,
-      el('div', { class: 'row wrap', style: { gap: '6px', marginTop: '6px' } },
-        el('button', { class: 'btn btn-small', text: 'Check the token', onclick: async () => { try { const x = await api.post('/admin/tgbot/test'); toast(`OK: @${x.username}`, 'success'); } catch (e) { toast(e.message, 'error'); } } }),
-        S.hasToken ? el('button', { class: 'btn btn-small btn-red', text: 'Delete the token', onclick: () => confirm('Delete the bot token? The bot stops.') && save({ clearToken: true, token: '' }) }) : null),
-      el('ol', { class: 'discord-steps' },
-        el('li', { text: 'In Telegram open @BotFather -> /mybots -> your bot -> API Token, copy it here and save. Don\'t send the token to anyone.' }),
-        el('li', {}, 'Add the bot as an admin of the channel ', el('b', { class: 'no-i18n', text: r.channel || '(set a Telegram link in Settings -> Social links)' }), ' - otherwise it can\'t see who is subscribed.'),
-        el('li', { text: 'Telegram Stars (Premium for real money) need nothing else: the Stars go to the bot; withdraw them in @BotFather -> Payments / Fragment.' }))),
-    section('Daily reward', `For being subscribed to ${r.channel || 'the Telegram channel'} and the VK group ${r.vkGroup || '(Settings -> Social links)'}.`,
-      field('Robits a day', daily),
-      vkToken,
-      el('p', { class: 'small muted', text: 'Without a VK key only the Telegram channel is checked. The key: vk.com/apps?act=manage -> your app -> Settings -> Service token. Players send their VK page to the bot (/vk).' }),
-      S.hasVkToken ? el('button', { class: 'btn btn-small btn-red', text: 'Delete the VK key', onclick: () => save({ clearVkToken: true, vkToken: '' }) }) : null),
-    section('Invites', 'When a friend makes a new account and links it in the bot. Not for alt accounts (same device or IP).',
-      field('The inviter gets R$', refInviter), field('The friend gets R$', refInvitee), field('Invites a day (max per player)', refDayCap)),
-    section('Premium for Telegram Stars', `30 days. For Robits it costs: ${r.tiers.map((t) => `${t.name} R$ ${fmtFull(t.robits)}`).join(', ')}. 0 = not for Stars.`,
-      ...r.tiers.map((t) => field(`${t.name}: ⭐ Stars`, stars[t.id]))),
-    el('button', { class: 'btn btn-primary btn-large', text: 'Save', onclick: () => save() }),
-    section('Stars payments', null, r.payments.length ? el('table', { class: 'adm-table' }, el('tbody', {}, r.payments.map((p) => el('tr', {},
-      el('td', { class: 'no-i18n', text: p.username }), el('td', { text: p.tier }), el('td', { class: 'no-i18n', text: `⭐ ${p.stars}` }), el('td', { text: timeAgo(p.at) })))))
-      : el('div', { class: 'muted small', text: 'No payments yet.' })));
 }
 
 // Admins give other players rights (see PERMISSIONS in server/api.js), and
