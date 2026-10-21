@@ -1,6 +1,6 @@
 import { initPage, setRobits } from '../layout.js';
 import { api } from '../api.js';
-import { el, icon, fmtFull, timeAgo, toast } from '../ui.js';
+import { el, icon, fmtFull, timeAgo, toast, modal } from '../ui.js';
 
 const me = await initPage({ active: 'robits' });
 const app = document.getElementById('app');
@@ -29,9 +29,23 @@ app.append(el('h1', { text: 'Robits' }),
 // a ready message; a bot answers there for the seller (server/tgshop.js).
 const donate = store.donate;
 const tgUrl = `https://t.me/${donate.telegram}`;
+// online payment (Lolz Market in rubles, CryptoBot in dollars) when it's set up
+const payOpts = await api.get('/economy/pay-options').catch(() => ({ methods: [], amounts: {} }));
+const waysFor = (key) => payOpts.methods.filter((m) => (payOpts.amounts[key] || {})[m.id] > 0);
+const money = (m, a) => (m.id === 'crypto' ? `$${(+a).toFixed(2)}` : `${fmtFull(a)} ₽`);
 async function buy(key) {
-  // the tab opens right on the click (Safari blocks it after waiting for the server)
-  const w = window.open('', '_blank');
+  const ways = waysFor(key);
+  if (ways.length) {
+    const box = modal({
+      title: 'How do you want to pay?', width: 420,
+      body: el('div', { class: 'pay-ways' }, ways.map((m) => el('button', { class: 'btn btn-large pay-way pay-' + m.id, onclick: () => { box.close(); pay(key, m); } },
+        el('b', { class: 'no-i18n', text: m.name }), el('span', { class: 'no-i18n', text: money(m, payOpts.amounts[key][m.id]) })))),
+      buttons: [{ text: 'Cancel' }],
+    });
+    return;
+  }
+  // no online payment: write to the seller in Telegram
+  const w = window.open('', '_blank'); // right on the click (Safari blocks it after waiting for the server)
   if (w) w.opener = null;
   let r;
   try { r = await api.post('/economy/order', { key }); } catch (e) { if (w) w.close(); toast(e.message, 'error'); return; }
@@ -39,6 +53,18 @@ async function buy(key) {
   if (w) w.location.href = r.url; else location.href = r.url;
   toast(`Order ${r.order.code}: send the message in Telegram (it's copied too)`, 'success');
   loadOrders();
+}
+async function pay(key, m) {
+  const w = window.open('', '_blank');
+  if (w) w.opener = null;
+  let r;
+  try { r = await api.post('/economy/order', { key, method: m.id }); } catch (e) { if (w) w.close(); toast(e.message, 'error'); return; }
+  if (w) w.location.href = r.pay.url; else location.href = r.pay.url;
+  toast(`Order ${r.order.code}: pay on ${m.name}, it's given by itself after the payment`, 'success');
+  loadOrders();
+  // check the order while the buyer pays
+  const t0 = Date.now();
+  const iv = setInterval(async () => { await loadOrders(); if (Date.now() - t0 > 20 * 60e3) clearInterval(iv); }, 15000);
 }
 // my orders: what was bought in Telegram and what is still waiting
 const ordersBox = el('div', { class: 'orders-box' });
@@ -50,15 +76,18 @@ async function loadOrders() {
     el('td', { class: 'order-' + o.status, text: ORDER_STATUS[o.status] || o.status }), el('td', { class: 'no-i18n', text: o.giftCode || '' }))))] : []));
 }
 loadOrders();
-const priceTag = (p) => el('div', { class: 'donate-price', text: p || 'Price in Telegram' });
+const onlinePrice = (key) => waysFor(key).map((m) => money(m, payOpts.amounts[key][m.id])).join(' · ');
+const priceTag = (p, key) => el('div', { class: 'donate-price no-i18n', text: (key && onlinePrice(key)) || p || 'Price in Telegram' });
 const packs = el('div', { class: 'donate-packs' }, donate.packs.map((p, i) => el('div', { class: 'panel donate-pack' + (i === 2 ? ' best' : '') },
   i === 2 ? el('div', { class: 'donate-tag', text: 'Popular' }) : null,
   el('div', { class: 'donate-amount' }, icon('robits', 'robits-icon'), el('span', { text: fmtFull(p.robits) })),
-  priceTag(p.price),
+  priceTag(p.price, 'r' + p.robits),
   el('button', { class: 'btn btn-green', text: 'Buy', onclick: () => buy('r' + p.robits) }))));
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Buy Robits' }),
-  el('p', { class: 'muted small' }, 'Support Robis! Press Buy: we open ', el('a', { href: tgUrl, target: '_blank', rel: 'noopener', class: 'no-i18n', text: '@' + donate.telegram }),
-    ' in Telegram with a ready message and an order number. Pay there and you get your Robits.'),
+  payOpts.methods.length
+    ? el('p', { class: 'muted small', text: `Support Robis! Press Buy and pay with ${payOpts.methods.map((m) => m.name).join(' or ')}: your Robits come by themselves a minute after the payment.` })
+    : el('p', { class: 'muted small' }, 'Support Robis! Press Buy: we open ', el('a', { href: tgUrl, target: '_blank', rel: 'noopener', class: 'no-i18n', text: '@' + donate.telegram }),
+      ' in Telegram with a ready message and an order number. Pay there and you get your Robits.'),
   packs, ordersBox);
 
 // ---------------------------------------------------------------- gift cards
@@ -71,8 +100,8 @@ const giftBox = el('div', { class: 'gift-grid' }, donate.giftcards.map((g) => el
     el('div', { class: 'gift-label', text: g.membership ? 'Premium · 30 days' : 'Robits' }),
     el('div', { class: 'gift-ribbon', text: 'GIFT CARD' })),
   el('div', { class: 'gift-buy' },
-    g.price ? el('div', { class: 'donate-price', style: { textAlign: 'center' }, text: g.price }) : null,
-    el('button', { class: 'btn btn-green', text: 'Buy in Telegram', onclick: () => buy(g.key) })))));
+    onlinePrice(g.key) || g.price ? el('div', { class: 'donate-price no-i18n', style: { textAlign: 'center' }, text: onlinePrice(g.key) || g.price }) : null,
+    el('button', { class: 'btn btn-green', text: waysFor(g.key).length ? 'Buy' : 'Buy in Telegram', onclick: () => buy(g.key) })))));
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Gift Cards' }),
   el('p', { class: 'muted small', text: 'Give Robits or Premium to a friend. Gift cards are sold in Telegram: you get a code, your friend redeems it on the Promo Codes page.' }),
   giftBox);
@@ -96,7 +125,7 @@ const plans = el('div', { class: 'plans' }, store.memberships.map((m) => {
 function planBuy(m, current) {
   const d = donate.memberships.find((x) => x.id === m.id) || {};
   return el('div', { class: 'plan-buy' },
-    el('button', { class: 'btn btn-small btn-green', text: d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(m.id) }));
+    el('button', { class: 'btn btn-small btn-green', text: onlinePrice(m.id) ? `Buy · ${onlinePrice(m.id)}` : d.price ? `Telegram · ${d.price}` : 'Buy in Telegram', onclick: () => buy(m.id) }));
 }
 app.append(el('h2', { style: { marginTop: '28px' }, text: 'Premium' }),
   el('p', { class: 'muted small', text: 'Premium replaced Builders Club in 2020. Buy it in Telegram or get it from a promo code.' }), plans);
@@ -118,6 +147,10 @@ const style = document.createElement('style');
 style.textContent = `
 .robits-icon.big { width: 38px; height: 38px; }
 .orders-box { margin-top: 14px; }
+.pay-ways { display: flex; flex-direction: column; gap: 10px; }
+.pay-way { display: flex; justify-content: space-between; align-items: center; width: 100%; color: #fff; }
+.pay-lzt { background: #1f8f4e; border-color: #1f8f4e; }
+.pay-crypto { background: #229ed9; border-color: #229ed9; }
 .orders-box h3 { margin: 6px 0; }
 .order-done { color: #02b757; font-weight: 700; }
 .order-cancelled, .order-expired { color: #999; }

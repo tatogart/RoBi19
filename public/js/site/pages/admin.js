@@ -124,7 +124,7 @@ const TABS = {
   spin: { label: 'Daily Spin', group: 'Economy', icon: 'wheel', draw: drawSpin, admin: true },
   sales: { label: 'Sales', group: 'Economy', icon: 'tag', draw: drawSales, admin: true },
   economy: { label: 'Economy', group: 'Economy', icon: 'coins', draw: drawEconomy, admin: true },
-  tgshop: { label: 'Telegram Shop', group: 'Economy', icon: 'megaphone', draw: drawTgShop, admin: true },
+  tgshop: { label: 'Shop & Payments', group: 'Economy', icon: 'megaphone', draw: drawTgShop, admin: true },
   progress: { label: 'Quests & Levels', group: 'Economy', icon: 'star', draw: drawProgress, admin: true },
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
@@ -1635,8 +1635,29 @@ async function drawTgShop() {
   const pay = el('textarea', { class: 'input no-i18n', rows: 3 });
   pay.value = S.payText;
   const section = (title, hint, ...kids) => el('div', { class: 'settings-section' }, el('h3', { text: title }), hint ? el('p', { class: 'small muted', text: hint }) : null, ...kids);
+  // online payments: Lolz Market (rubles) and CryptoBot (dollars)
+  const lztToken = el('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: S.lzt.hasToken ? 'The token is saved (paste a new one to change it)' : 'Lolz Market API token (with the "invoice" scope)' });
+  const lztMerchant = el('input', { class: 'input', type: 'number', min: 1, value: S.lzt.merchantId, placeholder: 'Merchant ID', style: { width: '160px' } });
+  const lztTest = el('input', { type: 'checkbox', checked: S.lzt.test });
+  const cpToken = el('input', { class: 'input', type: 'password', autocomplete: 'off', placeholder: S.cryptopay.hasToken ? 'The token is saved (paste a new one to change it)' : 'Crypto Pay API token (123456:AA...)' });
+  const cpTest = el('input', { type: 'checkbox', checked: S.cryptopay.testnet });
+  const amountIns = {};
+  const priceRows = r.products.map((p) => {
+    const a = S.amounts[p.key] || {};
+    amountIns[p.key] = { rub: el('input', { class: 'input', type: 'number', min: 0, step: 1, value: a.rub || '', placeholder: '₽', style: { width: '110px' } }), usd: el('input', { class: 'input', type: 'number', min: 0, step: 0.01, value: a.usd || '', placeholder: '$', style: { width: '110px' } }) };
+    return el('tr', {}, el('td', { text: p.name }), el('td', {}, amountIns[p.key].rub, ' ₽'), el('td', {}, '$ ', amountIns[p.key].usd));
+  });
   const save = async (extra = {}) => {
-    try { await api.post('/admin/tgshop', { on: on.checked, token: token.value, payText: pay.value, ...extra }); toast('Saved', 'success'); drawTgShop(); } catch (e) { toast(e.message, 'error'); }
+    try {
+      await api.post('/admin/tgshop', {
+        on: on.checked, token: token.value, payText: pay.value,
+        lzt: { token: lztToken.value, merchantId: +lztMerchant.value, test: lztTest.checked },
+        cryptopay: { token: cpToken.value, testnet: cpTest.checked },
+        amounts: Object.fromEntries(Object.entries(amountIns).map(([k, x]) => [k, { rub: +x.rub.value, usd: +x.usd.value }])),
+        ...extra,
+      });
+      toast('Saved', 'success'); drawTgShop();
+    } catch (e) { toast(e.message, 'error'); }
   };
   const act = async (o, op) => {
     if (op === 'give' && !confirm(`Give ${o.item} to ${o.username}? (only after the payment came)`)) return;
@@ -1653,14 +1674,28 @@ async function drawTgShop() {
         el('li', { text: '@BotFather -> /mybots -> the bot -> Bot Settings -> Business Mode: turn it on.' }),
         el('li', {}, 'On your account ', el('b', { class: 'no-i18n', text: '@' + S.seller }), ' (Telegram Premium needed): Settings -> Telegram Business -> Chat automation -> the bot\'s @name, "All private chats", allow it to reply. The buyers write to this account (Robits page; change it in Promo Codes / donate settings).'),
         el('li', { text: 'Done. The bot answers only messages with an order number (RB-12345). When the money came, write "+" in that chat: the order is given. "-" cancels it.' }))),
-    section('How to pay', 'The bot sends this to every buyer with the order and its price.', pay),
+    section('Lolz Market (rubles)', 'Buyers pay on lzt.market; paid orders are given by themselves (checked every 20 seconds).',
+      lztToken,
+      el('div', { class: 'row wrap', style: { gap: '10px', marginTop: '6px' } }, lztMerchant, el('label', { class: 'perm-row' }, lztTest, el('span', { text: 'Test invoices' })),
+        S.lzt.hasToken ? el('button', { class: 'btn btn-small btn-red', text: 'Delete the token', onclick: () => save({ lzt: { clearToken: true } }) }) : null),
+      el('ol', { class: 'discord-steps' },
+        el('li', { text: 'lzt.market -> Settings -> API: make an API client and a token with the "invoice" scope. Paste the token here.' }),
+        el('li', { text: 'lzt.market -> Merchants: make a merchant (your shop) and write its ID here.' }))),
+    section('CryptoBot (dollars)', 'Prices in US dollars, paid in USDT, TON, BTC... in @CryptoBot. Paid orders are given by themselves.',
+      cpToken,
+      el('div', { class: 'row wrap', style: { gap: '10px', marginTop: '6px' } }, el('label', { class: 'perm-row' }, cpTest, el('span', { text: 'Testnet (@CryptoTestnetBot)' })),
+        S.cryptopay.hasToken ? el('button', { class: 'btn btn-small btn-red', text: 'Delete the token', onclick: () => save({ cryptopay: { clearToken: true } }) }) : null),
+      el('ol', { class: 'discord-steps' }, el('li', { text: '@CryptoBot -> Crypto Pay -> Create App: copy the API token here.' }))),
+    section('Prices', 'An empty price = can\'t be paid that way. The text prices for the Robits page are in Promo Codes -> donate settings.', el('table', { class: 'adm-table' }, el('tbody', {}, priceRows))),
+    r.payError ? el('p', { class: 'small', style: { color: '#d0021b' }, text: 'Last payment check error: ' + r.payError }) : null,
+    section('How to pay (without online payment)', 'Sent by the Telegram bot when no online way to pay is set up.', pay),
     el('button', { class: 'btn btn-primary btn-large', text: 'Save', onclick: () => save() }),
     section(`Orders (${r.orders.length})`, 'You can also give or cancel orders here, without the bot.',
       r.orders.length ? el('table', { class: 'adm-table' }, el('tbody', {}, r.orders.map((o) => el('tr', {},
         el('td', { class: 'no-i18n', text: o.code }),
         el('td', { class: 'no-i18n', text: o.username }),
         el('td', { text: o.item }),
-        el('td', { class: 'no-i18n', text: [o.price, o.tgUser].filter(Boolean).join(' · ') }),
+        el('td', { class: 'no-i18n', text: [o.paidWith || Object.keys(o.invoices || {}).map((m) => (m === 'lzt' ? 'Lolz' : 'CryptoBot')).join('/'), o.price, o.tgUser].filter(Boolean).join(' · ') }),
         el('td', {}, el('span', { class: 'pill ' + (ORDER_LABEL[o.status] || ['', ''])[1] + '-pill', text: (ORDER_LABEL[o.status] || [o.status])[0] })),
         el('td', { class: 'small muted', text: timeAgo(o.created) }),
         el('td', {}, ['new', 'waiting', 'check'].includes(o.status) ? el('div', { class: 'row', style: { gap: '4px' } },
