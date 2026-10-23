@@ -302,7 +302,123 @@ export class GameServer {
     this.log('info', `${user.username} joined the game`);
     if (players.CharacterAutoLoads) this.loadCharacter(player);
     this._huntJoin(session);
+    this._halloweenJoin(session);
     return session;
+  }
+
+  // ------------------------------------------------------------ Halloween 2026
+  // A global update of every game while the event is on (server/halloween.js):
+  // dusk light and purple fog, jack-o'-lanterns, gravestones, bats, and
+  // candies hidden around the map. Candy goes to the player's account.
+  _halloweenJoin(session) {
+    const hw = this.manager && this.manager.halloween;
+    if (!hw || !hw.active() || this.isTest || session.bot) return;
+    const h = this.backend.hunt;
+    if (h && h.isHub && h.isHub()) return;
+    if (!this._hw) this._halloweenStart();
+    setTimeout(() => {
+      if (this.sessions.get(session.user.id) === session) this.send(session, { t: 'sys', text: '🎃 Halloween update! Candies are hidden in this game: collect them and spend them in the Halloween shop.' });
+    }, 2500);
+  }
+  _halloweenSpot(minDist) {
+    try { return findHuntSpot(this.game.Workspace, Math.random, { minDist, ground: true }) || findHuntSpot(this.game.Workspace, Math.random, { minDist: 0, ground: true }); } catch { return null; }
+  }
+  _halloweenStart() {
+    this._hw = { candies: new Set(), folder: null };
+    const L = this.game.GetService('Lighting');
+    const t = +L.ClockTime;
+    if (t > 6 && t < 17.5) L.ClockTime = 17.9; // daytime games turn to dusk
+    L.FogColor = Color3.fromRGB(70, 35, 80);
+    L.FogEnd = Math.min(+L.FogEnd || 100000, 700);
+    const folder = createInstance('Folder');
+    folder.Name = 'Halloween';
+    folder.Parent = this.game.Workspace;
+    this._hw.folder = folder;
+    const add = (name, size, pos, color, o = {}) => {
+      const p = createInstance('Part');
+      p.Name = name;
+      p.Size = new Vector3(...size);
+      p.CFrame = CFrame.fromPosition(pos);
+      p.Color = Color3.fromHex(color);
+      p.Material = o.material || 'SmoothPlastic';
+      if (o.shape) p.Shape = o.shape;
+      p.Anchored = true;
+      p.CanCollide = false;
+      if (o.transparency) p.Transparency = o.transparency;
+      p.Parent = o.parent || folder;
+      return p;
+    };
+    // jack-o'-lanterns, gravestones and bats
+    for (let i = 0; i < 7; i++) {
+      const s = this._halloweenSpot(12);
+      if (!s) break;
+      const pk = add('JackOLantern', [3, 2.6, 3], s.add(new Vector3(0, 1.3, 0)), '#ff7a12', { shape: 'Ball' });
+      add('Stem', [0.4, 0.8, 0.4], s.add(new Vector3(0, 2.9, 0)), '#3f6b1f', { parent: pk });
+      const light = createInstance('PointLight');
+      light.Color = Color3.fromHex('#ff9a3c');
+      light.Range = 14;
+      light.Brightness = 1.2;
+      light.Parent = pk;
+    }
+    for (let i = 0; i < 5; i++) {
+      const s = this._halloweenSpot(15);
+      if (!s) break;
+      add('Gravestone', [2.4, 3.2, 0.7], s.add(new Vector3(0, 1.6, 0)), '#7d7d86', { material: 'Slate' });
+    }
+    for (let i = 0; i < 3; i++) {
+      const s = this._halloweenSpot(8);
+      if (!s) break;
+      const bat = add('Bat', [1, 1, 1], s.add(new Vector3(0, 12 + i * 3, 0)), '#000000', { transparency: 1 });
+      const tag = createInstance('BillboardText');
+      tag.Text = '🦇';
+      tag.Parent = bat;
+    }
+    this._halloweenCandies();
+    this._hwTimer = setInterval(() => { try { this._halloweenCandies(); } catch (e) { this.log('warn', 'Halloween: ' + e.message); } }, 8000);
+  }
+  // 6 candies and a golden one (5 candy) somewhere in the map, far from the spawn
+  _halloweenCandies() {
+    const hw = this._hw;
+    if (!hw || this.closed) return;
+    for (const c of [...hw.candies]) if (c._destroyed) hw.candies.delete(c);
+    const COLORS = ['#ff3b8d', '#7a3cff', '#3ddc84', '#ffd23f', '#00c2ff', '#ff7a12'];
+    let golden = [...hw.candies].some((c) => c._golden);
+    while (hw.candies.size < 7) {
+      const s = this._halloweenSpot(30);
+      if (!s) break;
+      const gold = !golden;
+      golden = true;
+      const c = createInstance('Part');
+      c.Name = gold ? 'GoldenCandy' : 'Candy';
+      c.Size = new Vector3(gold ? 2.2 : 1.6, gold ? 2.2 : 1.6, gold ? 2.2 : 1.6);
+      c.Shape = 'Ball';
+      c.Material = 'Neon';
+      c.Color = Color3.fromHex(gold ? '#ffc400' : COLORS[Math.floor(Math.random() * COLORS.length)]);
+      c.Anchored = true;
+      c.CanCollide = false;
+      c.CFrame = CFrame.fromPosition(s.add(new Vector3(0, 1.6, 0)));
+      c._golden = gold;
+      const glow = createInstance('PointLight');
+      glow.Color = c.Color;
+      glow.Range = 8;
+      glow.Parent = c;
+      c.Parent = hw.folder && !hw.folder._destroyed ? hw.folder : this.game.Workspace;
+      hw.candies.add(c);
+    }
+  }
+  _halloweenTouched(session, candy) {
+    const hw = this._hw;
+    const m = this.manager && this.manager.halloween;
+    if (!hw || !m || !hw.candies.has(candy) || candy._destroyed) return;
+    const r = m.collect(session.user.id, candy._golden ? 5 : 1);
+    if (!r) return;
+    if (r.capped && !r.got) {
+      if (!session.candyCapWarned) { session.candyCapWarned = true; this.send(session, { t: 'sys', text: '🍬 That\'s all the candy for today! Come back tomorrow.' }); }
+      return;
+    }
+    hw.candies.delete(candy);
+    candy.Destroy();
+    this.send(session, { t: 'candy', got: r.got, candy: r.candy, golden: !!candy._golden });
   }
 
   // ------------------------------------------------------------ The Hunt
@@ -1589,6 +1705,12 @@ export class GameServer {
         const who = limb._parent && limb._parent._isCharacter && [...this.sessions.values()].find((x) => x.character === limb._parent);
         if (who) this._questObjTouched(who, this.runes.indexOf(rune));
       }
+      if (this._hw && (this._hw.candies.has(a) || this._hw.candies.has(b))) {
+        const candy = this._hw.candies.has(a) ? a : b;
+        const limb = candy === a ? b : a;
+        const who = limb._parent && limb._parent._isCharacter && [...this.sessions.values()].find((x) => x.character === limb._parent);
+        if (who) this._halloweenTouched(who, candy);
+      }
       if (this.huntToken && (a === this.huntToken || b === this.huntToken)) {
         const limb = a === this.huntToken ? b : a;
         const who = limb._parent && limb._parent._isCharacter && [...this.sessions.values()].find((x) => x.character === limb._parent);
@@ -1720,6 +1842,7 @@ export class GameServer {
     clearInterval(this.huntTimer);
     clearInterval(this.huntScan);
     clearInterval(this.questTimer);
+    clearInterval(this._hwTimer);
     clearInterval(this._disco);
     for (const s of [...this.sessions.values()]) {
       this.send(s, { t: 'shutdown', msg });

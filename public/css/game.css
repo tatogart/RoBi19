@@ -358,3 +358,7 @@ body:has(.game-root.touch) .room-hint { display: none; }
 .game-root.touch.force-landscape .chat { width: min(320px, 45%); }
 .game-root.force-landscape .use-btn { right: 130px; bottom: 28px; }
 .game-root.force-landscape .fly-down-btn { right: 210px; bottom: 28px; }
+
+/* Halloween 2026: picked up candy */
+.candy-pill { position: absolute; left: 50%; top: 92px; transform: translate(-50%, -10px); background: linear-gradient(135deg, #ff7a12, #7a3cff); color: #fff; font-weight: 800; padding: 6px 16px; border-radius: 18px; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 6; box-shadow: 0 2px 10px rgba(0,0,0,.4); white-space: nowrap; }
+.candy-pill.show { opacity: 1; transform: translate(-50%, 0); }

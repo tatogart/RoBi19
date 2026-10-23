@@ -2729,3 +2729,49 @@ test('more classics: Sword Fight on the Heights, Mining Simulator, The Robis Ele
     c.ws.close();
   }
 });
+
+test('Halloween: every game gets the spooky update, candy is collected and buys event items', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'CandyKid', password: 'secret123' });
+  assert.equal((await call('POST', '/admin/halloween', { on: true }, p.cookie)).status, 403);
+  assert.equal((await call('POST', '/admin/halloween', { on: true, days: 10, cap: 50 }, admin)).data.active, true);
+  assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.halloween, true);
+  const hw = (await call('GET', '/halloween', null, p.cookie)).data;
+  assert.equal(hw.shop.length, 6);
+  assert.ok(hw.shop.every((i) => i.special && i.special.label === 'HALLOWEEN' && i.offsale));
+  // a game: dusk, decorations, candies
+  const maker = (await call('POST', '/auth/signup', { username: 'CandyMaker', password: 'secret123' })).cookie;
+  const gm = (await call('POST', '/games', { name: 'Spooky Test', template: 'baseplate' }, maker)).data.game;
+  await call('PATCH', `/games/${gm.id}`, { isPublic: true }, maker);
+  const c = await join(p.cookie, { placeId: gm.id });
+  await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  const candies = () => {
+    const out = [];
+    const walk = (n) => { if (!n) return; if (n.c === 'Part' && (n.p.Name === 'Candy' || n.p.Name === 'GoldenCandy')) out.push(n); for (const k of n.ch || []) walk(k); };
+    for (const m of c.inbox) {
+      if (m.t === 'welcome') for (const n of m.snapshot) walk(n);
+      if (m.t === 'tick') for (const o of m.ops) if (o[0] === 'add') walk(o[2]);
+    }
+    return out;
+  };
+  await c.wait(() => candies().length >= 1, 4000).catch(() => {});
+  const list = candies();
+  assert.ok(list.length >= 1, 'candies in the game');
+  assert.ok(JSON.stringify(c.inbox).includes('JackOLantern'));
+  const cd = list[0];
+  c.ws.send(JSON.stringify({ t: 'move', p: [cd.p.CFrame[0], cd.p.CFrame[1], cd.p.CFrame[2]], ry: 0, a: 'idle' }));
+  const got = await c.wait((m) => m.t === 'candy', 5000);
+  assert.ok(got.got >= 1);
+  const errors = c.inbox.filter((m) => m.t === 'log' && m.level === 'error');
+  assert.equal(errors.length, 0, JSON.stringify(errors.slice(0, 3)));
+  c.ws.close();
+  // the shop: not enough candy, then enough
+  const witch = hw.shop.find((i) => i.name === 'Spooky Witch Hat');
+  assert.equal((await call('POST', '/halloween/buy', { itemId: witch.id }, p.cookie)).status, 400);
+  srv.db.data.users[p.data.user.id].candy = 100;
+  assert.equal((await call('POST', '/halloween/buy', { itemId: witch.id }, p.cookie)).status, 200);
+  assert.equal((await call('GET', '/halloween', null, p.cookie)).data.candy, 40);
+  assert.equal((await call('POST', `/catalog/${witch.id}/buy`, {}, p.cookie)).status, 400); // not for Robits
+  await call('POST', '/admin/halloween', { on: false }, admin);
+  assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.halloween, false);
+});

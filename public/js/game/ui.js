@@ -563,6 +563,21 @@ export class HUD {
     }
   }
 
+  // Halloween: a candy was picked up
+  candy(m) {
+    if (!this.candyPill) {
+      this.candyPill = h('div', 'candy-pill');
+      this.el.append(this.candyPill);
+    }
+    const p = this.candyPill;
+    p.textContent = `${m.golden ? '🌟' : '🍬'} +${m.got}  ·  ${m.candy} candy`;
+    p.classList.remove('show');
+    void p.offsetWidth;
+    p.classList.add('show');
+    clearTimeout(this._candyT);
+    this._candyT = setTimeout(() => p.classList.remove('show'), 2200);
+  }
+
   // player:ShowMessage(): big text in the middle of the screen for a moment.
   bigMessage(text, secs = 3, color = '#ffffff') {
     if (this.bigMsg) this.bigMsg.remove();

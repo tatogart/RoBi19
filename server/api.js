@@ -21,6 +21,7 @@ import { installAwards } from './awards.js';
 import { installClassic } from './classic.js';
 import { installProgress, levelOf } from './progress.js';
 import { installSpecial } from './special.js';
+import { installHalloween } from './halloween.js';
 import { installTgBot } from './tgbot.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
@@ -428,6 +429,7 @@ export function createApi(db, manager, opts = {}) {
     warning: u.pendingWarning || null, // a warning from the staff not seen yet (a popup)
     overwatch: hooks.overwatchAccess(u), // Robis Overwatch in the menu
     awards: hooks.awardsLive ? hooks.awardsLive() : null, // Robis Awards in the menu (voting or results)
+    halloween: hooks.halloweenActive ? hooks.halloweenActive() : false, // Halloween in the menu
     guest: !!u.guest, // a guest account (see /auth/guest)
     levelUp: u.levelUp || null, // a level-up popup not seen yet (server/progress.js)
     restrictions: hooks.restriction ? hooks.restriction(u) : { mute: 0, trade: 0 },
@@ -2696,6 +2698,7 @@ export function createApi(db, manager, opts = {}) {
   installProgress(api, { db, manager, requireUser, requireAdmin, bad, log, hooks });
   installClassic(api, { db, manager, requireAdmin, requirePerm, bad, log, hooks, adminUser, deleteAccount, isBanned, STARTER: { items: STARTER_ITEMS, wearing: STARTER_WEARING, body: STARTER_BODY } });
   installSpecial(api, { db, requireAdmin, bad, giveSerial, hooks });
+  installHalloween(api, { db, manager, requireUser, requireAdmin, bad, log, hooks, publicItem });
   hooks.giveMembership = (u, tier, days) => giveMembership(u, tier, days);
   installTgBot(api, { db, requireUser, requireAdmin, bad, log, hooks, MEMBERSHIPS, MEMBERSHIP_COST, DONATE_PACKS });
   if (manager) manager.tgbot = hooks.tgbot;

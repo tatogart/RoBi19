@@ -74,6 +74,8 @@ export function adBanner() {
       el('span', { class: 'lmn-chat' }, el('i', { text: 'Hi! 👋' }), el('i', { class: 'me', text: 'Play Robis?' })),
       el('span', { class: 'lmn-btn', text: 'Chat now!' })));
 }
+// The Hunt's icon: a golden compass
+const HUNT_ICON = '<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10" fill="#2b1d06" stroke="#ffc400" stroke-width="2.4"/><circle cx="12" cy="12" r="6.8" fill="none" stroke="#ffe48a" stroke-width=".8" stroke-dasharray="1.4 1.9"/><path d="M12 4.6 14.2 12h-4.4z" fill="#ff4b3e"/><path d="M12 19.4 9.8 12h4.4z" fill="#f5f5f5"/><circle cx="12" cy="12" r="1.5" fill="#ffc400"/></svg>';
 export let SITE = null;
 
 export async function initPage({ requireAuth = true, active = '', nav = true } = {}) {
@@ -110,7 +112,7 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
   else if (me && me.levelUp) showLevelUp(me.levelUp);
   // Inside a Discord Activity: what the player is doing goes in their Discord status.
   if (site && site.discord && inDiscord()) {
-    const where = { home: 'On the home page', games: 'Looking for a game', catalog: 'Shopping in the catalog', avatar: 'Changing their avatar', create: 'Creating', hunt: 'On The Hunt', profile: 'Looking at a profile', trades: 'Trading', groups: 'In groups', admin: 'In the Admin Panel' }[active] || 'Browsing Robis';
+    const where = { home: 'On the home page', games: 'Looking for a game', catalog: 'Shopping in the catalog', avatar: 'Changing their avatar', create: 'Creating', hunt: 'On The Hunt', halloween: 'At the Halloween event', profile: 'Looking at a profile', trades: 'Trading', groups: 'In groups', admin: 'In the Admin Panel' }[active] || 'Browsing Robis';
     setDiscordStatus(site.discord.appId, where, me ? `as ${me.username}` : undefined);
   }
   showAnnouncement();
@@ -223,7 +225,8 @@ function buildNav(me, active) {
   nav.append(el('div', { class: 'section-label', text: 'Events' }));
   if (me.awards) nav.append(el('a', { href: '/awards', class: 'awards-nav' + (active === 'awards' ? ' active' : '') }, el('span', { class: 'ow-nav-ic', text: '🏆' }), el('span', { text: 'Robis Awards' }), me.awards.status === 'voting' ? el('span', { class: 'count awards-vote', text: 'VOTE' }) : null));
   if (me.overwatch) nav.append(el('a', { href: '/overwatch', class: active === 'overwatch' ? 'active' : '' }, el('span', { class: 'ow-nav-ic', text: '🕵️' }), el('span', { text: 'Overwatch' })));
-  if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-dot' }), el('span', { text: 'The Hunt' })));
+  if (me.halloween) nav.append(el('a', { href: '/halloween', class: 'halloween-nav' + (active === 'halloween' ? ' active' : '') }, el('span', { class: 'ow-nav-ic', text: '🎃' }), el('span', { text: 'Halloween' }), el('span', { class: 'count hw-new', text: 'NEW' })));
+  if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-ic', html: HUNT_ICON }), el('span', { text: 'The Hunt' })));
   nav.append(el('a', { href: '/game?id=2' }, icon('star'), el('span', { text: 'Obby Week!' })));
   nav.append(el('a', { href: '#', class: 'spin-nav', onclick: (e) => { e.preventDefault(); import('./fun.js').then((f) => f.spinDialog(setRobits)); } }, el('span', { class: 'spin-dot' }), el('span', { text: 'Daily Spin' })));
   document.addEventListener('click', (e) => {

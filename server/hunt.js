@@ -490,6 +490,12 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     try { launch('prep_github', { public: true, endsAt: Date.now() + 21 * 86400e3 }); } catch (e) { console.warn('IGA 26 did not start:', e.message); }
     db.save();
   }
+  // IGA 26 is over (Halloween is next, see server/halloween.js): it ends once
+  if (!testing && !H.igaEnded) {
+    H.igaEnded = true;
+    if (H.current === 'prep_github' && live()) endEvent('IGA 26 is over');
+    db.save();
+  }
   tick();
   syncHub();
   const timer = setInterval(() => { try { tick(); syncHub(); } catch { /* try again */ } }, 20e3);

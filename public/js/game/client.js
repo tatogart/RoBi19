@@ -263,6 +263,7 @@ export class GameClient {
         return;
       case 'emote': { const v = this.views.get(m.userId); if (v) v.emote(m.emote); return; }
       case 'harpoon': this.onHarpoon(m); return;
+      case 'candy': this.hud.candy(m); sound.pop(); return;
       case 'teleport': {
         if (this.local) {
           const [x, y, z] = m.cf;

@@ -21,6 +21,14 @@ app.append(el('div', { class: 'section greet greet-card compact' },
     levelBox,
     window.ROBIS_STANDALONE ? el('button', { class: 'btn btn-green btn-small', style: { marginTop: '8px' }, text: 'Join a friend', onclick: joinFriendDialog }) : null)));
 
+// Halloween 2026: every game got a spooky update
+if (me.halloween) {
+  app.append(el('a', { class: 'section hw-banner', href: '/halloween' },
+    el('span', { class: 'hw-banner-ic', text: '🎃' }),
+    el('span', { class: 'hw-banner-text' }, el('b', { text: 'Halloween is here!' }), el('span', { text: 'Every game got a spooky update. Find candies in any game and get Halloween items.' })),
+    el('span', { class: 'btn btn-small hw-banner-btn', text: 'Open' })));
+}
+
 // ---------------------------------------------------------------- today
 const strip = el('div', { class: 'section today-strip' });
 app.append(strip);

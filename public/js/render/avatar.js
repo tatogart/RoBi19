@@ -628,6 +628,57 @@ const HATS = {
     g.add(M(new THREE.SphereGeometry(0.1, 8, 6), mat(d.accent), 0, 0.95, -0.5));
     return g;
   },
+  // ---- Halloween 2026 (bought with candy)
+  pumpkinhead(d) {
+    const g = new THREE.Group();
+    const skin = mat(d.color || '#ff7a12', { roughness: 0.7 });
+    const rib = mat(d.accent2 || '#e2620a', { roughness: 0.7 });
+    const body = M(new THREE.SphereGeometry(0.88, 24, 16), skin, 0, 0.05, 0);
+    body.scale.set(1.12, 0.95, 1.08);
+    g.add(body);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const r = M(new THREE.SphereGeometry(0.42, 12, 10), rib, Math.cos(a) * 0.62, 0.05, Math.sin(a) * 0.6);
+      r.scale.set(0.55, 1.85, 0.55);
+      g.add(r);
+    }
+    g.add(M(new THREE.CylinderGeometry(0.08, 0.12, 0.35, 8), mat('#3f6b1f'), 0.04, 0.98, 0, 0, 0, -0.2));
+    // the carved face glows
+    const glow = new THREE.MeshStandardMaterial({ color: d.accent || '#ffd23f', emissive: new THREE.Color(d.accent || '#ffd23f'), emissiveIntensity: 1.2 });
+    for (const sx of [-1, 1]) {
+      const eye = M(new THREE.ConeGeometry(0.16, 0.24, 3), glow, sx * 0.3, 0.25, -0.9, 0, 0, Math.PI);
+      eye.scale.z = 0.3;
+      g.add(eye);
+    }
+    const mouth = M(new THREE.BoxGeometry(0.62, 0.14, 0.08), glow, 0, -0.18, -0.92);
+    g.add(mouth);
+    for (const sx of [-0.18, 0.18]) g.add(M(new THREE.BoxGeometry(0.1, 0.1, 0.08), skin, sx, -0.13, -0.95));
+    return g;
+  },
+  batwings(d) {
+    const g = new THREE.Group();
+    g.userData.attach = 'torso';
+    const wing = mat(d.color || '#2b1840', { roughness: 0.8, side: THREE.DoubleSide });
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(1.9, 0.9);
+    shape.lineTo(1.6, 0.2);
+    shape.lineTo(1.25, 0.45);
+    shape.lineTo(1.0, -0.05);
+    shape.lineTo(0.7, 0.2);
+    shape.lineTo(0.45, -0.25);
+    shape.lineTo(0, -0.1);
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.04, bevelEnabled: false });
+    for (const sx of [-1, 1]) {
+      const w = new THREE.Mesh(geo, wing);
+      w.scale.set(sx, 1, 1);
+      w.position.set(sx * 0.25, 0.35, 0.58);
+      w.rotation.set(0, sx * -0.35, 0);
+      g.add(w);
+    }
+    g.add(M(new THREE.SphereGeometry(0.14, 8, 6), mat(d.accent || '#7a3cff'), 0, 0.35, 0.58));
+    return g;
+  },
   witch(d) {
     const g = new THREE.Group();
     g.add(M(new THREE.CylinderGeometry(1.05, 1.05, 0.05, 28), mat(d.color), 0, 0.58, 0));
@@ -1598,6 +1649,20 @@ const PETS = {
     const jet = M(new THREE.ConeGeometry(0.18, 0.4, 8), glow, 0, 0.0, 0, Math.PI, 0, 0);
     g.add(jet);
     g.userData = { fly: true, head, jet };
+    return g;
+  },
+  // a floating jack-o'-lantern with a little witch hat (Halloween 2026)
+  jackpet(d) {
+    const g = new THREE.Group();
+    const body = M(new THREE.SphereGeometry(0.55, 18, 12), mat(d.color || '#ff7a12', { roughness: 0.7 }), 0, 1, 0);
+    body.scale.set(1.15, 0.92, 1.1);
+    g.add(body);
+    const glow = new THREE.MeshStandardMaterial({ color: '#ffd23f', emissive: new THREE.Color('#ffd23f'), emissiveIntensity: 1.3 });
+    for (const sx of [-1, 1]) g.add(M(new THREE.ConeGeometry(0.1, 0.16, 3), glow, sx * 0.2, 1.1, -0.56, 0, 0, Math.PI));
+    g.add(M(new THREE.BoxGeometry(0.4, 0.09, 0.06), glow, 0, 0.86, -0.58));
+    g.add(M(new THREE.CylinderGeometry(0.6, 0.6, 0.04, 20), mat(d.accent || '#3b1f5c'), 0, 1.5, 0));
+    g.add(M(new THREE.ConeGeometry(0.32, 0.8, 16), mat(d.accent || '#3b1f5c'), 0, 1.9, 0.05, 0.15, 0, 0));
+    g.userData = { fly: true, sway: true };
     return g;
   },
   ghost(d) {

@@ -128,6 +128,7 @@ const TABS = {
   progress: { label: 'Quests & Levels', group: 'Economy', icon: 'star', draw: drawProgress, admin: true },
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
+  halloween: { label: 'Halloween', group: 'Content', icon: 'star', draw: drawHalloween, admin: true },
   polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
   awards: { label: 'Robis Awards', group: 'Content', icon: 'star', draw: drawAwards, admin: true },
   servers: { label: 'Servers', group: 'Live', icon: 'server', draw: drawServers },
@@ -1618,6 +1619,32 @@ async function drawSettings() {
         } }) : null,
         discordSteps)),
     el('button', { class: 'btn btn-primary btn-large', text: 'Save settings', onclick: save }));
+}
+
+// ---------------------------------------------------------------- Halloween
+// The Halloween update of every game (server/halloween.js): on/off, how long,
+// the daily candy limit, the top collectors.
+async function drawHalloween() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/halloween'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const on = el('input', { type: 'checkbox', checked: r.on });
+  const days = el('input', { class: 'input', type: 'number', min: 0, max: 60, placeholder: 'days', style: { width: '100px' } });
+  const cap = el('input', { class: 'input', type: 'number', min: 10, max: 5000, value: r.cap, style: { width: '100px' } });
+  body.replaceChildren(
+    el('div', { class: 'adm-stats' }, ...[['Players with candy', r.players], ['Candy collected', r.candy]].map(([k, v]) => el('div', { class: 'adm-stat' }, el('b', { class: 'no-i18n', text: fmtFull(v) }), el('span', { text: k })))),
+    el('div', { class: 'settings-section' },
+      el('h3', { text: '🎃 Halloween update' }),
+      el('p', { class: 'small muted', text: `Every game gets dusk, fog, jack-o'-lanterns and hidden candies; candy buys the Halloween shop items. ${r.active ? 'On until ' + new Date(r.until).toLocaleString() : 'Off now'}.` }),
+      el('label', { class: 'perm-row' }, on, el('b', { text: 'Halloween is on' })),
+      el('label', { class: 'row', style: { gap: '8px', margin: '6px 0' } }, el('span', { text: 'Run for (days from now, empty = keep)' }), days),
+      el('label', { class: 'row', style: { gap: '8px', margin: '6px 0' } }, el('span', { text: 'Candy a player can collect a day' }), cap),
+      el('button', { class: 'btn btn-primary', text: 'Save', onclick: async () => {
+        try { await api.post('/admin/halloween', { on: on.checked, cap: +cap.value, ...(days.value ? { days: +days.value } : {}) }); toast('Saved (games that are running change on their next start)', 'success'); drawHalloween(); } catch (e) { toast(e.message, 'error'); }
+      } })),
+    el('div', { class: 'settings-section' }, el('h3', { text: 'Top candy collectors' }),
+      r.top.length ? el('table', { class: 'adm-table' }, el('tbody', {}, r.top.map((u, i) => el('tr', {}, el('td', { text: `#${i + 1}` }), el('td', { class: 'no-i18n', text: u.username }), el('td', { class: 'no-i18n', text: `🍬 ${fmtFull(u.total)}` })))))
+        : el('div', { class: 'muted small', text: 'No candy yet.' })));
 }
 
 // ---------------------------------------------------------------- Telegram bot
