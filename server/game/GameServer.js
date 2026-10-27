@@ -303,6 +303,7 @@ export class GameServer {
     if (players.CharacterAutoLoads) this.loadCharacter(player);
     this._huntJoin(session);
     this._halloweenJoin(session);
+    this._farewellJoin(session);
     this._closingJoin(session);
     return session;
   }
@@ -432,6 +433,92 @@ export class GameServer {
     hw.candies.delete(candy);
     candy.Destroy();
     this.send(session, { t: 'candy', got: r.got, candy: r.candy, golden: !!candy._golden });
+  }
+
+  // ------------------------------------------------------------ The Last Night of Robis
+  // The farewell event (server/farewell.js): every game turns into a warm night,
+  // paper lanterns rise into the sky and the newest messages from the Wall of
+  // Thanks float over the spawn. Playing gives the Farewell Lantern pet.
+  _farewellJoin(session) {
+    const fw = this.manager && this.manager.farewell;
+    if (!fw || !fw.active() || this.isTest || session.bot) return;
+    const h = this.backend.hunt;
+    if (h && h.isHub && h.isHub()) return;
+    if (!this._fw) { try { this._farewellStart(); } catch (e) { this.log('warn', 'Farewell: ' + e.message); } }
+    const got = fw.played(session.user.id);
+    setTimeout(() => {
+      if (this.sessions.get(session.user.id) !== session) return;
+      this.send(session, { t: 'bigmsg', text: '🏮 The Last Night of Robis', secs: 5, color: '#ffb547' });
+      this.send(session, { t: 'sys', text: '🏮 The Last Night of Robis. Thank you for playing with us! Leave a message on the Wall of Thanks on the site.' });
+      if (got) this.send(session, { t: 'sys', text: '🎁 You got the Farewell Lantern pet! Wear it in Avatar.' });
+    }, 6000);
+  }
+  _farewellStart() {
+    this._fw = { lanterns: [], folder: null };
+    const L = this.game.GetService('Lighting');
+    const t = +L.ClockTime;
+    if (t > 5 && t < 19) L.ClockTime = 20.3; // a warm night
+    L.FogColor = Color3.fromRGB(40, 28, 60);
+    const folder = createInstance('Folder');
+    folder.Name = 'LastNight';
+    folder.Parent = this.game.Workspace;
+    this._fw.folder = folder;
+    const COLORS = ['#ff8a3d', '#ffb547', '#ff6a3d', '#ffd27a'];
+    for (let i = 0; i < 14; i++) {
+      const s = this._halloweenSpot(6);
+      if (!s) break;
+      const p = createInstance('Part');
+      p.Name = 'Lantern';
+      p.Size = new Vector3(1.4, 1.8, 1.4);
+      p.Material = 'Neon';
+      p.Color = Color3.fromHex(COLORS[i % COLORS.length]);
+      p.Transparency = 0.15;
+      p.Anchored = true;
+      p.CanCollide = false;
+      p._base = s;
+      p._h = 4 + Math.random() * 40;
+      p._v = 0.6 + Math.random() * 0.6;
+      p.CFrame = CFrame.fromPosition(s.add(new Vector3(0, p._h, 0)));
+      const glow = createInstance('PointLight');
+      glow.Color = p.Color;
+      glow.Range = 12;
+      glow.Brightness = 1;
+      glow.Parent = p;
+      p.Parent = folder;
+      this._fw.lanterns.push(p);
+    }
+    // the newest messages from the Wall of Thanks over the spawn
+    const spawn = this.game.Workspace.GetDescendants().find((d) => d instanceof SpawnLocation);
+    const base = spawn ? spawn.Position : this._halloweenSpot(0);
+    const msgs = this.manager.farewell.latest(6);
+    if (base) {
+      const board = (text, i, color) => {
+        const a = (i / Math.max(1, msgs.length + 1)) * Math.PI * 2;
+        const p = createInstance('Part');
+        p.Name = 'ThanksNote';
+        p.Size = new Vector3(1, 1, 1);
+        p.Transparency = 1;
+        p.Anchored = true;
+        p.CanCollide = false;
+        p.CFrame = CFrame.fromPosition(base.add(new Vector3(Math.cos(a) * 14, 9 + (i % 3) * 2.5, Math.sin(a) * 14)));
+        const tag = createInstance('BillboardText');
+        tag.Text = text;
+        tag.TextColor3 = Color3.fromHex(color);
+        tag.Parent = p;
+        p.Parent = folder;
+      };
+      board('🏮 Thank you for playing Robis! ❤', 0, '#ffd27a');
+      msgs.forEach((m, i) => board(`💌 ${m.username}: ${m.text.length > 70 ? m.text.slice(0, 68) + '…' : m.text}`, i + 1, '#ffffff'));
+    }
+    this._fwTimer = setInterval(() => {
+      if (this.closed || !this._fw) return;
+      for (const p of this._fw.lanterns) {
+        if (p._destroyed) continue;
+        p._h += p._v;
+        if (p._h > 70) p._h = 2;
+        p.CFrame = CFrame.fromPosition(p._base.add(new Vector3(Math.sin(p._h / 6) * 1.5, p._h, 0)));
+      }
+    }, 500);
   }
 
   // ------------------------------------------------------------ The Hunt
@@ -1856,6 +1943,7 @@ export class GameServer {
     clearInterval(this.huntScan);
     clearInterval(this.questTimer);
     clearInterval(this._hwTimer);
+    clearInterval(this._fwTimer);
     clearInterval(this._disco);
     for (const s of [...this.sessions.values()]) {
       this.send(s, { t: 'shutdown', msg });

@@ -1689,3 +1689,10 @@ body.has-closing .rbx-content { margin-top: calc(var(--header-h) + var(--closing
 .closing-modal h2 { margin: 8px 0; }
 .data-panel .btn { margin-top: 6px; }
 .closing-bar.static { position: sticky; height: 38px; }
+/* The Last Night of Robis (farewell event) */
+.closing-bar .cl-thanks { background: #ffcf7a; color: #5a2a00; }
+@media (max-width: 460px) { .closing-bar .cl-thanks { display: none; } }
+.farewell-nav span:nth-child(2) { font-weight: 700; color: #ff8a3d; }
+.farewell-nav .hw-new { background: #ff8a3d; }
+.fw-banner { background: linear-gradient(120deg, #0c0a18, #4a2d6b 60%, #ff8a3d 160%); }
+.fw-banner .hw-banner-btn { background: #ff8a3d; border-color: #ff8a3d; }

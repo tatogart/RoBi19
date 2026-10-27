@@ -21,6 +21,13 @@ app.append(el('div', { class: 'section greet greet-card compact' },
     levelBox,
     window.ROBIS_STANDALONE ? el('button', { class: 'btn btn-green btn-small', style: { marginTop: '8px' }, text: 'Join a friend', onclick: joinFriendDialog }) : null)));
 
+// The Last Night of Robis: the farewell event and the Wall of Thanks
+if (me.farewell) {
+  app.append(el('a', { class: 'section hw-banner fw-banner', href: '/farewell' },
+    el('span', { class: 'hw-banner-ic', text: '🏮' }),
+    el('span', { class: 'hw-banner-text' }, el('b', { text: 'The Last Night of Robis' }), el('span', { text: 'Every game is a warm night with lanterns. Play to get the Farewell Lantern and leave a message on the Wall of Thanks.' })),
+    el('span', { class: 'btn btn-small hw-banner-btn', text: 'Open' })));
+}
 // Halloween 2026: every game got a spooky update
 if (me.halloween) {
   app.append(el('a', { class: 'section hw-banner', href: '/halloween' },

@@ -23,6 +23,7 @@ import { installProgress, levelOf } from './progress.js';
 import { installSpecial } from './special.js';
 import { installClosing } from './closing.js';
 import { installHalloween } from './halloween.js';
+import { installFarewell } from './farewell.js';
 import { installTgBot } from './tgbot.js';
 import { installHunt } from './hunt.js';
 import { installAdminPlus, markActive, siteSettings } from './adminplus.js';
@@ -381,6 +382,8 @@ export function createApi(db, manager, opts = {}) {
     ['founder', '👑', 'Group Founder', 'Owns a group.', (u) => Object.values(D.groups || {}).some((gr) => gr.ownerId === u.id)],
     ['combat', '⚔️', 'Combat Initiation', 'Knocked someone out in a battle game.', (u) => (D.badges[u.id] || []).some((b) => b.name === 'First Blood')],
     ['warrior', '🗡️', 'Warrior', 'Got 25 KOs in one battle.', (u) => (D.badges[u.id] || []).some((b) => b.name === 'Warrior')],
+    ['farewell', '🏮', 'Until The Very End', 'Played on The Last Night of Robis.', (u) => !!u.farewellPlayed],
+    ['thanks', '💌', 'Thank You, Robis', 'Wrote on the Wall of Thanks.', (u) => !!u.farewellWrote],
   ];
   const achievements = (u, x) => ACHIEVEMENTS.filter((a) => { try { return a[4](u, x); } catch { return false; } }).map(([id, icon, name, desc]) => ({ id, icon, name, desc }));
 
@@ -431,6 +434,7 @@ export function createApi(db, manager, opts = {}) {
     overwatch: hooks.overwatchAccess(u), // Robis Overwatch in the menu
     awards: hooks.awardsLive ? hooks.awardsLive() : null, // Robis Awards in the menu (voting or results)
     halloween: hooks.halloweenActive ? hooks.halloweenActive() : false, // Halloween in the menu
+    farewell: hooks.farewellActive ? hooks.farewellActive() : false, // the farewell event in the menu
     guest: !!u.guest, // a guest account (see /auth/guest)
     levelUp: u.levelUp || null, // a level-up popup not seen yet (server/progress.js)
     restrictions: hooks.restriction ? hooks.restriction(u) : { mute: 0, trade: 0 },
@@ -2700,6 +2704,7 @@ export function createApi(db, manager, opts = {}) {
   installClassic(api, { db, manager, requireAdmin, requirePerm, bad, log, hooks, adminUser, deleteAccount, isBanned, STARTER: { items: STARTER_ITEMS, wearing: STARTER_WEARING, body: STARTER_BODY } });
   installSpecial(api, { db, requireAdmin, bad, giveSerial, hooks });
   installHalloween(api, { db, manager, requireUser, requireAdmin, bad, log, hooks, publicItem });
+  installFarewell(api, { db, manager, requireUser, requireAdmin, bad, log, hooks, publicItem });
   hooks.giveMembership = (u, tier, days) => giveMembership(u, tier, days);
   installTgBot(api, { db, requireUser, requireAdmin, bad, log, hooks, MEMBERSHIPS, MEMBERSHIP_COST, DONATE_PACKS });
   if (manager) manager.tgbot = hooks.tgbot;

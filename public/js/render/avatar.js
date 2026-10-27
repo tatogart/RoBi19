@@ -1651,6 +1651,25 @@ const PETS = {
     g.userData = { fly: true, head, jet };
     return g;
   },
+  // a glowing paper lantern (The Last Night of Robis)
+  lantern(d) {
+    const g = new THREE.Group();
+    const paper = new THREE.MeshStandardMaterial({ color: d.color || '#ff8a3d', emissive: new THREE.Color(d.color || '#ff8a3d'), emissiveIntensity: 0.9, roughness: 0.8 });
+    const body = M(new THREE.SphereGeometry(0.5, 18, 14), paper, 0, 1, 0);
+    body.scale.set(1, 1.25, 1);
+    g.add(body);
+    const rim = mat('#5a3214', { roughness: 0.6 });
+    g.add(M(new THREE.CylinderGeometry(0.26, 0.26, 0.1, 14), rim, 0, 1.62, 0));
+    g.add(M(new THREE.CylinderGeometry(0.22, 0.22, 0.08, 14), rim, 0, 0.38, 0));
+    const fire = new THREE.MeshBasicMaterial({ color: d.accent || '#ffd27a' }); fire.toneMapped = false;
+    g.add(M(new THREE.ConeGeometry(0.08, 0.2, 8), fire, 0, 0.5, 0));
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      g.add(M(new THREE.BoxGeometry(0.03, 1.1, 0.03), rim, Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5));
+    }
+    g.userData = { fly: true, sway: true };
+    return g;
+  },
   // a floating jack-o'-lantern with a little witch hat (Halloween 2026)
   jackpet(d) {
     const g = new THREE.Group();

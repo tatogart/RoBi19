@@ -92,7 +92,8 @@ export function closingBar(c) {
   return el('div', { class: 'closing-bar' },
     el('span', { class: 'cl-ic', text: '⚠' }),
     el('span', { class: 'cl-text no-i18n' }, el('b', { text: ru ? `Robis закрывается ${day}` : `Robis is closing on ${day}` }), ` · ${ru ? 'осталось' : 'left'}: `, left),
-    el('a', { class: 'cl-btn', href: '/mydata', text: 'Download my data' }));
+    el('a', { class: 'cl-btn', href: '/mydata', text: 'Download my data' }),
+    el('a', { class: 'cl-btn cl-thanks', href: '/farewell', text: 'Wall of Thanks' }));
 }
 function closingWindow(c) {
   const key = 'robis.closingSeen';
@@ -109,6 +110,7 @@ function closingWindow(c) {
     el('p', { text: 'Download your data before that: your account, items, friends, messages and your games with their places.' }),
     el('div', { class: 'row wrap', style: { gap: '8px', justifyContent: 'center' } },
       el('a', { class: 'btn btn-green', href: '/mydata', onclick: close, text: 'Download my data' }),
+      el('a', { class: 'btn btn-orange', href: '/farewell', onclick: close, text: 'Wall of Thanks' }),
       el('button', { class: 'btn', onclick: close, text: 'OK' }))));
   back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
   document.body.append(back);
@@ -154,7 +156,7 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
   else if (me && me.levelUp) showLevelUp(me.levelUp);
   // Inside a Discord Activity: what the player is doing goes in their Discord status.
   if (site && site.discord && inDiscord()) {
-    const where = { home: 'On the home page', games: 'Looking for a game', catalog: 'Shopping in the catalog', avatar: 'Changing their avatar', create: 'Creating', hunt: 'On The Hunt', halloween: 'At the Halloween event', profile: 'Looking at a profile', trades: 'Trading', groups: 'In groups', admin: 'In the Admin Panel' }[active] || 'Browsing Robis';
+    const where = { home: 'On the home page', games: 'Looking for a game', catalog: 'Shopping in the catalog', avatar: 'Changing their avatar', create: 'Creating', hunt: 'On The Hunt', halloween: 'At the Halloween event', farewell: 'At the Wall of Thanks', profile: 'Looking at a profile', trades: 'Trading', groups: 'In groups', admin: 'In the Admin Panel' }[active] || 'Browsing Robis';
     setDiscordStatus(site.discord.appId, where, me ? `as ${me.username}` : undefined);
   }
   showAnnouncement();
@@ -267,6 +269,7 @@ function buildNav(me, active) {
   nav.append(el('div', { class: 'section-label', text: 'Events' }));
   if (me.awards) nav.append(el('a', { href: '/awards', class: 'awards-nav' + (active === 'awards' ? ' active' : '') }, el('span', { class: 'ow-nav-ic', text: '🏆' }), el('span', { text: 'Robis Awards' }), me.awards.status === 'voting' ? el('span', { class: 'count awards-vote', text: 'VOTE' }) : null));
   if (me.overwatch) nav.append(el('a', { href: '/overwatch', class: active === 'overwatch' ? 'active' : '' }, el('span', { class: 'ow-nav-ic', text: '🕵️' }), el('span', { text: 'Overwatch' })));
+  if (me.farewell) nav.append(el('a', { href: '/farewell', class: 'farewell-nav' + (active === 'farewell' ? ' active' : '') }, el('span', { class: 'ow-nav-ic', text: '🏮' }), el('span', { text: 'Last Night' }), el('span', { class: 'count hw-new', text: 'NEW' })));
   if (me.halloween) nav.append(el('a', { href: '/halloween', class: 'halloween-nav' + (active === 'halloween' ? ' active' : '') }, el('span', { class: 'ow-nav-ic', text: '🎃' }), el('span', { text: 'Halloween' }), el('span', { class: 'count hw-new', text: 'NEW' })));
   if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-ic', html: HUNT_ICON }), el('span', { text: 'The Hunt' })));
   nav.append(el('a', { href: '#', class: 'spin-nav', onclick: (e) => { e.preventDefault(); import('./fun.js').then((f) => f.spinDialog(setRobits)); } }, el('span', { class: 'spin-dot' }), el('span', { text: 'Daily Spin' })));

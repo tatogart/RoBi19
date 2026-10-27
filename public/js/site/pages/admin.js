@@ -128,6 +128,7 @@ const TABS = {
   progress: { label: 'Quests & Levels', group: 'Economy', icon: 'star', draw: drawProgress, admin: true },
   games: { label: 'Games', group: 'Content', icon: 'game', draw: drawGames },
   hunt: { label: 'The Hunt', group: 'Content', icon: 'hunt', draw: drawHunt, admin: true },
+  farewell: { label: 'Last Night', group: 'Content', icon: 'star', draw: drawFarewell, admin: true },
   halloween: { label: 'Halloween', group: 'Content', icon: 'star', draw: drawHalloween, admin: true },
   polls: { label: 'Polls', group: 'Content', icon: 'chart', draw: drawPolls, admin: true },
   awards: { label: 'Robis Awards', group: 'Content', icon: 'star', draw: drawAwards, admin: true },
@@ -1653,6 +1654,35 @@ async function drawClosing() {
       el('h3', { text: 'Full backup' }),
       el('p', { class: 'small muted', text: 'Everything in one file: the database (players, items, games, messages...) and every place. Bot tokens and the Discord secret are left out. Keep it private: it has the players\' password hashes.' }),
       el('a', { class: 'btn btn-green', href: '/api/admin/export', download: '', text: 'Download the full backup' })));
+}
+
+// ---------------------------------------------------------------- The Last Night of Robis
+// The farewell event (server/farewell.js): on/off and the Wall of Thanks
+// (delete messages).
+async function drawFarewell() {
+  body.replaceChildren(spinner());
+  let r, w;
+  try { [r, w] = await Promise.all([api.get('/admin/farewell'), api.get('/farewell')]); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const on = el('input', { type: 'checkbox', checked: r.on });
+  body.replaceChildren(
+    el('div', { class: 'adm-stats' }, ...[['Messages on the wall', r.count], ['Deleted', r.hidden], ['Played on the Last Night', r.players]].map(([k, v]) => el('div', { class: 'adm-stat' }, el('b', { class: 'no-i18n', text: fmtFull(v) }), el('span', { text: k })))),
+    el('div', { class: 'settings-section' },
+      el('h3', { text: '🏮 The Last Night of Robis' }),
+      el('p', { class: 'small muted', text: 'Every game turns into a warm night with rising lanterns and the newest wall messages over the spawn; playing gives the Farewell Lantern pet and a badge.' }),
+      el('label', { class: 'perm-row' }, on, el('b', { text: 'The Last Night is on' })),
+      el('button', { class: 'btn btn-primary', text: 'Save', onclick: async () => {
+        try { await api.post('/admin/farewell', { on: on.checked }); toast('Saved (games that are running change on their next start)', 'success'); drawFarewell(); } catch (e) { toast(e.message, 'error'); }
+      } })),
+    el('div', { class: 'settings-section' }, el('h3', { text: 'Wall of Thanks' }),
+      w.wall.length ? el('table', { class: 'adm-table' }, el('tbody', {}, w.wall.map((m) => el('tr', {},
+        el('td', { class: 'no-i18n', text: m.username }),
+        el('td', { class: 'no-i18n', text: m.text }),
+        el('td', { class: 'no-i18n', text: `❤ ${m.likes}` }),
+        el('td', {}, el('button', { class: 'btn btn-small btn-red', text: 'Delete', onclick: async () => {
+          if (!confirm('Delete this message?')) return;
+          try { await api.del(`/farewell/wall/${m.id}`); drawFarewell(); } catch (e) { toast(e.message, 'error'); }
+        } }))))))
+        : el('div', { class: 'muted small', text: 'No messages yet.' })));
 }
 
 // ---------------------------------------------------------------- Halloween

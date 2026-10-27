@@ -2816,3 +2816,52 @@ test('Robis is closing: every event ends, the site and games say so, data downlo
   await call('POST', '/admin/closing', { on: false }, admin);
   assert.equal((await call('GET', '/site')).data.closing, null);
 });
+
+test('The Last Night of Robis: the Wall of Thanks, likes, the lantern and lanterns in the games', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'ThankfulKid', password: 'secret123' });
+  const q = await call('POST', '/auth/signup', { username: 'ThankfulFriend', password: 'secret123' });
+  assert.equal((await call('POST', '/admin/farewell', { on: true }, p.cookie)).status, 403);
+  assert.equal((await call('POST', '/admin/farewell', { on: true }, admin)).data.on, true);
+  assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.farewell, true);
+  // the wall: one message per player, it can be changed; the chat filter works
+  assert.equal((await call('POST', '/farewell/wall', { text: 'hi' }, p.cookie)).status, 400);
+  assert.equal((await call('POST', '/farewell/wall', { text: 'Thank you Robis, you damn legend!' }, p.cookie)).status, 200);
+  assert.equal((await call('POST', '/farewell/wall', { text: 'again' }, p.cookie)).status, 400); // too fast
+  srv.db.data.users[p.data.user.id].lastWall = 0;
+  const changed = await call('POST', '/farewell/wall', { text: 'Thank you Robis for everything!' }, p.cookie);
+  assert.equal(changed.data.message.text, 'Thank you Robis for everything!');
+  await call('POST', '/farewell/wall', { text: 'Best years of my life ❤' }, q.cookie);
+  let w = (await call('GET', '/farewell', null, q.cookie)).data;
+  assert.equal(w.count, 2);
+  assert.equal(w.mine.text, 'Best years of my life ❤');
+  const pm = w.wall.find((m) => m.username === 'ThankfulKid');
+  assert.equal((await call('POST', '/farewell/like', { id: pm.id }, q.cookie)).data.liked, true);
+  w = (await call('GET', '/farewell?sort=top', null, p.cookie)).data;
+  assert.equal(w.wall[0].id, pm.id);
+  assert.equal(w.wall[0].likes, 1);
+  // only my own message (or staff) can be deleted
+  assert.equal((await call('DELETE', `/farewell/wall/${pm.id}`, null, q.cookie)).status, 403);
+  assert.ok((await call('GET', `/users/${p.data.user.id}`)).data.user.achievements.some((x) => x.id === 'thanks'));
+  // a game: the night, lanterns, the wall over the spawn, the lantern pet
+  const maker = (await call('POST', '/auth/signup', { username: 'LastNightMaker', password: 'secret123' })).cookie;
+  const gm = (await call('POST', '/games', { name: 'Last Night Test', template: 'baseplate' }, maker)).data.game;
+  await call('PATCH', `/games/${gm.id}`, { isPublic: true }, maker);
+  const c = await join(p.cookie, { placeId: gm.id });
+  await c.wait((m) => m.t === 'tick' && m.ops.some((o) => o[0] === 'char'));
+  const text = JSON.stringify(c.inbox);
+  assert.ok(text.includes('LastNight') && text.includes('Lantern'));
+  assert.ok(text.includes('Best years of my life'));
+  const errors = c.inbox.filter((m) => m.t === 'log' && m.level === 'error');
+  assert.equal(errors.length, 0, JSON.stringify(errors.slice(0, 3)));
+  c.ws.close();
+  w = (await call('GET', '/farewell', null, p.cookie)).data;
+  assert.equal(w.lantern.owned, true);
+  assert.ok(w.lantern.special && w.lantern.special.label === 'FAREWELL');
+  assert.ok((await call('GET', `/users/${p.data.user.id}`)).data.user.achievements.some((x) => x.id === 'farewell'));
+  // staff delete
+  assert.equal((await call('DELETE', `/farewell/wall/${pm.id}`, null, admin)).status, 200);
+  assert.equal((await call('GET', '/farewell')).data.count, 1);
+  await call('POST', '/admin/farewell', { on: false }, admin);
+  assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.farewell, false);
+});
