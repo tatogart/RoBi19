@@ -22,6 +22,15 @@ const drawAppearance = (theme) => {
 drawAppearance(THEME);
 app.append(appearance);
 
+// ---------------------------------------------------------------- my data
+// Everything about your account in one file (server/closing.js): items,
+// friends, messages, transactions and your games with their places.
+app.append(el('div', { class: 'panel data-panel', id: 'data' },
+  el('h3', { text: 'Your data' }),
+  el('p', { text: 'Download everything about your account in one file: your Robits and Premium, items and avatar, friends, messages, transactions, trades and your games with their places.' }),
+  el('a', { class: 'btn btn-green', href: '/api/me/export', download: '', text: 'Download my data' })));
+if (location.hash === '#data') setTimeout(() => document.getElementById('data')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+
 // ---------------------------------------------------------------- Telegram
 // The Robis bot: Premium and Robits for Telegram Stars (server/tgbot.js).
 // Linking: a one-time link that opens the bot.

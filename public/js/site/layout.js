@@ -7,7 +7,7 @@ import { startInvites } from './invites.js';
 import { startChatParty } from './chatparty.js';
 import { installSecret, startLive } from './fun.js';
 import { checkGifts } from './gifts.js';
-import { tr } from '../i18n.js';
+import { tr, LANG } from '../i18n.js';
 
 const isStaff = (me) => me.isAdmin || (me.perms || []).some((p) => p === 'moderator' || p === 'economy');
 
@@ -76,6 +76,43 @@ export function adBanner() {
 }
 // The Hunt's icon: a golden compass
 const HUNT_ICON = '<svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="10" fill="#2b1d06" stroke="#ffc400" stroke-width="2.4"/><circle cx="12" cy="12" r="6.8" fill="none" stroke="#ffe48a" stroke-width=".8" stroke-dasharray="1.4 1.9"/><path d="M12 4.6 14.2 12h-4.4z" fill="#ff4b3e"/><path d="M12 19.4 9.8 12h4.4z" fill="#f5f5f5"/><circle cx="12" cy="12" r="1.5" fill="#ffc400"/></svg>';
+// Robis is closing: a red bar on top of every page with the countdown and the
+// data download, and once a day a window that says it plainly.
+export function closingBar(c) {
+  const ru = LANG === 'ru';
+  const day = new Date(c.at).toLocaleDateString(ru ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long' });
+  const left = el('b', { class: 'cl-left no-i18n' });
+  const tick = () => {
+    const ms = c.at - Date.now();
+    const [d, h, m] = [Math.floor(ms / 86400e3), Math.floor((ms % 86400e3) / 3600e3), Math.floor((ms % 3600e3) / 60e3)];
+    left.textContent = ms <= 0 ? (ru ? 'уже закрыт' : 'closed') : ru ? `${d} д ${h} ч ${m} мин` : `${d}d ${h}h ${m}m`;
+  };
+  tick();
+  setInterval(tick, 30e3);
+  return el('div', { class: 'closing-bar' },
+    el('span', { class: 'cl-ic', text: '⚠' }),
+    el('span', { class: 'cl-text no-i18n' }, el('b', { text: ru ? `Robis закрывается ${day}` : `Robis is closing on ${day}` }), ` · ${ru ? 'осталось' : 'left'}: `, left),
+    el('a', { class: 'cl-btn', href: '/settings#data', text: 'Download my data' }));
+}
+function closingWindow(c) {
+  const key = 'robis.closingSeen';
+  const today = new Date().toISOString().slice(0, 10);
+  try { if (localStorage.getItem(key) === today) return; localStorage.setItem(key, today); } catch { /* private mode */ }
+  const day = new Date(c.at).toLocaleDateString(LANG === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' });
+  const back = el('div', { class: 'modal-backdrop closing-modal' });
+  const close = () => back.remove();
+  back.append(el('div', { class: 'modal', style: { maxWidth: '480px' } },
+    el('div', { class: 'cl-big', text: '⚠' }),
+    el('h2', { text: tr('Robis is closing') }),
+    el('p', { class: 'no-i18n', text: `${tr('Robis closes on')} ${day}${day.endsWith('.') ? '' : '.'} ${tr('All events are over. Thank you for playing, building and being here with us!')}` }),
+    c.message ? el('p', { class: 'no-i18n', text: c.message }) : null,
+    el('p', { text: 'Download your data before that: your account, items, friends, messages and your games with their places.' }),
+    el('div', { class: 'row wrap', style: { gap: '8px', justifyContent: 'center' } },
+      el('a', { class: 'btn btn-green', href: '/settings#data', onclick: close, text: 'Download my data' }),
+      el('button', { class: 'btn', onclick: close, text: 'OK' }))));
+  back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
+  document.body.append(back);
+}
 export let SITE = null;
 
 export async function initPage({ requireAuth = true, active = '', nav = true } = {}) {
@@ -86,6 +123,11 @@ export async function initPage({ requireAuth = true, active = '', nav = true } =
     return new Promise(() => {});
   }
   document.body.prepend(buildHeader(me, active));
+  if (site && site.closing) {
+    document.body.classList.add('has-closing');
+    document.body.prepend(closingBar(site.closing));
+    if (me) setTimeout(() => closingWindow(site.closing), 600);
+  }
   // the banner ad on the main pages, like Roblox in 2019
   if (site && site.ads && ['home', 'games', 'catalog'].includes(active)) { const app = document.getElementById('app'); if (app) app.prepend(adBanner()); }
   if (nav && me) {
@@ -227,7 +269,6 @@ function buildNav(me, active) {
   if (me.overwatch) nav.append(el('a', { href: '/overwatch', class: active === 'overwatch' ? 'active' : '' }, el('span', { class: 'ow-nav-ic', text: '🕵️' }), el('span', { text: 'Overwatch' })));
   if (me.halloween) nav.append(el('a', { href: '/halloween', class: 'halloween-nav' + (active === 'halloween' ? ' active' : '') }, el('span', { class: 'ow-nav-ic', text: '🎃' }), el('span', { text: 'Halloween' }), el('span', { class: 'count hw-new', text: 'NEW' })));
   if (me.hunt) nav.append(el('a', { href: '/hunt', class: 'hunt-nav' + (active === 'hunt' ? ' active' : '') }, el('span', { class: 'hunt-ic', html: HUNT_ICON }), el('span', { text: 'The Hunt' })));
-  nav.append(el('a', { href: '/game?id=2' }, icon('star'), el('span', { text: 'Obby Week!' })));
   nav.append(el('a', { href: '#', class: 'spin-nav', onclick: (e) => { e.preventDefault(); import('./fun.js').then((f) => f.spinDialog(setRobits)); } }, el('span', { class: 'spin-dot' }), el('span', { text: 'Daily Spin' })));
   document.addEventListener('click', (e) => {
     if (document.body.classList.contains('nav-open') && !nav.contains(e.target) && !e.target.closest('.menu-btn')) document.body.classList.remove('nav-open');

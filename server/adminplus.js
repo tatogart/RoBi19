@@ -52,7 +52,8 @@ export function installAdminPlus(api, { db, manager, requireAdmin, requireStaff,
     res.json({ socials: S.socials, maintenance: S.maintenance.on ? S.maintenance : null, signups: S.signups !== false, staff: isStaffUser(req.user),
       discord: S.discord.on && S.discord.appId ? { appId: S.discord.appId } : null,
       discordStatus: !!(S.discord.status && S.discord.appId),
-      ads: S.ads !== false }); // the 2019-style banner (Control Center -> Site Tools)
+      ads: S.ads !== false, // the 2019-style banner (Control Center -> Site Tools)
+      closing: manager && manager.closing ? manager.closing() : null }); // Robis is closing (server/closing.js)
   });
 
   // Discord Activity: the page inside Discord trades the code from

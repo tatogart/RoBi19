@@ -1665,3 +1665,27 @@ html[data-theme="dark"] .lvl-bar { background: #555; }
 .hw-banner-text b { color: #ff9a3c; font-size: 17px; }
 .hw-banner-text span { font-size: 13px; opacity: .9; }
 .hw-banner-btn { background: #ff7a12; border-color: #ff7a12; color: #fff; }
+/* Robis is closing: the bar above every page (it pushes the header down) */
+:root { --closing-h: 0px; }
+body.has-closing { --closing-h: 38px; }
+.closing-bar { position: fixed; top: 0; left: 0; right: 0; height: var(--closing-h); z-index: 101; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 12px; background: linear-gradient(90deg, #8b0f0f, #d0021b, #8b0f0f); color: #fff; font-size: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+.closing-bar .cl-ic { font-size: 18px; }
+.closing-bar .cl-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.closing-bar .cl-left { color: #ffe08a; }
+.closing-bar .cl-btn { flex: none; background: #fff; color: #b00012; font-weight: 800; padding: 3px 10px; border-radius: 4px; text-decoration: none; font-size: 13px; }
+.closing-bar .cl-btn:hover { text-decoration: none; filter: brightness(.95); }
+body.has-closing .rbx-header { top: var(--closing-h); }
+body.has-closing .rbx-leftnav { top: calc(var(--header-h) + var(--closing-h)); }
+body.has-closing .rbx-content { margin-top: calc(var(--header-h) + var(--closing-h)); }
+@media (max-width: 760px) {
+  body.has-closing .rbx-header { top: var(--closing-h); }
+  body.has-closing .rbx-content { margin-top: calc(var(--header-h) + var(--closing-h) + env(safe-area-inset-top)); }
+  body.has-closing .rbx-leftnav { top: calc(var(--header-h) + var(--closing-h) + env(safe-area-inset-top)); }
+  .closing-bar { font-size: 12px; gap: 6px; }
+  .closing-bar .cl-ic { display: none; }
+}
+.closing-modal .modal { text-align: center; padding: 22px 20px; }
+.closing-modal .cl-big { font-size: 46px; color: #d0021b; line-height: 1; }
+.closing-modal h2 { margin: 8px 0; }
+.data-panel .btn { margin-top: 6px; }
+.closing-bar.static { position: sticky; height: 38px; }

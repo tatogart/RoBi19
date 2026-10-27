@@ -2775,3 +2775,44 @@ test('Halloween: every game gets the spooky update, candy is collected and buys 
   await call('POST', '/admin/halloween', { on: false }, admin);
   assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.halloween, false);
 });
+
+test('Robis is closing: every event ends, the site and games say so, data downloads', async () => {
+  const admin = (await call('POST', '/auth/login', { username: 'Tester_1', password: 'secret123' })).cookie;
+  const p = await call('POST', '/auth/signup', { username: 'LeavingKid', password: 'secret123' });
+  assert.equal((await call('GET', '/site')).data.closing, null);
+  // some events on: Halloween, a sale
+  await call('POST', '/admin/halloween', { on: true, days: 5 }, admin);
+  assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.halloween, true);
+  assert.equal((await call('POST', '/admin/closing', { on: true }, p.cookie)).status, 403);
+  const r = await call('POST', '/admin/closing', { on: true, days: 3, message: 'Thanks for everything!', endEvents: true }, admin);
+  assert.equal(r.status, 200);
+  assert.ok(r.data.info.at > Date.now() + 2.9 * 86400e3);
+  // events are over
+  assert.equal((await call('GET', '/auth/me', null, p.cookie)).data.user.halloween, false);
+  assert.ok(!(await call('GET', '/auth/me', null, p.cookie)).data.user.hunt);
+  // every page knows
+  const site = (await call('GET', '/site')).data;
+  assert.equal(site.closing.message, 'Thanks for everything!');
+  // a game says so
+  const maker = (await call('POST', '/auth/signup', { username: 'LeavingMaker', password: 'secret123' })).cookie;
+  const gm = (await call('POST', '/games', { name: 'My Last Game', template: 'obby' }, maker)).data.game;
+  await call('PATCH', `/games/${gm.id}`, { isPublic: true }, maker);
+  const c = await join(p.cookie, { placeId: gm.id });
+  assert.match((await c.wait((m) => m.t === 'bigmsg', 6000)).text, /Robis closes on/);
+  c.ws.close();
+  // my data: account, items, games with their places
+  const mine = await call('GET', '/me/export', null, maker);
+  assert.equal(mine.status, 200);
+  assert.equal(mine.data.account.username, 'LeavingMaker');
+  assert.ok(Array.isArray(mine.data.inventory));
+  const g = mine.data.games.find((x) => x.name === 'My Last Game');
+  assert.ok(g && g.places[g.id] && g.places[g.id].services);
+  // the full backup: admins only, no sessions, every place
+  assert.equal((await call('GET', '/admin/export', null, p.cookie)).status, 403);
+  const all = await call('GET', '/admin/export', null, admin);
+  assert.equal(all.status, 200);
+  assert.equal(all.data.data.sessions, undefined);
+  assert.ok(all.data.data.users && all.data.places[gm.id]);
+  await call('POST', '/admin/closing', { on: false }, admin);
+  assert.equal((await call('GET', '/site')).data.closing, null);
+});

@@ -303,7 +303,20 @@ export class GameServer {
     if (players.CharacterAutoLoads) this.loadCharacter(player);
     this._huntJoin(session);
     this._halloweenJoin(session);
+    this._closingJoin(session);
     return session;
+  }
+
+  // Robis is closing (server/closing.js): everyone who joins a game is told
+  _closingJoin(session) {
+    const c = this.manager && this.manager.closing ? this.manager.closing() : null;
+    if (!c || session.bot) return;
+    const day = new Date(c.at + 3 * 3600e3).toISOString().slice(0, 10).split('-').reverse().join('.'); // Moscow time
+    setTimeout(() => {
+      if (this.sessions.get(session.user.id) !== session) return;
+      this.send(session, { t: 'bigmsg', text: `⚠ Robis closes on ${day}`, secs: 7, color: '#ff5b4f' });
+      this.send(session, { t: 'sys', text: `⚠ Robis closes on ${day}. Download your data on the site: Settings -> Download my data.` });
+    }, 3000);
   }
 
   // ------------------------------------------------------------ Halloween 2026

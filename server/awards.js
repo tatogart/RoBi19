@@ -34,7 +34,13 @@ export function installAwards(api, { db, requireUser, requireAdmin, bad, hooks }
     for (const gid of c.nominees) if (best === null || (n[gid] || 0) > (n[best] || 0)) best = gid;
     return best;
   };
-  hooks.awardsLive = () => { const s = live(); return s ? { id: s.id, title: s.title, status: s.status } : null; };
+  hooks.awardsLive = () => { const s = !A.closed && live(); return s ? { id: s.id, title: s.title, status: s.status } : null; };
+  // Robis is closing: voting ends (the winners are counted) and the menu link goes away
+  hooks.awardsEnd = () => {
+    for (const s of A.seasons) if (s.status === 'voting') { s.status = 'results'; for (const c of s.categories) c.winner = c.winner || winnerOf(c); }
+    A.closed = true;
+    db.save();
+  };
 
   // ---------------------------------------------------------------- players
   api.get('/awards', (req, res) => {

@@ -21,6 +21,7 @@ import { installAwards } from './awards.js';
 import { installClassic } from './classic.js';
 import { installProgress, levelOf } from './progress.js';
 import { installSpecial } from './special.js';
+import { installClosing } from './closing.js';
 import { installHalloween } from './halloween.js';
 import { installTgBot } from './tgbot.js';
 import { installHunt } from './hunt.js';
@@ -2703,6 +2704,8 @@ export function createApi(db, manager, opts = {}) {
   installTgBot(api, { db, requireUser, requireAdmin, bad, log, hooks, MEMBERSHIPS, MEMBERSHIP_COST, DONATE_PACKS });
   if (manager) manager.tgbot = hooks.tgbot;
   installAdminTools(api, { db, manager, requireUser, requireStaff, requireAdmin, requirePerm, requireOpt, bad, log, giveSerial, takeItem, presence, isBanned, adminUser, popt, MEMBERSHIPS, hooks });
+
+  installClosing(api, { db, manager, requireUser, requireAdmin, bad, hooks });
 
   api.use((req, res) => bad(res, 'Not found', 404));
   return api;

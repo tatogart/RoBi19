@@ -137,6 +137,7 @@ const TABS = {
   live: { label: 'Live Events', group: 'Live', icon: 'sparkle', draw: drawLiveEvents, admin: true },
   broadcast: { label: 'Broadcast', group: 'Live', icon: 'megaphone', draw: drawBroadcast, admin: true },
   schedule: { label: 'Scheduler', group: 'Live', icon: 'clock', draw: drawSchedule, admin: true },
+  closing: { label: 'Closing', group: 'System', icon: 'flag', draw: drawClosing, admin: true },
   tools: { label: 'Site Tools', group: 'System', icon: 'bolt', draw: drawSiteTools, admin: true },
   settings: { label: 'Settings', group: 'System', icon: 'gear', draw: drawSettings, admin: true },
   switches: { label: 'Switches', group: 'System', icon: 'toggle', draw: drawSwitches, admin: true },
@@ -1619,6 +1620,39 @@ async function drawSettings() {
         } }) : null,
         discordSteps)),
     el('button', { class: 'btn btn-primary btn-large', text: 'Save settings', onclick: save }));
+}
+
+// ---------------------------------------------------------------- closing
+// Robis is closing (server/closing.js): the red bar and the window on every
+// page, the message in every game, the data download, a full backup.
+async function drawClosing() {
+  body.replaceChildren(spinner());
+  let r;
+  try { r = await api.get('/admin/closing'); } catch (e) { body.replaceChildren(el('div', { class: 'empty', text: e.message })); return; }
+  const on = el('input', { type: 'checkbox', checked: !!r.on });
+  const when = el('input', { class: 'input', type: 'datetime-local', style: { width: 'auto' } });
+  const d = new Date(r.at || Date.now());
+  when.value = new Date(d.getTime() - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 16);
+  const msg = el('textarea', { class: 'input no-i18n', rows: 3, placeholder: 'Your words for the players (optional)' });
+  msg.value = r.message || '';
+  const save = async (extra = {}) => {
+    try { await api.post('/admin/closing', { on: on.checked, at: new Date(when.value).getTime(), message: msg.value, ...extra }); toast('Saved', 'success'); drawClosing(); } catch (e) { toast(e.message, 'error'); }
+  };
+  body.replaceChildren(
+    el('div', { class: 'settings-section' },
+      el('h3', { text: '⚠ Robis is closing' }),
+      el('p', { class: 'small muted', text: 'A red bar with the countdown on every page, a window once a day, a message in every game, and the "Download my data" button in Settings.' }),
+      el('label', { class: 'perm-row' }, on, el('b', { text: 'Show that Robis is closing' })),
+      el('label', { class: 'field' }, 'Closes at (your time)', when),
+      el('label', { class: 'field' }, 'Message', msg),
+      el('div', { class: 'row wrap', style: { gap: '8px' } },
+        el('button', { class: 'btn btn-primary', text: 'Save', onclick: () => save() }),
+        el('button', { class: 'btn btn-red', text: 'End all events again', onclick: () => confirm('End The Hunt, Halloween, Robis Awards, sales, Admin Abuse and boosts?') && save({ endEvents: true }) })),
+      r.eventsEnded ? el('p', { class: 'small muted', text: `Events were ended ${timeAgo(r.eventsEnded)}.` }) : null),
+    el('div', { class: 'settings-section' },
+      el('h3', { text: 'Full backup' }),
+      el('p', { class: 'small muted', text: 'Everything in one file: the database (players, items, games, messages...) and every place. Bot tokens and the Discord secret are left out. Keep it private: it has the players\' password hashes.' }),
+      el('a', { class: 'btn btn-green', href: '/api/admin/export', download: '', text: 'Download the full backup' })));
 }
 
 // ---------------------------------------------------------------- Halloween

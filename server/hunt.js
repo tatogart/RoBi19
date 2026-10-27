@@ -379,6 +379,8 @@ export function installHunt(api, { db, manager, requireUser, requireAdmin, bad, 
     return { new: first, prize: prize ? prize.name : '' };
   };
   manager.hunt = {
+    // Robis is closing: the live event ends, nothing is scheduled any more
+    endNow: (why = 'Robis is closing') => { H.next = null; if (live()) endEvent(why); db.save(); },
     eligible,
     kind: () => ev().kind,
     isPublic: () => !!H.public,
