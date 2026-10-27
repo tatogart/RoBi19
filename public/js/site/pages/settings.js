@@ -27,8 +27,8 @@ app.append(appearance);
 // friends, messages, transactions and your games with their places.
 app.append(el('div', { class: 'panel data-panel', id: 'data' },
   el('h3', { text: 'Your data' }),
-  el('p', { text: 'Download everything about your account in one file: your Robits and Premium, items and avatar, friends, messages, transactions, trades and your games with their places.' }),
-  el('a', { class: 'btn btn-green', href: '/api/me/export', download: '', text: 'Download my data' })));
+  el('p', { text: 'Your Robis as a presentation: your account, items, friends, games and activity on slides you can save as pictures (PNG).' }),
+  el('a', { class: 'btn btn-green', href: '/mydata', text: 'Download my data' })));
 if (location.hash === '#data') setTimeout(() => document.getElementById('data')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
 
 // ---------------------------------------------------------------- Telegram

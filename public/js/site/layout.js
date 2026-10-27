@@ -92,7 +92,7 @@ export function closingBar(c) {
   return el('div', { class: 'closing-bar' },
     el('span', { class: 'cl-ic', text: '⚠' }),
     el('span', { class: 'cl-text no-i18n' }, el('b', { text: ru ? `Robis закрывается ${day}` : `Robis is closing on ${day}` }), ` · ${ru ? 'осталось' : 'left'}: `, left),
-    el('a', { class: 'cl-btn', href: '/settings#data', text: 'Download my data' }));
+    el('a', { class: 'cl-btn', href: '/mydata', text: 'Download my data' }));
 }
 function closingWindow(c) {
   const key = 'robis.closingSeen';
@@ -108,7 +108,7 @@ function closingWindow(c) {
     c.message ? el('p', { class: 'no-i18n', text: c.message }) : null,
     el('p', { text: 'Download your data before that: your account, items, friends, messages and your games with their places.' }),
     el('div', { class: 'row wrap', style: { gap: '8px', justifyContent: 'center' } },
-      el('a', { class: 'btn btn-green', href: '/settings#data', onclick: close, text: 'Download my data' }),
+      el('a', { class: 'btn btn-green', href: '/mydata', onclick: close, text: 'Download my data' }),
       el('button', { class: 'btn', onclick: close, text: 'OK' }))));
   back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
   document.body.append(back);
